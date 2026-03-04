@@ -1,0 +1,1438 @@
+[
+  {
+    "file": "apps/web/src/App.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/context/AuthContext.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/Badge/Badge.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/KPIText/KPIText.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/List/List.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/MaterialIcon/MaterialIcon.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/Pill/Pill.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/data-display/Table/Table.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "table": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": true,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/feedback/Alert/Alert.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 3,
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/Button/Button.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/ButtonGroup/ButtonGroup.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/Checkbox/Checkbox.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "input": 1,
+      "span": 3
+    },
+    "nativeInteractiveCount": 1,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/DatePicker/DatePicker.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/FormContainer/FormContainer.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/Input/Input.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "input": 1,
+      "textarea": 1,
+      "span": 4
+    },
+    "nativeInteractiveCount": 2,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/InputContainer/InputContainer.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 6
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/NumberInput/NumberInput.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/Radio/Radio.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "input": 1,
+      "span": 3
+    },
+    "nativeInteractiveCount": 1,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/RadioGroup/RadioGroup.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/SearchSelect/SearchSelect.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "button": 1,
+      "input": 1,
+      "div": 3,
+      "span": 1
+    },
+    "nativeInteractiveCount": 2,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/Select/Select.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "select": 1
+    },
+    "nativeInteractiveCount": 1,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/inputs/ToggleSwitch/ToggleSwitch.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "input": 1,
+      "span": 4
+    },
+    "nativeInteractiveCount": 1,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Card/Card.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 2,
+      "a": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Card/CardSections.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 3
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/CardContainer/CardContainer.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Grid/Grid.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Inline/Inline.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Page/Page.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "header": 1,
+      "div": 6
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/PageContainer/PageContainer.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Section/Section.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Stack/Stack.stories.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "section": 1,
+      "div": 1,
+      "p": 3,
+      "h3": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Stack/Stack.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/layout/Subsection/Subsection.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/navigation/Breadcrumbs/Breadcrumbs.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/navigation/Pagination/Pagination.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 2,
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/navigation/Tabs/Tabs.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/overlay/Drawer/Drawer.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/overlay/Modal/Modal.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "button": 1,
+      "div": 3
+    },
+    "nativeInteractiveCount": 1,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/overlay/Popover/Popover.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/overlay/Tooltip/Tooltip.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/typography/Heading/Heading.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/typography/Prose/Prose.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1,
+      "p": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/design-system/components/typography/Text/Text.tsx",
+    "layer": "design-system",
+    "functionPattern": "design-system",
+    "formPattern": "DS primitive",
+    "status": "canonical",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/event-wizard/stageBlocks.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/guards/RequireAdmin.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/guards/RequireSuperAdmin.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/AdminHomeScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/AdminLayoutScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/content/AdminContentEditorScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/content/AdminContentHomeScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/content/AdminContentLayoutScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/events/AdminEventsLayoutScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/system/AdminSystemHomeScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/system/AdminSystemLayoutScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/admin/screens/users/AdminUsersLayoutScreen.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/events/EventCard.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/events/event-detail/fragments.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/events/event-detail/registerModal.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/events/event-detail/resultsTables.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "Table-heavy display composite",
+    "status": "review",
+    "reasons": [
+      "native table rendering (often intentional for dense score grids)"
+    ],
+    "nativeCounts": {
+      "div": 1,
+      "span": 9,
+      "table": 3,
+      "thead": 2,
+      "tbody": 3,
+      "tr": 5,
+      "td": 14,
+      "th": 10,
+      "a": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": true,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/events/event-detail/roundPills.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1,
+      "span": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/notifications/NotificationsBellMenu.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/shared/PageStateNotice.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/teams/team-page/gameRows.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 3,
+      "span": 3,
+      "tr": 4,
+      "td": 20,
+      "a": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/users/UserPill.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/users/UserSearchSelect.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/features/users/profile/ProfileSections.tsx",
+    "layer": "feature",
+    "functionPattern": "feature",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "span": 1,
+      "img": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/layouts/MainLayout.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1,
+      "header": 1,
+      "footer": 1,
+      "div": 7
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/main.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/mantine.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/AboutFAQPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/AboutPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/ChallengeArchivePage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1,
+      "p": 1,
+      "h1": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/ChallengeDetailPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/CodeOfConductPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/ContactPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/ContentPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/EventDetailPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "Table-heavy display composite",
+    "status": "review",
+    "reasons": [
+      "native table rendering (often intentional for dense score grids)"
+    ],
+    "nativeCounts": {
+      "main": 1,
+      "div": 4,
+      "table": 1,
+      "thead": 1,
+      "tbody": 1,
+      "tr": 2,
+      "td": 5,
+      "th": 5
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": true,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/EventStatsPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 2,
+      "div": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/EventsPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/FeedbackPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/LandingPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/LegalPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/LegalPrivacyPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/LegalTermsPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/LoginPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1,
+      "span": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/NewUserPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/NotFoundPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/SessionLivePage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 3,
+      "div": 1,
+      "a": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/SessionTeamPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "Table-heavy display composite",
+    "status": "review",
+    "reasons": [
+      "native table rendering (often intentional for dense score grids)"
+    ],
+    "nativeCounts": {
+      "main": 1,
+      "table": 1,
+      "thead": 1,
+      "tbody": 1,
+      "tr": 2,
+      "td": 5,
+      "th": 5
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": true,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/SpoilerGatePage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "main": 1,
+      "p": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/TeamPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "Table-heavy display composite",
+    "status": "review",
+    "reasons": [
+      "native table rendering (often intentional for dense score grids)"
+    ],
+    "nativeCounts": {
+      "main": 1,
+      "header": 1,
+      "section": 2,
+      "div": 22,
+      "span": 6,
+      "p": 7,
+      "h1": 1,
+      "h2": 3,
+      "h3": 1,
+      "table": 1,
+      "thead": 1,
+      "tbody": 1,
+      "tr": 1,
+      "th": 9
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": true,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/UserBadgesPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "div": 1,
+      "img": 2
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/UserEventsPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/UserPage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/UserProfilePage.tsx",
+    "layer": "page-route",
+    "functionPattern": "page-route",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "img": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminBadgeDesignerPage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "img": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminBadgesIndexPage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "img": 1
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminCreateEventPage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {
+      "img": 3
+    },
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminEventsIndexPage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminHomePage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/pages/admin/AdminManageUsersPage.tsx",
+    "layer": "admin-page",
+    "functionPattern": "admin-page",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/routes/AppRoutes.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/routes/index.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  },
+  {
+    "file": "apps/web/src/ui/MarkdownRenderer.tsx",
+    "layer": "other",
+    "functionPattern": "other",
+    "formPattern": "DS composition",
+    "status": "ok",
+    "reasons": [],
+    "nativeCounts": {},
+    "nativeInteractiveCount": 0,
+    "tableHeavy": false,
+    "hasTailwindUtilityClass": false
+  }
+]

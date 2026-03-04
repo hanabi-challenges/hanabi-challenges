@@ -20,7 +20,7 @@ export NODE_ENV=test
 export DATABASE_URL="postgresql://hanabi_user:hanabi_password@localhost:55432/hanabi_test"
 
 echo "🚀 Running backend tests..."
-cd "${ROOT_DIR}/backend"
-npm test
+cd "${ROOT_DIR}/apps/api"
+pnpm run test:integration
 
 echo "🎉 Tests complete."

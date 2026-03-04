@@ -1,0 +1,50 @@
+.teamgame-link {
+  color: #1d4ed8;
+  text-decoration: underline;
+  font-size: 0.75rem;
+}
+
+.teamgame-row {
+  border-top: 1px solid var(--ds-color-border);
+}
+
+.teamgame-cell {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.teamgame-cell-right {
+  text-align: right;
+}
+
+.teamgame-muted {
+  color: var(--ds-color-text-muted);
+}
+
+.teamgame-empty {
+  color: var(--ds-color-text-muted);
+}
+
+.teamgame-notes-row {
+  border-top: 1px solid var(--ds-color-border);
+  background: #f9fafb;
+}
+
+.teamgame-notes-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.teamgame-error-row {
+  border-top: 1px solid var(--ds-color-border);
+  background: #fef2f2;
+}
+
+.teamgame-error-cell {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: #b91c1c;
+}

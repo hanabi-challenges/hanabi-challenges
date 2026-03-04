@@ -7,30 +7,38 @@ on:
     branches: ['main']
 
 jobs:
-  build:
+  ci-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install root dependencies
-        run: npm install
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
 
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm install
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm install
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Set environment variables for tests
+      - name: Install Playwright browser
+        run: pnpm run test:e2e:install
+
+      - name: Prepare integration test database
+        run: ./infra/ci/test_db_reset.sh
+
+      - name: Set environment variables for full test battery
         run: |
           echo "JWT_SECRET=test_jwt_secret_for_ci" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgresql://hanabi_user:hanabi_password@localhost:55432/hanabi_test" >> $GITHUB_ENV
           echo "NODE_ENV=test" >> $GITHUB_ENV
 
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Run backend tests
-        run: ./infra/ci/test_run.sh
+      - name: Run CI test battery
+        run: pnpm run ci:tests

@@ -9,8 +9,8 @@ DB_CONTAINER_NAME="${DB_CONTAINER_NAME:-hanabi_db}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-SCHEMA_FILE="${ROOT_DIR}/backend/db/schema.sql"
-RICH_SAMPLE_DATA_FILE="${ROOT_DIR}/backend/db/sample_data_rich.sql"
+SCHEMA_FILE="${ROOT_DIR}/apps/api/db/schema.sql"
+RICH_SAMPLE_DATA_FILE="${ROOT_DIR}/apps/api/db/sample_data_rich.sql"
 
 if [ ! -f "${SCHEMA_FILE}" ]; then
   echo "Schema file not found at ${SCHEMA_FILE}"

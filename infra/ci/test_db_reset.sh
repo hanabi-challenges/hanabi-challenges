@@ -8,7 +8,7 @@ DB_NAME="${DB_NAME:-hanabi_test}"
 DB_USER="${DB_USER:-hanabi_user}"
 DB_PASSWORD="${DB_PASSWORD:-hanabi_password}"
 
-SCHEMA_FILE="${ROOT_DIR}/backend/db/schema.sql"
+SCHEMA_FILE="${ROOT_DIR}/apps/api/db/schema.sql"
 
 if [ ! -f "${SCHEMA_FILE}" ]; then
   echo "Schema file not found at ${SCHEMA_FILE}"

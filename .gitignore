@@ -10,14 +10,14 @@ package-lock.json
 dist
 build
 coverage
-backend/dist/
-backend/src/**/*.js
-backend/src/**/*.js.map
-backend/**/*.d.ts
-backend/**/*.d.ts.map
-backend/tests/**/*.js
-backend/tests/**/*.js.map
-frontend/src/_legacy
+apps/api/dist/
+apps/api/src/**/*.js
+apps/api/src/**/*.js.map
+apps/api/**/*.d.ts
+apps/api/**/*.d.ts.map
+apps/api/tests/**/*.js
+apps/api/tests/**/*.js.map
+apps/web/src/_legacy
 
 # Logs
 var/

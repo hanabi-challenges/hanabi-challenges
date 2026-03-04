@@ -8,7 +8,7 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
+    environment: 'happy-dom',
     include: ['tests/unit/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/vitest.setup.ts'],
     pool: 'threads',

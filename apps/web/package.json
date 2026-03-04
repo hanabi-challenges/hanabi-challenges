@@ -35,12 +35,12 @@
     "unified": "^11.0.5"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.6.1",
     "@eslint/js": "^9.39.1",
     "@storybook/addon-docs": "^10.1.2",
     "@storybook/react-vite": "^10.1.2",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/d3": "^7.4.3",
     "@types/node": "^24.10.0",
     "@types/node-emoji": "^1.8.2",
@@ -53,6 +53,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "happy-dom": "^15.11.7",
     "jsdom": "^27.0.1",
     "storybook": "^10.1.2",
     "tsx": "^4.20.6",

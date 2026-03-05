@@ -36,7 +36,7 @@ services:
       - key: JWT_SECRET
         sync: false
     buildCommand: npx -y pnpm@10.30.3 install --frozen-lockfile && npx -y pnpm@10.30.3 -C apps/api run build
-    startCommand: pnpm -C apps/api run start
+    startCommand: node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:
       - api.hanabi-challenges.com

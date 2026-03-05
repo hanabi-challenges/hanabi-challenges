@@ -2,12 +2,14 @@ services:
   - type: web
     name: hanabi-challenges
     runtime: static
+    plan: starter
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/web run build
+    buildCommand: npm install -g pnpm@10.30.3 && pnpm install --frozen-lockfile && pnpm -C apps/web run build
     staticPublishPath: ./apps/web/dist
     domains:
+      - hanabi-challenges.com
       - www.hanabi-challenges.com
     routes:
       - type: rewrite
@@ -23,11 +25,26 @@ services:
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
+    plan: starter
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/api run build
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hanabi-challenges-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+    buildCommand: npm install -g pnpm@10.30.3 && pnpm install --frozen-lockfile && pnpm -C apps/api run build
     startCommand: pnpm -C apps/api run start
     healthCheckPath: /health
     domains:
       - api.hanabi-challenges.com
+
+databases:
+  - name: hanabi-challenges-db
+    plan: starter
+    databaseName: hanabi
+    user: hanabi

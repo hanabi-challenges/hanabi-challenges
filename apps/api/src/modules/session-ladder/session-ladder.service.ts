@@ -1,6 +1,7 @@
 import { pool } from '../../config/db';
 import { partitionHybrid34, shuffleInPlace } from './session-ladder.assignment';
 import type { PoolClient } from 'pg';
+import { END_CONDITIONS_TURNS_VICTORY } from './session-ladder.end-condition';
 
 export type SessionLadderConfig = {
   event_id: number;
@@ -76,8 +77,28 @@ export type SessionEloRow = {
 };
 
 let readyCheckTablesEnsured = false;
-let roundResultReplayColumnEnsured = false;
+let roundResultMetadataColumnsEnsured = false;
 const readyCheckFinalizeTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+export type VictoryType = 'score' | 'bottom_deck_risk' | 'turns';
+
+const K_FACTOR_MATRIX: Record<2 | 3 | 4, Record<VictoryType, number>> = {
+  2: {
+    score: 48,
+    bottom_deck_risk: 32,
+    turns: 16,
+  },
+  3: {
+    score: 30,
+    bottom_deck_risk: 20,
+    turns: 10,
+  },
+  4: {
+    score: 24,
+    bottom_deck_risk: 16,
+    turns: 8,
+  },
+};
 
 async function ensureReadyCheckTables(): Promise<void> {
   if (readyCheckTablesEnsured) return;
@@ -104,13 +125,101 @@ async function ensureReadyCheckTables(): Promise<void> {
   readyCheckTablesEnsured = true;
 }
 
-async function ensureRoundResultReplayColumn(): Promise<void> {
-  if (roundResultReplayColumnEnsured) return;
+async function ensureRoundResultMetadataColumns(): Promise<void> {
+  if (roundResultMetadataColumnsEnsured) return;
   await pool.query(`
     ALTER TABLE event_session_round_team_results
     ADD COLUMN IF NOT EXISTS replay_game_id BIGINT NULL
   `);
-  roundResultReplayColumnEnsured = true;
+  await pool.query(`
+    ALTER TABLE event_session_round_team_results
+    ADD COLUMN IF NOT EXISTS end_condition INTEGER NULL
+  `);
+  await pool.query(`
+    ALTER TABLE event_session_round_team_results
+    ADD COLUMN IF NOT EXISTS bottom_deck_risk NUMERIC(8, 3) NULL
+  `);
+  roundResultMetadataColumnsEnsured = true;
+}
+
+function resolveTeamCountBucket(teamCount: number): 2 | 3 | 4 {
+  if (teamCount <= 2) return 2;
+  if (teamCount === 3) return 3;
+  return 4;
+}
+
+export function classifyVictoryType(input: {
+  endCondition: number | null;
+  bottomDeckRisk: number | null;
+}): VictoryType {
+  const { endCondition, bottomDeckRisk } = input;
+  if (bottomDeckRisk != null) {
+    return 'bottom_deck_risk';
+  }
+  if (endCondition != null && END_CONDITIONS_TURNS_VICTORY.has(endCondition)) {
+    return 'turns';
+  }
+  return 'score';
+}
+
+export function resolveRoundPairwiseKFactor(input: {
+  teamCount: number;
+  defaultK: number;
+  endCondition: number | null;
+  bottomDeckRisk: number | null;
+}): number {
+  const { teamCount, defaultK, endCondition, bottomDeckRisk } = input;
+  if (teamCount < 2) return defaultK;
+  const teamBucket = resolveTeamCountBucket(teamCount);
+  const victoryType = classifyVictoryType({ endCondition, bottomDeckRisk });
+  return K_FACTOR_MATRIX[teamBucket][victoryType] ?? defaultK;
+}
+
+export type EloTeamInput = {
+  team_no: number;
+  score: number;
+  avg_rating: number;
+  end_condition: number | null;
+  bottom_deck_risk: number | null;
+};
+
+export type EloTeamDelta = {
+  team_no: number;
+  delta: number;
+  k_used: number;
+  victory_type: VictoryType;
+};
+
+export function computeTeamCompetitiveDeltas(input: {
+  teams: EloTeamInput[];
+  defaultK: number;
+}): EloTeamDelta[] {
+  const { teams, defaultK } = input;
+  const teamCount = teams.length;
+  return teams.map((a) => {
+    const kUsed = resolveRoundPairwiseKFactor({
+      teamCount,
+      defaultK,
+      endCondition: a.end_condition ?? null,
+      bottomDeckRisk: a.bottom_deck_risk ?? null,
+    });
+    let sum = 0;
+    for (const b of teams) {
+      if (a.team_no === b.team_no) continue;
+      const expected = 1 / (1 + 10 ** ((b.avg_rating - a.avg_rating) / 400));
+      const actual = a.score > b.score ? 1 : a.score < b.score ? 0 : 0.5;
+      sum += actual - expected;
+    }
+    return {
+      team_no: a.team_no,
+      delta: kUsed * sum,
+      k_used: kUsed,
+      victory_type: classifyVictoryType({
+        endCondition: a.end_condition ?? null,
+        bottomDeckRisk: a.bottom_deck_risk ?? null,
+      }),
+    };
+  });
 }
 
 async function finalizeActiveRoundsWithForfeitsTx(
@@ -813,7 +922,7 @@ export async function setSessionPresence(input: {
 
 export async function getSessionState(sessionId: number) {
   await ensureReadyCheckTables();
-  await ensureRoundResultReplayColumn();
+  await ensureRoundResultMetadataColumns();
   try {
     const readyCheckStatus = await pool.query<{ status: 'open' | 'closed'; ends_at: string }>(
       `
@@ -916,9 +1025,19 @@ export async function getSessionState(sessionId: number) {
     submitted_at: string;
     submitted_by_user_id: number | null;
     replay_game_id: string | null;
+    end_condition: number | null;
+    bottom_deck_risk: number | null;
   }>(
     `
-    SELECT round_id, team_no, score, submitted_at, submitted_by_user_id, replay_game_id::text
+    SELECT
+      round_id,
+      team_no,
+      score,
+      submitted_at,
+      submitted_by_user_id,
+      replay_game_id::text,
+      end_condition,
+      bottom_deck_risk::float8 AS bottom_deck_risk
     FROM event_session_round_team_results
     WHERE round_id IN (
       SELECT id FROM event_session_rounds WHERE session_id = $1
@@ -1637,9 +1756,19 @@ export async function submitRoundScore(input: {
   score: number;
   submittedByUserId: number;
   replayGameId?: number | null;
+  endCondition?: number | null;
+  bottomDeckRisk?: number | null;
 }) {
-  await ensureRoundResultReplayColumn();
-  const { roundId, teamNo, score, submittedByUserId, replayGameId = null } = input;
+  await ensureRoundResultMetadataColumns();
+  const {
+    roundId,
+    teamNo,
+    score,
+    submittedByUserId,
+    replayGameId = null,
+    endCondition = null,
+    bottomDeckRisk = null,
+  } = input;
   const result = await pool.query(
     `
     INSERT INTO event_session_round_team_results (
@@ -1648,18 +1777,31 @@ export async function submitRoundScore(input: {
       score,
       submitted_by_user_id,
       submitted_at,
-      replay_game_id
+      replay_game_id,
+      end_condition,
+      bottom_deck_risk
     )
-    VALUES ($1, $2, $3, $4, NOW(), $5)
+    VALUES ($1, $2, $3, $4, NOW(), $5, $6, $7)
     ON CONFLICT (round_id, team_no)
     DO UPDATE SET
       score = EXCLUDED.score,
       submitted_by_user_id = EXCLUDED.submitted_by_user_id,
       submitted_at = NOW(),
-      replay_game_id = EXCLUDED.replay_game_id
-    RETURNING id, round_id, team_no, score, submitted_by_user_id, submitted_at, replay_game_id::text
+      replay_game_id = EXCLUDED.replay_game_id,
+      end_condition = EXCLUDED.end_condition,
+      bottom_deck_risk = EXCLUDED.bottom_deck_risk
+    RETURNING
+      id,
+      round_id,
+      team_no,
+      score,
+      submitted_by_user_id,
+      submitted_at,
+      replay_game_id::text,
+      end_condition,
+      bottom_deck_risk::float8 AS bottom_deck_risk
     `,
-    [roundId, teamNo, score, submittedByUserId, replayGameId],
+    [roundId, teamNo, score, submittedByUserId, replayGameId, endCondition, bottomDeckRisk],
   );
 
   await pool.query(
@@ -1770,9 +1912,17 @@ export async function finalizeRoundElo(roundId: number): Promise<{
   round_id: number;
   team_count: number;
   ledger_rows: number;
+  team_meta: Array<{
+    team_no: number;
+    k_used: number;
+    victory_type: VictoryType;
+    end_condition: number | null;
+    bottom_deck_risk: number | null;
+  }>;
 }> {
   const client = await pool.connect();
   try {
+    await ensureRoundResultMetadataColumns();
     await client.query('BEGIN');
 
     const metaRes = await client.query<{
@@ -1793,6 +1943,7 @@ export async function finalizeRoundElo(roundId: number): Promise<{
       JOIN event_sessions s ON s.id = r.session_id
       LEFT JOIN event_session_ladder_config c ON c.event_id = s.event_id
       WHERE r.id = $1
+      FOR UPDATE OF r
       `,
       [roundId],
     );
@@ -1801,7 +1952,7 @@ export async function finalizeRoundElo(roundId: number): Promise<{
     }
     const meta = metaRes.rows[0];
     const eventId = meta.event_id;
-    const k = Number(meta.k_factor ?? 24);
+    const defaultK = Number(meta.k_factor ?? 24);
     const bonus = Number(meta.participation_bonus ?? 0.5);
 
     const existingLedgerRes = await client.query<{ count: string }>(
@@ -1814,6 +1965,34 @@ export async function finalizeRoundElo(roundId: number): Promise<{
     );
     const existingLedgerCount = Number(existingLedgerRes.rows[0]?.count ?? 0);
     if (existingLedgerCount > 0) {
+      const existingTeamMetaRes = await client.query<{
+        team_no: number;
+        end_condition: number | null;
+        bottom_deck_risk: number | null;
+      }>(
+        `
+        SELECT team_no, end_condition, bottom_deck_risk::float8 AS bottom_deck_risk
+        FROM event_session_round_team_results
+        WHERE round_id = $1
+        ORDER BY team_no
+        `,
+        [roundId],
+      );
+      const existingTeamMeta = existingTeamMetaRes.rows.map((row) => ({
+        team_no: row.team_no,
+        k_used: resolveRoundPairwiseKFactor({
+          teamCount: existingTeamMetaRes.rows.length,
+          defaultK,
+          endCondition: row.end_condition ?? null,
+          bottomDeckRisk: row.bottom_deck_risk ?? null,
+        }),
+        victory_type: classifyVictoryType({
+          endCondition: row.end_condition ?? null,
+          bottomDeckRisk: row.bottom_deck_risk ?? null,
+        }),
+        end_condition: row.end_condition ?? null,
+        bottom_deck_risk: row.bottom_deck_risk ?? null,
+      }));
       const existingTeamsRes = await client.query<{ count: string }>(
         `
         SELECT COUNT(*)::int AS count
@@ -1828,15 +2007,22 @@ export async function finalizeRoundElo(roundId: number): Promise<{
         round_id: roundId,
         team_count: Number(existingTeamsRes.rows[0]?.count ?? 0),
         ledger_rows: existingLedgerCount,
+        team_meta: existingTeamMeta,
       };
     }
 
     const teamsRes = await client.query<{
       team_no: number;
       score: number;
+      end_condition: number | null;
+      bottom_deck_risk: number | null;
     }>(
       `
-      SELECT team_no, score
+      SELECT
+        team_no,
+        score,
+        end_condition,
+        bottom_deck_risk::float8 AS bottom_deck_risk
       FROM event_session_round_team_results
       WHERE round_id = $1
       ORDER BY team_no
@@ -1905,20 +2091,21 @@ export async function finalizeRoundElo(roundId: number): Promise<{
           : 1000;
       return { ...t, players, avg_rating: avg };
     });
-
-    const teamDelta = new Map<number, number>();
-    for (const a of teamRows) {
-      let sum = 0;
-      let pairs = 0;
-      for (const b of teamRows) {
-        if (a.team_no === b.team_no) continue;
-        const expected = 1 / (1 + 10 ** ((b.avg_rating - a.avg_rating) / 400));
-        const actual = a.score > b.score ? 1 : a.score < b.score ? 0 : 0.5;
-        sum += actual - expected;
-        pairs += 1;
-      }
-      teamDelta.set(a.team_no, pairs > 0 ? (k * sum) / pairs : 0);
-    }
+    const teamDeltaRows = computeTeamCompetitiveDeltas({ teams: teamRows, defaultK });
+    const teamDelta = new Map<number, number>(teamDeltaRows.map((row) => [row.team_no, row.delta]));
+    const teamMeta = teamRows
+      .map((team) => {
+        const deltaRow = teamDeltaRows.find((row) => row.team_no === team.team_no);
+        if (!deltaRow) return null;
+        return {
+          team_no: team.team_no,
+          k_used: deltaRow.k_used,
+          victory_type: deltaRow.victory_type,
+          end_condition: team.end_condition ?? null,
+          bottom_deck_risk: team.bottom_deck_risk ?? null,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
 
     let ledgerRows = 0;
     for (const team of teamRows) {
@@ -1971,6 +2158,7 @@ export async function finalizeRoundElo(roundId: number): Promise<{
       round_id: roundId,
       team_count: teamRows.length,
       ledger_rows: ledgerRows,
+      team_meta: teamMeta,
     };
   } catch (err) {
     await client.query('ROLLBACK');

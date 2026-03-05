@@ -2,6 +2,9 @@ services:
   - type: web
     name: hanabi-challenges
     runtime: static
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
     buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/web run build
     staticPublishPath: ./apps/web/dist
     domains:
@@ -20,6 +23,9 @@ services:
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
     buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/api run build
     startCommand: pnpm -C apps/api run start
     healthCheckPath: /health

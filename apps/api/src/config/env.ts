@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const BACKEND_PORT = Number(process.env.BACKEND_PORT) || 4000;
+const BACKEND_PORT = Number(process.env.PORT || process.env.BACKEND_PORT) || 4000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const JWT_SECRET = process.env.JWT_SECRET;
 

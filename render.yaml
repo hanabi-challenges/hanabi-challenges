@@ -2,7 +2,7 @@ services:
   - type: web
     name: hanabi-challenges
     runtime: static
-    buildCommand: pnpm install --frozen-lockfile && pnpm -C apps/web run build
+    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/web run build
     staticPublishPath: ./apps/web/dist
     domains:
       - www.hanabi-challenges.com
@@ -20,7 +20,7 @@ services:
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
-    buildCommand: pnpm install --frozen-lockfile && pnpm -C apps/api run build
+    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile && pnpm -C apps/api run build
     startCommand: pnpm -C apps/api run start
     healthCheckPath: /health
     domains:

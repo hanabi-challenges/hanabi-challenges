@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: hanabi-challenges
+    runtime: static
+    buildCommand: pnpm install --frozen-lockfile && pnpm -C apps/web run build
+    staticPublishPath: ./apps/web/dist
+    domains:
+      - www.hanabi-challenges.com
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://api.hanabi-challenges.com/api/*
+      - type: rewrite
+        source: /ws/*
+        destination: wss://api.hanabi-challenges.com/ws/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: hanabi-challenges-api-prod
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile && pnpm -C apps/api run build
+    startCommand: pnpm -C apps/api run start
+    healthCheckPath: /health
+    domains:
+      - api.hanabi-challenges.com

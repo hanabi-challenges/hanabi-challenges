@@ -35,6 +35,11 @@ import { pool } from '../../config/db';
 import { listTeamMembers } from '../teams/team.service';
 import { validateSlug } from '../../utils/slug';
 import { getErrorCode, getErrorDetail, isAdminUser, validateLength } from './event.routes.helpers';
+import {
+  extractReplayExportPlayers,
+  extractReplayHistoryGames,
+  normalizeReplayEndCondition,
+} from '../replay/replay-parse';
 
 const router = Router();
 
@@ -652,7 +657,7 @@ router.post(
       step = 'lookup template';
       const tplResult = await pool.query(
         `
-      SELECT egt.id, egt.seed_payload, egt.variant, es.event_id
+      SELECT egt.id, egt.seed_payload, egt.variant, es.event_id, es.config_json
       FROM event_game_templates egt
       JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
       WHERE egt.id = $1;
@@ -667,6 +672,7 @@ router.post(
         seed_payload: string | null;
         variant: string;
         event_id: number;
+        config_json: unknown;
       };
       if (tpl.event_id !== eventId) {
         return res.status(400).json({ error: 'Template does not belong to this event' });
@@ -674,8 +680,15 @@ router.post(
       console.log('[validate-replay] template', { tpl });
 
       const members = await listTeamMembers(team.id);
-      const memberNames = members.map((m) => m.display_name);
-      console.log('[validate-replay] members', memberNames);
+      const teamPlayerPool = members.filter((m) => m.role === 'PLAYER').map((m) => m.display_name);
+      const stageConfig =
+        tpl.config_json && typeof tpl.config_json === 'object' && !Array.isArray(tpl.config_json)
+          ? (tpl.config_json as { enforce_exact_team_size?: unknown })
+          : {};
+      const enforceExactTeamMatch = stageConfig.enforce_exact_team_size === true;
+      console.log('[validate-replay] members', teamPlayerPool, {
+        enforceExactTeamMatch,
+      });
 
       // Stage 1: fetch export and validate players/seed/size
       step = 'fetch export';
@@ -688,16 +701,36 @@ router.post(
       if (!exportJson || typeof exportJson !== 'object') {
         return res.status(400).json({ error: 'Invalid export payload from hanab.live' });
       }
-      const exportPlayers =
-        exportJson.players ?? exportJson.playerNames ?? exportJson.player_names ?? [];
+      const exportPlayers = extractReplayExportPlayers(exportJson);
+      if (!exportPlayers || exportPlayers.length === 0) {
+        return res.status(400).json({ error: 'Replay export is missing a valid players list' });
+      }
       const seedString = exportJson.seed ?? '';
 
-      // Check players subset
-      const missingPlayers = exportPlayers.filter((p) => !memberNames.includes(p));
-      if (missingPlayers.length > 0) {
+      const duplicatePlayers = exportPlayers.filter(
+        (player) =>
+          exportPlayers.findIndex((candidate: string) => candidate === player) !==
+          exportPlayers.lastIndexOf(player),
+      );
+      if (duplicatePlayers.length > 0) {
         return res.status(400).json({
-          error: `Replay includes players not on this team: ${missingPlayers.join(', ')}`,
+          error: `Replay includes duplicate players: ${[...new Set(duplicatePlayers)].join(', ')}`,
         });
+      }
+
+      const nonPoolPlayers = exportPlayers.filter((p) => !teamPlayerPool.includes(p));
+      if (nonPoolPlayers.length > 0) {
+        return res.status(400).json({
+          error: `Replay includes players not in this team pool: ${nonPoolPlayers.join(', ')}`,
+        });
+      }
+      if (enforceExactTeamMatch) {
+        const missingPlayers = teamPlayerPool.filter((p) => !exportPlayers.includes(p));
+        if (missingPlayers.length > 0 || exportPlayers.length !== teamPlayerPool.length) {
+          return res.status(400).json({
+            error: `Replay team must exactly match registered team players: ${teamPlayerPool.join(', ')}`,
+          });
+        }
       }
 
       // Check seed and player count from seed string
@@ -741,13 +774,7 @@ router.post(
       let playedAt: string | null = null;
 
       // history-full returns an array for single-user queries. For multi-user it can be {games: []}
-      const historyGames: ReplayHistoryGame[] = Array.isArray(historyData)
-        ? (historyData as ReplayHistoryGame[])
-        : historyData &&
-            typeof historyData === 'object' &&
-            Array.isArray((historyData as { games?: unknown }).games)
-          ? ((historyData as { games: ReplayHistoryGame[] }).games ?? [])
-          : [];
+      const historyGames = extractReplayHistoryGames<ReplayHistoryGame>(historyData);
 
       if (historyGames.length > 0) {
         const game = historyGames.find(
@@ -767,7 +794,7 @@ router.post(
           };
           flagsOk = Object.values(flags).every((v) => v === false || v === undefined);
           score = game.score == null ? null : Number(game.score);
-          endCondition = game.endCondition ?? null;
+          endCondition = normalizeReplayEndCondition(game.endCondition);
           playedAt =
             game.datetimeFinished ?? game.datetimeFinishedUtc ?? game.datetime_finished ?? null;
         }

@@ -78,6 +78,7 @@ export function SessionTeamPage() {
   const [validateStatus, setValidateStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [validateMessage, setValidateMessage] = useState<string | null>(null);
   const [derivedScore, setDerivedScore] = useState<number | null>(null);
+  const [derivedEndConditionCode, setDerivedEndConditionCode] = useState<number | null>(null);
   const [derivedEndCondition, setDerivedEndCondition] = useState<string | null>(null);
   const [bdrInput, setBdrInput] = useState('');
   const [savingScore, setSavingScore] = useState(false);
@@ -182,6 +183,7 @@ export function SessionTeamPage() {
     setValidateStatus('idle');
     setValidateMessage(null);
     setDerivedScore(null);
+    setDerivedEndConditionCode(null);
     setDerivedEndCondition(null);
     setBdrInput('');
   }, [rid, team]);
@@ -213,6 +215,7 @@ export function SessionTeamPage() {
       setValidateStatus('idle');
       setValidateMessage(null);
       setDerivedScore(null);
+      setDerivedEndConditionCode(null);
       setDerivedEndCondition(null);
       return;
     }
@@ -221,6 +224,7 @@ export function SessionTeamPage() {
       setValidateStatus('error');
       setValidateMessage('Unable to parse game ID from replay link.');
       setDerivedScore(null);
+      setDerivedEndConditionCode(null);
       setDerivedEndCondition(null);
       return;
     }
@@ -231,6 +235,7 @@ export function SessionTeamPage() {
     setValidateStatus('loading');
     setValidateMessage(null);
     setDerivedScore(null);
+    setDerivedEndConditionCode(null);
     setDerivedEndCondition(null);
     try {
       const resp = await postJsonAuth<{
@@ -257,6 +262,7 @@ export function SessionTeamPage() {
       setValidateStatus('ok');
       setValidateMessage('Replay validated.');
       setDerivedScore(resp.derived.score);
+      setDerivedEndConditionCode(resp.derived.endCondition ?? null);
       setDerivedEndCondition(mapEndCondition(resp.derived.endCondition));
     } catch (err) {
       const msg =
@@ -266,6 +272,7 @@ export function SessionTeamPage() {
       setValidateStatus('error');
       setValidateMessage(msg);
       setDerivedScore(null);
+      setDerivedEndConditionCode(null);
       setDerivedEndCondition(null);
     }
   }
@@ -281,6 +288,11 @@ export function SessionTeamPage() {
       setError('Missing score from replay validation.');
       return;
     }
+    const normalizedBdr = bdrInput.trim() ? Number(bdrInput) : null;
+    if (normalizedBdr != null && !Number.isFinite(normalizedBdr)) {
+      setError('BDR must be a valid number when provided.');
+      return;
+    }
     setSavingScore(true);
     setError(null);
     try {
@@ -288,6 +300,8 @@ export function SessionTeamPage() {
         team_no: team,
         score: derivedScore,
         replay_game_id: replayGameId ? Number(replayGameId) : null,
+        end_condition: derivedEndConditionCode,
+        bottom_deck_risk: normalizedBdr,
       });
       if (slug) navigate(`/events/${slug}`, { replace: true });
     } catch (err) {

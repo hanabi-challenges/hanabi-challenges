@@ -169,12 +169,12 @@
   --ds-textScale-10-lineHeight: 1.2;
   --ds-textScale-11-fontSize: 40px;
   --ds-textScale-11-lineHeight: 1.2;
-  --ds-typography-fontFamily-display: 'Inter', sans-serif;
-  --ds-typography-fontFamily-heading: 'Inter', sans-serif;
-  --ds-typography-fontFamily-body: 'Inter', sans-serif;
-  --ds-typography-fontFamily-prose: 'Lora', serif;
-  --ds-typography-fontFamily-mono: 'Roboto Mono', monospace;
-  --ds-typography-fontFamily-meta: 'Inter', sans-serif;
+  --ds-typography-fontFamily-display: "Inter", sans-serif;
+  --ds-typography-fontFamily-heading: "Inter", sans-serif;
+  --ds-typography-fontFamily-body: "Inter", sans-serif;
+  --ds-typography-fontFamily-prose: "Lora", serif;
+  --ds-typography-fontFamily-mono: "Roboto Mono", monospace;
+  --ds-typography-fontFamily-meta: "Inter", sans-serif;
   --ds-typography-fontWeight-display: 800;
   --ds-typography-fontWeight-heading: 700;
   --ds-typography-fontWeight-body: 500;

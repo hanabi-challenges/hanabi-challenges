@@ -41,6 +41,11 @@ import {
   parseGameId,
   parseSeedPayload,
 } from './session-ladder.utils';
+import {
+  extractReplayExportPlayers,
+  extractReplayHistoryGames,
+  normalizeReplayEndCondition,
+} from '../replay/replay-parse';
 
 const router = Router();
 
@@ -57,6 +62,9 @@ type ReplayHistoryGame = {
   score?: number | string | null;
   endCondition?: number | null;
   datetimeStarted?: string | null;
+  datetimeFinished?: string | null;
+  datetimeFinishedUtc?: string | null;
+  datetime_finished?: string | null;
 };
 
 async function requireSessionLadderEvent(slug: string, res: Response) {
@@ -614,8 +622,14 @@ router.post(
     const teamNo = Number(req.body?.team_no);
     const score = Number(req.body?.score);
     const replayGameIdRaw = req.body?.replay_game_id;
+    const endConditionRaw = req.body?.end_condition;
+    const bottomDeckRiskRaw = req.body?.bottom_deck_risk;
     const replayGameId =
       replayGameIdRaw == null || replayGameIdRaw === '' ? null : Number(replayGameIdRaw);
+    const endCondition =
+      endConditionRaw == null || endConditionRaw === '' ? null : Number(endConditionRaw);
+    const bottomDeckRisk =
+      bottomDeckRiskRaw == null || bottomDeckRiskRaw === '' ? null : Number(bottomDeckRiskRaw);
     if (!Number.isInteger(roundId) || roundId <= 0) {
       return res.status(400).json({ error: 'Invalid roundId' });
     }
@@ -629,6 +643,14 @@ router.post(
       return res
         .status(400)
         .json({ error: 'replay_game_id must be a positive integer when provided' });
+    }
+    if (endCondition != null && !Number.isInteger(endCondition)) {
+      return res.status(400).json({ error: 'end_condition must be an integer when provided' });
+    }
+    if (bottomDeckRisk != null && (!Number.isFinite(bottomDeckRisk) || bottomDeckRisk < 0)) {
+      return res
+        .status(400)
+        .json({ error: 'bottom_deck_risk must be a non-negative number when provided' });
     }
 
     const eventId = await getRoundEventId(roundId);
@@ -659,6 +681,8 @@ router.post(
       score,
       submittedByUserId: req.user!.userId,
       replayGameId,
+      endCondition,
+      bottomDeckRisk,
     });
     res.status(201).json(row);
   },
@@ -725,16 +749,31 @@ router.post(
         return res.status(400).json({ error: 'Invalid export payload from hanab.live' });
       }
 
-      const exportPlayers = (exportJson.players ??
-        exportJson.playerNames ??
-        exportJson.player_names ??
-        []) as string[];
+      const exportPlayers = extractReplayExportPlayers(exportJson);
+      if (!exportPlayers || exportPlayers.length === 0) {
+        return res.status(400).json({ error: 'Replay export is missing a valid players list' });
+      }
       const seedString = String(exportJson.seed ?? '');
+      const expectedPlayers = context.team_players;
+      const duplicatePlayers = exportPlayers.filter(
+        (player, index) => exportPlayers.indexOf(player) !== index,
+      );
+      if (duplicatePlayers.length > 0) {
+        return res.status(400).json({
+          error: `Replay includes duplicate players: ${[...new Set(duplicatePlayers)].join(', ')}`,
+        });
+      }
 
-      const unexpectedPlayers = exportPlayers.filter((p) => !context.team_players.includes(p));
+      const unexpectedPlayers = exportPlayers.filter((p) => !expectedPlayers.includes(p));
       if (unexpectedPlayers.length > 0) {
         return res.status(400).json({
           error: `Replay includes players not on this team: ${unexpectedPlayers.join(', ')}`,
+        });
+      }
+      const missingPlayers = expectedPlayers.filter((p) => !exportPlayers.includes(p));
+      if (missingPlayers.length > 0 || exportPlayers.length !== expectedPlayers.length) {
+        return res.status(400).json({
+          error: `Replay team must exactly match assigned players: ${expectedPlayers.join(', ')}`,
         });
       }
 
@@ -757,11 +796,7 @@ router.post(
         `https://hanab.live/api/v1/history-full/${encodeURIComponent(context.team_players[0])}?start=${gameId}&end=${gameId}`,
       );
 
-      const historyGames = Array.isArray(historyData)
-        ? historyData
-        : Array.isArray(historyData?.games)
-          ? historyData.games
-          : [];
+      const historyGames = extractReplayHistoryGames<ReplayHistoryGame>(historyData);
       const game = historyGames.find(
         (g: ReplayHistoryGame) => String(g.id ?? g.gameId ?? g.game_id) === String(gameId),
       );
@@ -784,6 +819,8 @@ router.post(
         return res.status(400).json({ error: 'Unable to derive score from replay' });
       }
 
+      const endCondition = normalizeReplayEndCondition(game.endCondition);
+
       return res.json({
         ok: true,
         gameId,
@@ -794,7 +831,7 @@ router.post(
         derived: {
           variant: replayVariantRaw ?? expected.variant,
           score,
-          endCondition: game.endCondition ?? null,
+          endCondition,
           playedAt:
             game.datetimeFinished ?? game.datetimeFinishedUtc ?? game.datetime_finished ?? null,
         },

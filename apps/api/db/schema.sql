@@ -211,6 +211,8 @@ CREATE TABLE event_session_round_team_results (
   round_id INTEGER NOT NULL REFERENCES event_session_rounds(id) ON DELETE CASCADE,
   team_no INTEGER NOT NULL CHECK (team_no > 0),
   score INTEGER NOT NULL,
+  end_condition INTEGER,
+  bottom_deck_risk NUMERIC(8, 3),
   replay_game_id BIGINT,
   submitted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   submitted_at TIMESTAMPTZ DEFAULT NOW(),

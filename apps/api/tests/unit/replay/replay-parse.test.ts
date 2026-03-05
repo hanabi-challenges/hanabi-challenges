@@ -36,4 +36,3 @@ describe('replay-parse helpers', () => {
     expect(normalizeReplayEndCondition('nope')).toBeNull();
   });
 });
-

@@ -20,4 +20,3 @@ describe('session-ladder end-condition mapping', () => {
     expect(classifyVictoryType({ endCondition: 999, bottomDeckRisk: null })).toBe('score');
   });
 });
-

@@ -13,4 +13,3 @@ export const END_CONDITION_NAMES: Record<number, string> = {
 };
 
 export const END_CONDITIONS_TURNS_VICTORY = new Set<number>([3, 4, 10]);
-

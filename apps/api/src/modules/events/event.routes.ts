@@ -680,9 +680,7 @@ router.post(
       console.log('[validate-replay] template', { tpl });
 
       const members = await listTeamMembers(team.id);
-      const teamPlayerPool = members
-        .filter((m) => m.role === 'PLAYER')
-        .map((m) => m.display_name);
+      const teamPlayerPool = members.filter((m) => m.role === 'PLAYER').map((m) => m.display_name);
       const stageConfig =
         tpl.config_json && typeof tpl.config_json === 'object' && !Array.isArray(tpl.config_json)
           ? (tpl.config_json as { enforce_exact_team_size?: unknown })

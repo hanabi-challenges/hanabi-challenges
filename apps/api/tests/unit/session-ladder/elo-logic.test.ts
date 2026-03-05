@@ -93,4 +93,3 @@ describe('session-ladder Elo logic', () => {
     deltas.forEach((row) => expect(row.delta).toBeCloseTo(0, 6));
   });
 });
-

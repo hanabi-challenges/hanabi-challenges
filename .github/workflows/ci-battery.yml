@@ -1,7 +1,6 @@
 name: CI Battery
 
 on:
-  push:
   pull_request:
     branches: ['main']
   workflow_dispatch:
@@ -22,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version-file: '.nvmrc'
           cache: pnpm
 
       - name: Install dependencies

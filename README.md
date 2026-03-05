@@ -27,7 +27,7 @@ Contribution workflow is documented in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ### Prerequisites
 
-- Node.js 20 (see `.nvmrc`)
+- Node.js 22.12.0 (see `.nvmrc`)
 - Corepack enabled (`corepack enable`) so pnpm is available
 - Docker (recommended for local DB bootstrapping)
 

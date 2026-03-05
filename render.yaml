@@ -2,7 +2,6 @@ services:
   - type: web
     name: hanabi-challenges
     runtime: static
-    plan: starter
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
@@ -25,7 +24,6 @@ services:
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
-    plan: starter
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
@@ -45,6 +43,6 @@ services:
 
 databases:
   - name: hanabi-challenges-db
-    plan: starter
+    plan: basic-256mb
     databaseName: hanabi
     user: hanabi

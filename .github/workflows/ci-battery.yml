@@ -1,4 +1,4 @@
-name: CI
+name: CI Battery
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  ci-tests:
+  ci-battery:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

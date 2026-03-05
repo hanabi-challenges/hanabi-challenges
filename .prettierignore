@@ -3,3 +3,4 @@ dist
 build
 coverage
 *.log
+apps/web/src/design-system/styles/tokens.css

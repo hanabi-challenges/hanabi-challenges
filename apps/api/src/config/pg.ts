@@ -18,7 +18,9 @@ function shouldUseSslFromMode(modeRaw: string | undefined): boolean | null {
   return true;
 }
 
-export function buildPgClientConfig(connectionString: string): Pick<ClientConfig, 'connectionString' | 'ssl'> {
+export function buildPgClientConfig(
+  connectionString: string,
+): Pick<ClientConfig, 'connectionString' | 'ssl'> {
   const modeDecision = shouldUseSslFromMode(process.env.PGSSLMODE);
   const useSsl = modeDecision ?? shouldUseSslFromUrl(connectionString);
 

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --prefer-ts-exts src/index.ts",
     "build": "tsc",
+    "db:bootstrap": "node dist/src/scripts/bootstrap-db.js",
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:unit": "vitest run -c vitest.unit.config.mts",

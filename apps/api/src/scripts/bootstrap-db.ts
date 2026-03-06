@@ -10,9 +10,9 @@ function resolveSchemaPath(): string {
 }
 
 async function main(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL_OVERRIDE || process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
-    throw new Error('DATABASE_URL is not set (or DATABASE_URL_OVERRIDE)');
+    throw new Error('DATABASE_URL is not set');
   }
 
   const schemaPath = resolveSchemaPath();

@@ -24,6 +24,7 @@ services:
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
+    region: virginia
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
@@ -44,5 +45,6 @@ services:
 databases:
   - name: hanabi-challenges-db
     plan: basic-256mb
+    region: virginia
     databaseName: hanabi
     user: hanabi

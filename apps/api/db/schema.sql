@@ -28,6 +28,8 @@ DROP TABLE IF EXISTS event_teams CASCADE;
 DROP TABLE IF EXISTS event_stages CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS hanabi_variant_sync_state CASCADE;
+DROP TABLE IF EXISTS hanabi_variants CASCADE;
 DROP FUNCTION IF EXISTS notify_badge_award_insert() CASCADE;
 
 ------------------------------------------------------------

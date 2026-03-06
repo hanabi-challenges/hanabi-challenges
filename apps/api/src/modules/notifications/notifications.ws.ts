@@ -3,6 +3,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { Client } from 'pg';
 import { env } from '../../config/env';
+import { buildPgClientConfig } from '../../config/pg';
 
 type NotificationSocketMessage =
   | {
@@ -78,7 +79,7 @@ export async function startNotificationDbListener(): Promise<void> {
   if (listenerStarted) return;
   listenerStarted = true;
 
-  const client = new Client({ connectionString: env.DATABASE_URL });
+  const client = new Client(buildPgClientConfig(env.DATABASE_URL));
   await client.connect();
   await client.query('LISTEN user_notification');
 

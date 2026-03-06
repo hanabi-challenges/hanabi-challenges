@@ -36,6 +36,7 @@ services:
       - key: JWT_SECRET
         sync: false
     buildCommand: npx -y pnpm@10.30.3 install --frozen-lockfile && npx -y pnpm@10.30.3 -C apps/api run build
+    preDeployCommand: node apps/api/dist/src/scripts/bootstrap-db.js
     startCommand: node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:

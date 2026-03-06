@@ -15,6 +15,13 @@ async function main(): Promise<void> {
     throw new Error('DATABASE_URL is not set');
   }
 
+  try {
+    const { hostname } = new URL(connectionString);
+    console.log(`[db-bootstrap] Connecting to host: ${hostname}`);
+  } catch {
+    console.log('[db-bootstrap] DATABASE_URL is not a valid URL');
+  }
+
   const schemaPath = resolveSchemaPath();
   const schemaSql = await fs.readFile(schemaPath, 'utf8');
   const pool = new Pool(buildPgClientConfig(connectionString));

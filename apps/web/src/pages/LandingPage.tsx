@@ -5,7 +5,6 @@ import {
   Heading,
   Inline,
   PageContainer,
-  Prose,
   Section,
   Stack,
   Text,
@@ -13,9 +12,12 @@ import {
 } from '../design-system';
 import { EventCard } from '../features/events';
 import { useEvents } from '../hooks/useEvents';
+import { usePublicContentPage } from './ContentPage';
+import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 
 export const LandingPage: React.FC = () => {
   const { events, loading, error } = useEvents();
+  const { page: homePage } = usePublicContentPage('home');
   const [now] = React.useState(() => Date.now());
   const activeEvents = useMemo(() => {
     return events.filter((e) => {
@@ -48,18 +50,11 @@ export const LandingPage: React.FC = () => {
     <Main>
       <PageContainer>
         <Section paddingY="lg" header={<Heading level={1}>Hanabi Competitions</Heading>}>
-          <Section>
-            <Prose>
-              Welcome! This is where Hanabi players organize and track community challenges and
-              tournaments. You can browse current events, see their rules and timelines, and join
-              with your team to play through preset seeds.
-            </Prose>
-            <Prose>
-              We keep your team’s progress and results together so everyone knows where they stand.
-              If you’re curious about an event, click in to see the format and how to participate.
-              If you’re ready to play, register a team and start logging games.
-            </Prose>
-          </Section>
+          {homePage && (
+            <Section>
+              <MarkdownRenderer markdown={homePage.markdown} />
+            </Section>
+          )}
 
           <Section header={<Heading level={2}>Ongoing Competitions</Heading>}>
             {loading && <Text variant="muted">Loading…</Text>}

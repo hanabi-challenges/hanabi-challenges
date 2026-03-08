@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ContentEditor } from '../../../../pages/ContentPage';
 
 const EDITABLE_SLUGS = new Set([
+  'home',
   'about',
   'faq',
   'contact',

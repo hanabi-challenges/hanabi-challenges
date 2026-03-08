@@ -19,6 +19,11 @@ export const LandingPage: React.FC = () => {
   const [now] = React.useState(() => Date.now());
   const activeEvents = useMemo(() => {
     return events.filter((e) => {
+      // Leagues (session_ladder) use status rather than date bounds
+      if (e.event_format === 'session_ladder') {
+        return e.event_status !== 'COMPLETE';
+      }
+
       const start = e.starts_at ? new Date(e.starts_at).getTime() : null;
       const end = e.ends_at ? new Date(e.ends_at).getTime() : null;
       if (!start || !end) return false; // only time-bound events

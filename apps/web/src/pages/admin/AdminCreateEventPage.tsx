@@ -63,50 +63,34 @@ import {
   slugify,
 } from '../../features/admin/event-wizard/helpers';
 
-const HANABI_VARIANTS = [
-  'No Variant',
-  'Rainbow',
-  'Pink',
-  'White',
-  'Brown',
-  'Null',
-  'Muddy Rainbow',
-  'Dark Rainbow',
-  'Dark Pink',
-  'Dark White',
-  'Dark Brown',
-  'Dark Null',
-  'Dark Muddy Rainbow',
-  'Black',
-  'Purple',
-  'Gray',
-  'Gray Pink',
-  'Light Pink',
-  'Prism',
-  'Dark Prism',
-  'Omni',
-  'Dark Omni',
-  'Critical Fours',
-  'Alternating Clues',
-  'Clue Starved',
-  'Color Blind',
-  'Number Blind',
-  'Totally Blind',
-  'Color Mute',
-  'Number Mute',
-  'Throw It in a Hole',
-  'Reversed',
-  'Up or Down',
-  'Cow & Pig',
-  'Duck',
-];
+// Module-level cache so we only fetch once per page session.
+let cachedVariants: string[] | null = null;
 
-function VariantCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+async function fetchHanabVariants(): Promise<string[]> {
+  if (cachedVariants) return cachedVariants;
+  const resp = await fetch('https://hanab.live/api/v1/variants');
+  if (!resp.ok) throw new Error(`Failed to fetch variants (${resp.status})`);
+  const data = (await resp.json()) as Record<string, string>;
+  const sorted = Object.values(data).sort((a, b) => a.localeCompare(b));
+  cachedVariants = sorted;
+  return sorted;
+}
+
+function VariantCombobox({
+  value,
+  onChange,
+  variants,
+  loading,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  variants: string[];
+  loading?: boolean;
+}) {
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
-  const filtered = HANABI_VARIANTS.filter((v) =>
-    v.toLowerCase().includes(value.toLowerCase().trim()),
-  );
-  const exactMatch = HANABI_VARIANTS.some((v) => v.toLowerCase() === value.toLowerCase().trim());
+  const trimmed = value.toLowerCase().trim();
+  const filtered = variants.filter((v) => v.toLowerCase().includes(trimmed));
+  const exactMatch = variants.some((v) => v.toLowerCase() === trimmed);
 
   return (
     <Combobox
@@ -120,6 +104,7 @@ function VariantCombobox({ value, onChange }: { value: string; onChange: (v: str
         <TextInput
           label="Variant"
           value={value}
+          placeholder={loading ? 'Loading variants…' : 'Search variants…'}
           onChange={(e) => {
             onChange(e.currentTarget.value);
             combobox.openDropdown();
@@ -132,16 +117,17 @@ function VariantCombobox({ value, onChange }: { value: string; onChange: (v: str
         />
       </Combobox.Target>
       <Combobox.Dropdown>
-        <Combobox.Options>
-          {filtered.map((v) => (
+        <Combobox.Options mah={260} style={{ overflowY: 'auto' }}>
+          {loading && <Combobox.Empty>Loading…</Combobox.Empty>}
+          {!loading && filtered.map((v) => (
             <Combobox.Option key={v} value={v}>
               {v}
             </Combobox.Option>
           ))}
-          {filtered.length === 0 && value.trim() && !exactMatch && (
+          {!loading && filtered.length === 0 && value.trim() && !exactMatch && (
             <Combobox.Option value={value}>Use &quot;{value}&quot;</Combobox.Option>
           )}
-          {filtered.length === 0 && !value.trim() && (
+          {!loading && filtered.length === 0 && !value.trim() && (
             <Combobox.Empty>No variants found</Combobox.Empty>
           )}
         </Combobox.Options>
@@ -205,6 +191,8 @@ export function AdminCreateEventPage() {
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hanabVariants, setHanabVariants] = useState<string[]>([]);
+  const [hanabVariantsLoading, setHanabVariantsLoading] = useState(false);
 
   const hasLoadedExisting = useRef(false);
   const previousEventTypeRef = useRef<EventTypeLabel>('Challenge');
@@ -553,6 +541,27 @@ export function AdminCreateEventPage() {
       cancelled = true;
     };
   }, [token, isUnauthorized]);
+
+  useEffect(() => {
+    if (currentStep !== 'templates' || isSessionLadder) return;
+    if (hanabVariants.length > 0 || hanabVariantsLoading) return;
+    let cancelled = false;
+    const load = async () => {
+      setHanabVariantsLoading(true);
+      try {
+        const variants = await fetchHanabVariants();
+        if (!cancelled) setHanabVariants(variants);
+      } catch {
+        // fall through — user can still type a custom value
+      } finally {
+        if (!cancelled) setHanabVariantsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStep, isSessionLadder, hanabVariants.length, hanabVariantsLoading]);
 
   useEffect(() => {
     if (!isEdit || !editSlug || hasLoadedExisting.current) return;
@@ -1611,7 +1620,12 @@ export function AdminCreateEventPage() {
                         </Alert>
                       ) : (
                         <>
-                          <VariantCombobox value={variant} onChange={setVariant} />
+                          <VariantCombobox
+                            value={variant}
+                            onChange={setVariant}
+                            variants={hanabVariants}
+                            loading={hanabVariantsLoading}
+                          />
 
                           <NumberInput
                             label="Number of games"

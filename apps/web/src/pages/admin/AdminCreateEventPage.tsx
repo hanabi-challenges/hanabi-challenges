@@ -37,6 +37,7 @@ import {
   type BadgeSetRecord,
   updateChallengeBadgeConfigAuth,
 } from './badgeSetsApi';
+import { CoreCombobox as Combobox, useCoreCombobox as useCombobox } from '../../design-system';
 import {
   CREATE_EVENT_WIZARD_DRAFT_KEY,
   initialStage,
@@ -61,6 +62,93 @@ import {
   getStageAbbrForSeeds,
   slugify,
 } from '../../features/admin/event-wizard/helpers';
+
+const HANABI_VARIANTS = [
+  'No Variant',
+  'Rainbow',
+  'Pink',
+  'White',
+  'Brown',
+  'Null',
+  'Muddy Rainbow',
+  'Dark Rainbow',
+  'Dark Pink',
+  'Dark White',
+  'Dark Brown',
+  'Dark Null',
+  'Dark Muddy Rainbow',
+  'Black',
+  'Purple',
+  'Gray',
+  'Gray Pink',
+  'Light Pink',
+  'Prism',
+  'Dark Prism',
+  'Omni',
+  'Dark Omni',
+  'Critical Fours',
+  'Alternating Clues',
+  'Clue Starved',
+  'Color Blind',
+  'Number Blind',
+  'Totally Blind',
+  'Color Mute',
+  'Number Mute',
+  'Throw It in a Hole',
+  'Reversed',
+  'Up or Down',
+  'Cow & Pig',
+  'Duck',
+];
+
+function VariantCombobox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
+  const filtered = HANABI_VARIANTS.filter((v) =>
+    v.toLowerCase().includes(value.toLowerCase().trim()),
+  );
+  const exactMatch = HANABI_VARIANTS.some((v) => v.toLowerCase() === value.toLowerCase().trim());
+
+  return (
+    <Combobox
+      store={combobox}
+      onOptionSubmit={(v) => {
+        onChange(v);
+        combobox.closeDropdown();
+      }}
+    >
+      <Combobox.Target>
+        <TextInput
+          label="Variant"
+          value={value}
+          onChange={(e) => {
+            onChange(e.currentTarget.value);
+            combobox.openDropdown();
+            combobox.updateSelectedOptionIndex();
+          }}
+          onClick={() => combobox.openDropdown()}
+          onFocus={() => combobox.openDropdown()}
+          onBlur={() => combobox.closeDropdown()}
+          required
+        />
+      </Combobox.Target>
+      <Combobox.Dropdown>
+        <Combobox.Options>
+          {filtered.map((v) => (
+            <Combobox.Option key={v} value={v}>
+              {v}
+            </Combobox.Option>
+          ))}
+          {filtered.length === 0 && value.trim() && !exactMatch && (
+            <Combobox.Option value={value}>Use &quot;{value}&quot;</Combobox.Option>
+          )}
+          {filtered.length === 0 && !value.trim() && (
+            <Combobox.Empty>No variants found</Combobox.Empty>
+          )}
+        </Combobox.Options>
+      </Combobox.Dropdown>
+    </Combobox>
+  );
+}
 
 export function AdminCreateEventPage() {
   const { user, token } = useAuth();
@@ -135,7 +223,7 @@ export function AdminCreateEventPage() {
     }
 
     if (isChallenge) {
-      return ['type', 'event', 'registration', 'stage', 'templates', 'badges']
+      return ['type', 'event', 'registration', 'templates', 'badges']
         .map((key) => stepByKey.get(key as StepKey))
         .filter((step): step is { key: StepKey; label: string } => Boolean(step));
     }
@@ -761,19 +849,20 @@ export function AdminCreateEventPage() {
     !formulaHasSpace &&
     !tournamentLimitError;
 
-  const stageValid = isSessionLadder
-    ? true
-    : stages.length > 0 &&
-      stages.every((stage) => {
-        const hasSpace = /\s/.test(stage.abbr);
-        return (
-          Boolean(stage.label) &&
-          Boolean(stage.abbr) &&
-          !hasSpace &&
-          stage.gameCount > 0 &&
-          (stage.timeBound ? datesValid(stage.startsAt, stage.endsAt) : true)
-        );
-      });
+  const stageValid =
+    isSessionLadder || isChallenge
+      ? true
+      : stages.length > 0 &&
+        stages.every((stage) => {
+          const hasSpace = /\s/.test(stage.abbr);
+          return (
+            Boolean(stage.label) &&
+            Boolean(stage.abbr) &&
+            !hasSpace &&
+            stage.gameCount > 0 &&
+            (stage.timeBound ? datesValid(stage.startsAt, stage.endsAt) : true)
+          );
+        });
 
   const templatesValid = isSessionLadder
     ? true
@@ -1522,12 +1611,7 @@ export function AdminCreateEventPage() {
                         </Alert>
                       ) : (
                         <>
-                          <TextInput
-                            label="Variant"
-                            value={variant}
-                            onChange={(e) => setVariant(e.currentTarget.value)}
-                            required
-                          />
+                          <VariantCombobox value={variant} onChange={setVariant} />
 
                           <NumberInput
                             label="Number of games"
@@ -1543,16 +1627,6 @@ export function AdminCreateEventPage() {
                             onChange={(e) => setSeedFormula(e.currentTarget.value)}
                             placeholder="{eID}-{rID}-{i}"
                             required
-                            rightSection={
-                              <Button
-                                type="button"
-                                variant="subtle"
-                                size="compact-xs"
-                                onClick={() => setShowFormulaHelp(true)}
-                              >
-                                Info
-                              </Button>
-                            }
                             error={
                               formulaHasSpace
                                 ? 'Formula cannot contain spaces.'
@@ -1561,6 +1635,14 @@ export function AdminCreateEventPage() {
                                   : undefined
                             }
                           />
+                          <Button
+                            type="button"
+                            variant="subtle"
+                            size="compact-xs"
+                            onClick={() => setShowFormulaHelp(true)}
+                          >
+                            Formula reference
+                          </Button>
 
                           {invalidTokens.length > 0 && (
                             <Alert color="red" variant="light">

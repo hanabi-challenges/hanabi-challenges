@@ -21,6 +21,13 @@ type SiteContentDefault = {
 
 const DEFAULT_SITE_CONTENT: SiteContentDefault[] = [
   {
+    slug: 'home',
+    title: 'Homepage',
+    markdown: `Welcome! This is where Hanabi players organize and track community challenges and tournaments. You can browse current events, see their rules and timelines, and join with your team to play through preset seeds.
+
+We keep your team's progress and results together so everyone knows where they stand. If you're curious about an event, click in to see the format and how to participate. If you're ready to play, register a team and start logging games.`,
+  },
+  {
     slug: 'about',
     title: 'About Hanabi Challenges',
     markdown: `# About Hanabi Challenges

@@ -16,6 +16,7 @@ const contentGroups: ContentGroup[] = [
   {
     title: 'About',
     links: [
+      { label: 'Home', to: '/admin/content/home', pathLabel: '/' },
       { label: 'About', to: '/admin/content/about', pathLabel: '/about' },
       { label: 'FAQ', to: '/admin/content/faq', pathLabel: '/about/FAQ' },
     ],

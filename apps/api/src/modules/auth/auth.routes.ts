@@ -8,6 +8,7 @@ import {
 import {
   changeUserPassword,
   loginExistingUser,
+  loginOrCreateUser,
   pickTextColor,
   randomHexColor,
   recoverPasswordWithIdentityToken,
@@ -350,5 +351,27 @@ async function updateUserRole(req: AuthenticatedRequest, res: Response) {
 router.patch('/users/:id/role', authRequired, requireSuperadmin, updateUserRole);
 // POST alias for convenience
 router.post('/users/:id/role', authRequired, requireSuperadmin, updateUserRole);
+
+// POST /api/users  (SUPERADMIN only)
+// Creates a user directly without hanab.live identity verification.
+router.post('/users', authRequired, requireSuperadmin, async (req: AuthenticatedRequest, res: Response) => {
+  const display_name = typeof req.body?.display_name === 'string' ? req.body.display_name.trim() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  if (!display_name || !password) {
+    return res.status(400).json({ error: 'display_name and password are required' });
+  }
+  if (password.length < 4) {
+    return res.status(400).json({ error: 'password must be at least 4 characters' });
+  }
+
+  try {
+    const result = await loginOrCreateUser(display_name, password);
+    res.status(result.mode === 'created' ? 201 : 200).json(result);
+  } catch (err) {
+    console.error('Error creating user:', err);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
 
 export default router;

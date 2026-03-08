@@ -15,6 +15,9 @@ DROP TABLE IF EXISTS event_session_rounds CASCADE;
 DROP TABLE IF EXISTS event_sessions CASCADE;
 DROP TABLE IF EXISTS event_session_ladder_config CASCADE;
 DROP TABLE IF EXISTS user_notifications CASCADE;
+DROP TABLE IF EXISTS pending_validations CASCADE;
+DROP TABLE IF EXISTS sim_runs CASCADE;
+DROP TABLE IF EXISTS sim_api_tokens CASCADE;
 DROP TABLE IF EXISTS admin_access_requests CASCADE;
 DROP TABLE IF EXISTS event_badge_awards CASCADE;
 DROP TABLE IF EXISTS event_badges CASCADE;
@@ -45,6 +48,7 @@ CREATE TABLE users (
   color_hex TEXT NOT NULL DEFAULT '#777777',
   text_color TEXT NOT NULL DEFAULT '#ffffff'
     CHECK (text_color IN ('#000000', '#ffffff')),
+  sim_run_id INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -70,6 +74,7 @@ CREATE TABLE events (
   registration_cutoff TIMESTAMPTZ,
   starts_at TIMESTAMPTZ,
   ends_at TIMESTAMPTZ,
+  sim_run_id INTEGER,
   CONSTRAINT chk_tournament_limits CHECK (max_teams IS NULL OR max_rounds IS NULL),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -560,3 +565,59 @@ CREATE INDEX idx_admin_access_requests_requester_created
 CREATE UNIQUE INDEX uq_admin_access_requests_pending_per_user
   ON admin_access_requests (requester_user_id)
   WHERE status = 'pending';
+
+------------------------------------------------------------
+-- SIM API TOKENS
+-- Cycled tokens granting simulation access (superadmin-managed)
+------------------------------------------------------------
+
+CREATE TABLE sim_api_tokens (
+  id SERIAL PRIMARY KEY,
+  label TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ,
+  revoked BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+------------------------------------------------------------
+-- SIM RUNS
+-- Tracks a single simulation execution for GC purposes
+------------------------------------------------------------
+
+CREATE TABLE sim_runs (
+  id SERIAL PRIMARY KEY,
+  label TEXT,
+  created_by_token_id INTEGER REFERENCES sim_api_tokens(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  gc_at TIMESTAMPTZ
+);
+
+------------------------------------------------------------
+-- PENDING VALIDATIONS
+-- Short-lived proof that validate-replay succeeded, consumed on score submit
+------------------------------------------------------------
+
+CREATE TABLE pending_validations (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('challenge', 'session_round')),
+  -- challenge context
+  event_team_id INTEGER REFERENCES event_teams(id) ON DELETE CASCADE,
+  event_game_template_id INTEGER REFERENCES event_game_templates(id) ON DELETE CASCADE,
+  -- session_round context
+  round_id INTEGER REFERENCES event_session_rounds(id) ON DELETE CASCADE,
+  team_no INTEGER,
+  -- the hanab.live game that was validated
+  game_id BIGINT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX uq_pending_validations_challenge
+  ON pending_validations (event_team_id, event_game_template_id)
+  WHERE kind = 'challenge';
+
+CREATE UNIQUE INDEX uq_pending_validations_session_round
+  ON pending_validations (round_id, team_no)
+  WHERE kind = 'session_round';

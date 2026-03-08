@@ -818,6 +818,17 @@ router.post(
         derived: { seedSuffix, seedPlayers, historyVariant, score, endCondition, playedAt },
       });
 
+      // Record proof of validation so POST /api/results can verify it was called.
+      // Upsert: a re-validation of the same slot refreshes the TTL and game_id.
+      await pool.query(
+        `INSERT INTO pending_validations
+           (kind, event_team_id, event_game_template_id, game_id, expires_at)
+         VALUES ('challenge', $1, $2, $3, NOW() + INTERVAL '10 minutes')
+         ON CONFLICT (event_team_id, event_game_template_id) WHERE kind = 'challenge'
+         DO UPDATE SET game_id = EXCLUDED.game_id, expires_at = EXCLUDED.expires_at`,
+        [teamIdNum, template_id, gameId],
+      );
+
       return res.json({
         ok: true,
         gameId,

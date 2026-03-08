@@ -10,6 +10,7 @@ import siteContentRouter from '../modules/site-content/site-content.routes';
 import badgesRouter from '../modules/badges/badges.routes';
 import notificationsRouter from '../modules/notifications/notifications.routes';
 import adminAccessRouter from '../modules/admin-access/admin-access.routes';
+import simRouter from '../modules/sim/sim.routes';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/api', siteContentRouter);
 router.use('/api', badgesRouter);
 router.use('/api', notificationsRouter);
 router.use('/api', adminAccessRouter);
+router.use('/api/sim', simRouter); // /api/sim/...
 
 export default router;

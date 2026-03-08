@@ -1,6 +1,8 @@
 // src/modules/results/result.routes.ts
 import { Router, Request, Response } from 'express';
 import { authRequired } from '../../middleware/authMiddleware';
+import { simTokenOptional, SimAuthenticatedRequest } from '../../middleware/simTokenMiddleware';
+import { pool } from '../../config/db';
 import { createGameResult, getGameResultById, ZeroReason } from './result.service';
 
 const router = Router();
@@ -22,7 +24,7 @@ const router = Router();
  *   "players": string[]                // optional display_names in seat order
  * }
  */
-router.post('/', authRequired, async (req: Request, res: Response) => {
+router.post('/', authRequired, simTokenOptional, async (req: SimAuthenticatedRequest, res: Response) => {
   const {
     event_team_id,
     event_game_template_id,
@@ -63,6 +65,26 @@ router.post('/', authRequired, async (req: Request, res: Response) => {
       error: "zero_reason must be one of 'Strike Out', 'Time Out', 'VTK', or null",
     });
     return;
+  }
+
+  // Require a recent successful validate-replay call unless the request carries
+  // a valid sim token, in which case the sim is trusted to submit directly.
+  if (!req.simToken) {
+    const validationResult = await pool.query(
+      `DELETE FROM pending_validations
+       WHERE kind = 'challenge'
+         AND event_team_id = $1
+         AND event_game_template_id = $2
+         AND expires_at > NOW()
+       RETURNING id`,
+      [event_team_id, event_game_template_id],
+    );
+    if (validationResult.rowCount === 0) {
+      res.status(403).json({
+        error: 'Score submission requires a recent successful replay validation',
+      });
+      return;
+    }
   }
 
   try {

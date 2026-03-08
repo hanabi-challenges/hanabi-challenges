@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authOptional, authRequired, AuthenticatedRequest } from '../../middleware/authMiddleware';
+import { pool } from '../../config/db';
 import {
   addEventDelegate,
   assignNextRound,
@@ -675,6 +676,22 @@ router.post(
       return res.status(403).json({ error: 'You are not assigned to this team for this round' });
     }
 
+    // Require a recent successful validate-replay call for this round/team.
+    const validationResult = await pool.query(
+      `DELETE FROM pending_validations
+       WHERE kind = 'session_round'
+         AND round_id = $1
+         AND team_no = $2
+         AND expires_at > NOW()
+       RETURNING id`,
+      [roundId, teamNo],
+    );
+    if (validationResult.rowCount === 0) {
+      return res.status(403).json({
+        error: 'Score submission requires a recent successful replay validation',
+      });
+    }
+
     const row = await submitRoundScore({
       roundId,
       teamNo,
@@ -820,6 +837,16 @@ router.post(
       }
 
       const endCondition = normalizeReplayEndCondition(game.endCondition);
+
+      // Record proof of validation so submit-score can verify it was called.
+      await pool.query(
+        `INSERT INTO pending_validations
+           (kind, round_id, team_no, game_id, expires_at)
+         VALUES ('session_round', $1, $2, $3, NOW() + INTERVAL '10 minutes')
+         ON CONFLICT (round_id, team_no) WHERE kind = 'session_round'
+         DO UPDATE SET game_id = EXCLUDED.game_id, expires_at = EXCLUDED.expires_at`,
+        [roundId, teamNo, gameId],
+      );
 
       return res.json({
         ok: true,

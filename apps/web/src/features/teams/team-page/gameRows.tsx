@@ -481,7 +481,10 @@ export function UnplayedRow({
     } catch (err) {
       const body = err instanceof ApiError ? (err.body as { error?: string }) : null;
       const message =
-        body?.error ?? (err instanceof ApiError ? `Submit failed (status ${err.status})` : ((err as Error)?.message ?? 'Submit failed'));
+        body?.error ??
+        (err instanceof ApiError
+          ? `Submit failed (status ${err.status})`
+          : ((err as Error)?.message ?? 'Submit failed'));
       setSubmitError(message);
     } finally {
       setSubmitting(false);

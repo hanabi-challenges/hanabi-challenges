@@ -674,7 +674,11 @@ router.post(
       return res.status(e.statusCode).json(e.body);
     }
 
-    const { derived, exportPlayers, teamId: resolvedTeamId } = validation as ReplayValidationSuccess;
+    const {
+      derived,
+      exportPlayers,
+      teamId: resolvedTeamId,
+    } = validation as ReplayValidationSuccess;
 
     if (derived.score == null) {
       return res
@@ -832,8 +836,7 @@ async function runReplayValidation(
     const seedString = (exportJson as { seed?: string }).seed ?? '';
 
     const duplicatePlayers = exportPlayers.filter(
-      (p) =>
-        exportPlayers.findIndex((c: string) => c === p) !== exportPlayers.lastIndexOf(p),
+      (p) => exportPlayers.findIndex((c: string) => c === p) !== exportPlayers.lastIndexOf(p),
     );
     if (duplicatePlayers.length > 0) {
       return err(
@@ -870,10 +873,7 @@ async function runReplayValidation(
       return err(400, `Replay is for ${seedPlayers}p but team is ${team.team_size}p`);
     }
     if (tpl.seed_payload && seedSuffix !== tpl.seed_payload) {
-      return err(
-        400,
-        `Replay seed ${seedSuffix} does not match template seed ${tpl.seed_payload}`,
-      );
+      return err(400, `Replay seed ${seedSuffix} does not match template seed ${tpl.seed_payload}`);
     }
 
     // Stage 2: fetch history-full for first player and check variant/flags/score
@@ -898,7 +898,8 @@ async function runReplayValidation(
       );
       if (game) {
         const opts = game.options ?? {};
-        historyVariant = game.variantName ?? opts.variantName ?? game.variant ?? opts.variant ?? null;
+        historyVariant =
+          game.variantName ?? opts.variantName ?? game.variant ?? opts.variant ?? null;
         const flags = {
           cardCycle: game.cardCycle ?? opts.cardCycle,
           deckPlays: game.deckPlays ?? opts.deckPlays,

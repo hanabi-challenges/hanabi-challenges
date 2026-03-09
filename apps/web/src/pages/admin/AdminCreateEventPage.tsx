@@ -119,11 +119,12 @@ function VariantCombobox({
       <Combobox.Dropdown>
         <Combobox.Options mah={260} style={{ overflowY: 'auto' }}>
           {loading && <Combobox.Empty>Loading…</Combobox.Empty>}
-          {!loading && filtered.map((v) => (
-            <Combobox.Option key={v} value={v}>
-              {v}
-            </Combobox.Option>
-          ))}
+          {!loading &&
+            filtered.map((v) => (
+              <Combobox.Option key={v} value={v}>
+                {v}
+              </Combobox.Option>
+            ))}
           {!loading && filtered.length === 0 && value.trim() && !exactMatch && (
             <Combobox.Option value={value}>Use &quot;{value}&quot;</Combobox.Option>
           )}
@@ -1384,9 +1385,7 @@ export function AdminCreateEventPage() {
                               isEdit && editSlug
                                 ? `/admin/events/${editSlug}/edit`
                                 : '/admin/events/create';
-                            navigate(
-                              `/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`,
-                            );
+                            navigate(`/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`);
                           }}
                         >
                           Open Badge Designer

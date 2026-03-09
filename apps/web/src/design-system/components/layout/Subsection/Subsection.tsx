@@ -1,6 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './Subsection.css';
 
 type SubsectionProps = {
   children: ReactNode;
@@ -11,5 +10,15 @@ type SubsectionProps = {
  * Hierarchical spacing variant of Section for nested content blocks.
  */
 export function Subsection({ children, className }: SubsectionProps): ReactElement {
-  return <Box className={['ds-subsection', className].filter(Boolean).join(' ')}>{children}</Box>;
+  return (
+    <Box
+      className={className}
+      style={{
+        paddingTop: 'var(--ds-space-sm)',
+        paddingBottom: 'var(--ds-space-sm)',
+      }}
+    >
+      {children}
+    </Box>
+  );
 }

@@ -1,6 +1,5 @@
 import type { InputHTMLAttributes, ReactElement } from 'react';
 import { Checkbox as MantineCheckbox } from '../../../../mantine';
-import './Checkbox.css';
 
 export type CheckboxProps = {
   label?: string;
@@ -20,7 +19,7 @@ export function Checkbox({
   return (
     <MantineCheckbox
       id={id}
-      className={['ds-checkbox-field', className].filter(Boolean).join(' ')}
+      className={className}
       label={label}
       description={helperText}
       error={error ?? undefined}

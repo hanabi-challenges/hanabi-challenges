@@ -38,6 +38,7 @@ export const MainLayout: React.FC = () => {
     const root = document.documentElement;
     root.classList.toggle('dark', isDark);
     root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    root.setAttribute('data-mantine-color-scheme', isDark ? 'dark' : 'light');
     document.body.classList.toggle('dark', isDark);
   }, [isDark]);
 

@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react';
-import { Box } from '../../../../mantine';
-import './Badge.css';
+import { Badge as MantineBadge } from '../../../../mantine';
 
 export type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 export type BadgeSize = 'sm' | 'md';
@@ -12,18 +11,23 @@ type BadgeProps = {
   className?: string;
 };
 
+const colorMap: Record<BadgeTone, string> = {
+  neutral: 'gray',
+  info: 'blue',
+  success: 'green',
+  warning: 'yellow',
+  danger: 'red',
+};
+
 export function Badge({
   tone = 'neutral',
   size = 'md',
   children,
   className,
 }: BadgeProps): ReactElement {
-  const rootClass = ['ds-badge', `ds-badge--${tone}`, `ds-badge--${size}`, className]
-    .filter(Boolean)
-    .join(' ');
   return (
-    <Box className={rootClass} component="span">
+    <MantineBadge color={colorMap[tone]} size={size} className={className}>
       {children}
-    </Box>
+    </MantineBadge>
   );
 }

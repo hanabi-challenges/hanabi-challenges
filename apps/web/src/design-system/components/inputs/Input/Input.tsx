@@ -48,19 +48,35 @@ export function Input(props: InputProps): ReactElement {
     id ?? (label ? `ds-input-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined);
   const describedBy = error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined;
   const hasError = Boolean(error);
-  const sizeClass = size === 'sm' ? 'ds-input--sm' : 'ds-input--md';
-  const widthClass = fullWidth ? 'ds-input--full' : '';
-  const errorClass = hasError ? 'ds-input--error' : '';
-  const inputClasses = ['ds-input', sizeClass, widthClass, errorClass, className]
-    .filter(Boolean)
-    .join(' ');
 
   return (
-    <Box component="label" className="ds-input-field">
+    <Box
+      component="label"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--ds-space-xxs)',
+        width: '100%',
+      }}
+    >
       {(label || labelAction) && (
-        <Box className="ds-input-label-row">
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--ds-space-xs)',
+          }}
+        >
           {label && (
-            <Box className="ds-input-label" component="span">
+            <Box
+              component="span"
+              style={{
+                fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+                fontWeight: 600,
+                color: 'var(--ds-color-text)',
+              }}
+            >
               {label}
             </Box>
           )}
@@ -70,7 +86,9 @@ export function Input(props: InputProps): ReactElement {
       {multiline ? (
         <MantineTextarea
           id={inputId}
-          classNames={{ input: inputClasses }}
+          classNames={{
+            input: `ds-input ds-input--${size}${fullWidth ? ' ds-input--full' : ''}${hasError ? ' ds-input--error' : ''}${className ? ` ${className}` : ''}`,
+          }}
           aria-invalid={hasError}
           aria-describedby={describedBy}
           {...(rest as TextAreaProps)}
@@ -78,7 +96,9 @@ export function Input(props: InputProps): ReactElement {
       ) : (
         <MantineTextInput
           id={inputId}
-          classNames={{ input: inputClasses }}
+          classNames={{
+            input: `ds-input ds-input--${size}${fullWidth ? ' ds-input--full' : ''}${hasError ? ' ds-input--error' : ''}${className ? ` ${className}` : ''}`,
+          }}
           aria-invalid={hasError}
           aria-describedby={describedBy}
           styles={{ input: { width: '100%' }, section: { display: 'none' } }}
@@ -86,11 +106,25 @@ export function Input(props: InputProps): ReactElement {
         />
       )}
       {hasError ? (
-        <Box id={describedBy} className="ds-input-helper ds-input-helper--error" component="span">
+        <Box
+          id={describedBy}
+          component="span"
+          style={{
+            fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+            color: 'var(--ds-color-semantic-alert-error-light-text, #b91c1c)',
+          }}
+        >
           {error}
         </Box>
       ) : helperText ? (
-        <Box id={describedBy} className="ds-input-helper" component="span">
+        <Box
+          id={describedBy}
+          component="span"
+          style={{
+            fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+            color: 'var(--ds-color-text-muted)',
+          }}
+        >
           {helperText}
         </Box>
       ) : null}

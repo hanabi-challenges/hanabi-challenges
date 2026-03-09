@@ -1,51 +1,4 @@
-.ds-input-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-xxs);
-  width: 100%;
-}
-
-.ds-input-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ds-space-xs);
-}
-
-.ds-input-label {
-  font-size: var(--ds-typography-fontSize-small);
-  font-weight: var(--ds-typography-fontWeight-title, 600);
-  color: var(--ds-color-text);
-}
-
-.ds-input {
-  border: 1px solid var(--ds-color-border);
-  border-radius: var(--ds-radius-md);
-  height: var(--ds-size-control-md-height);
-  padding: 0 var(--ds-size-control-md-paddingX);
-  font-size: var(--ds-typography-fontSize-body);
-  color: var(--ds-color-text);
-  background: var(--ds-color-surface);
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
-}
-
-.ds-input--sm {
-  height: var(--ds-size-control-sm-height);
-  padding: 0 var(--ds-size-control-sm-paddingX);
-  font-size: var(--ds-typography-fontSize-small);
-  border-radius: var(--ds-radius-sm);
-}
-
-.ds-input--md {
-  height: var(--ds-size-control-md-height);
-}
-
-.ds-input--full {
-  width: 100%;
-}
+/* Pseudo-state rules only — layout styles are inline in Input.tsx */
 
 .ds-input:focus {
   outline: none;
@@ -59,14 +12,5 @@
 
 .ds-input--error {
   border-color: var(--ds-color-semantic-alert-error-light-text, #b91c1c);
-  color: var(--ds-color-semantic-alert-error-light-text, #b91c1c);
-}
-
-.ds-input-helper {
-  font-size: var(--ds-typography-fontSize-small);
-  color: var(--ds-color-text-muted);
-}
-
-.ds-input-helper--error {
   color: var(--ds-color-semantic-alert-error-light-text, #b91c1c);
 }

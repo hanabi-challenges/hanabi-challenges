@@ -7,7 +7,6 @@ import {
   type ReactNode,
 } from 'react';
 import { Box } from '../../../../mantine';
-import './Section.css';
 
 type SectionHeaderRenderer = (level: number) => ReactNode;
 
@@ -38,6 +37,18 @@ function gapForDepth(depth: number): string {
   return 'var(--ds-space-xs)';
 }
 
+const paddingYMap: Record<'sm' | 'md' | 'lg', string> = {
+  sm: 'var(--ds-space-sm)',
+  md: 'var(--ds-space-md)',
+  lg: 'var(--ds-space-lg)',
+};
+
+const paddingXMap: Record<'none' | 'sm' | 'md', string> = {
+  none: '0',
+  sm: 'var(--ds-space-sm)',
+  md: 'var(--ds-space-md)',
+};
+
 export function Section({
   children,
   paddingY = 'md',
@@ -55,14 +66,6 @@ export function Section({
   const headingLevel = Math.max(1, Math.min(6, effectiveBase + depth));
   const nextDepth = depth + 1;
   const Component = (as || 'section') as ElementType;
-  const classes = [
-    'ds-section',
-    `ds-section--py-${paddingY}`,
-    `ds-section--px-${paddingX}`,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
 
   const gap = gapForDepth(depth);
   const childGap = 'var(--ds-space-sm)';
@@ -80,10 +83,17 @@ export function Section({
           : 'var(--ds-space-sm)'
         : undefined;
 
-  const mergedStyle: CSSProperties = {
+  const sectionStyle: CSSProperties = {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: childGap,
+    paddingTop: paddingYMap[paddingY],
+    paddingBottom: paddingYMap[paddingY],
+    paddingLeft: paddingXMap[paddingX],
+    paddingRight: paddingXMap[paddingX],
+    // expose gap vars for nested sections' margin-top calculation
     ['--ds-section-gap' as string]: gap,
-    ['--ds-section-header-gap' as string]: headerGap,
-    ['--ds-section-subheader-gap' as string]: subheaderGap,
     ['--ds-section-child-gap' as string]: childGap,
     ...style,
   };
@@ -93,9 +103,13 @@ export function Section({
 
   return (
     <SectionDepthContext.Provider value={{ depth: nextDepth, baseLevel: effectiveBase }}>
-      <Box component={Component} className={classes} style={mergedStyle} data-depth={depth}>
-        {renderHeader ? <Box className="ds-section__header">{renderHeader}</Box> : null}
-        {subheader ? <Box className="ds-section__subheader">{subheader}</Box> : null}
+      <Box component={Component} className={className} style={sectionStyle} data-depth={depth}>
+        {renderHeader ? (
+          <Box style={{ marginBottom: headerGap ?? 'var(--ds-space-sm)' }}>{renderHeader}</Box>
+        ) : null}
+        {subheader ? (
+          <Box style={{ marginBottom: subheaderGap ?? 'var(--ds-space-sm)' }}>{subheader}</Box>
+        ) : null}
         <Box>{children}</Box>
       </Box>
     </SectionDepthContext.Provider>

@@ -1,7 +1,5 @@
-import type { CSSProperties, HTMLAttributes, ReactElement, ReactNode } from 'react';
-import { useId, useState } from 'react';
-import { Box } from '../../../../mantine';
-import './Tooltip.css';
+import type { HTMLAttributes, ReactElement, ReactNode } from 'react';
+import { Tooltip as MantineTooltip } from '../../../../mantine';
 
 type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
 
@@ -19,40 +17,32 @@ export function Tooltip({
   maxWidth = 'min(360px, 80vw)',
   minWidth = '200px',
   children,
-  ...rest
 }: TooltipProps): ReactElement {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  const styleVars: CSSProperties = {
-    '--ds-tooltip-max-width':
-      typeof maxWidth === 'number' ? `${maxWidth}px` : (maxWidth as CSSProperties['maxWidth']),
-    '--ds-tooltip-min-width':
-      typeof minWidth === 'number' ? `${minWidth}px` : (minWidth as CSSProperties['minWidth']),
-  };
+  const maxWidthStr = typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth;
+  const minWidthStr = typeof minWidth === 'number' ? `${minWidth}px` : minWidth;
 
   return (
-    <Box
-      component="span"
-      className="ds-tooltip__trigger"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      aria-describedby={open ? id : undefined}
-      {...rest}
+    <MantineTooltip
+      label={content}
+      position={placement}
+      styles={{
+        tooltip: {
+          maxWidth: maxWidthStr,
+          minWidth: minWidthStr,
+          background: 'var(--ds-color-surface)',
+          color: 'var(--ds-color-text)',
+          border: '1px solid var(--ds-color-border)',
+          borderRadius: 'var(--ds-radius-sm)',
+          boxShadow: 'var(--ds-shadow-light)',
+          fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+          lineHeight: '1.3',
+          wordBreak: 'break-word',
+          whiteSpace: 'normal',
+        },
+      }}
     >
-      {children}
-      {open && (
-        <Box
-          component="span"
-          id={id}
-          className={`ds-tooltip ds-tooltip--${placement}`}
-          style={styleVars}
-          role="tooltip"
-        >
-          {content}
-        </Box>
-      )}
-    </Box>
+      {/* Mantine tooltip requires a single child that accepts refs */}
+      <span>{children}</span>
+    </MantineTooltip>
   );
 }

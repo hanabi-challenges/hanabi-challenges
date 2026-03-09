@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react';
 import { Select as MantineSelect } from '../../../../mantine';
-import './Select.css';
 
 export type SelectOption = { value: string; label: string };
 
@@ -23,13 +22,8 @@ export function Select({
 }: SelectProps): ReactElement {
   return (
     <MantineSelect
-      className={['ds-select', className].filter(Boolean).join(' ')}
-      classNames={{
-        wrapper: 'ds-select__wrapper',
-        input: 'ds-select__input',
-        dropdown: 'ds-select__dropdown',
-        option: 'ds-select__option',
-      }}
+      className={className}
+      style={{ width: '100%' }}
       value={value}
       disabled={disabled}
       onChange={(next) => onChange(next ?? '')}

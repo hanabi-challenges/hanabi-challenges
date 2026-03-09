@@ -1,7 +1,6 @@
 import type { ReactElement } from 'react';
-import { Box } from '../../../../mantine';
+import { Box, Text } from '../../../../mantine';
 import { Button } from '../../inputs/Button/Button';
-import './Pagination.css';
 
 type PaginationProps = {
   totalItems: number;
@@ -29,8 +28,18 @@ export function Pagination({
   const isLast = currentPage >= totalPages;
 
   return (
-    <Box className={['ds-pagination', className].filter(Boolean).join(' ')}>
-      <Box className="ds-pagination__controls">
+    <Box
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}
+      className={className}
+    >
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--ds-space-xs)',
+          flexWrap: 'wrap',
+        }}
+      >
         <Button
           size="sm"
           variant="secondary"
@@ -49,9 +58,9 @@ export function Pagination({
         >
           ‹
         </Button>
-        <Box className="ds-pagination__status" component="span">
+        <Text component="span" style={{ color: 'var(--ds-color-text-muted)', fontWeight: 600 }}>
           Page {currentPage} of {totalPages}
-        </Box>
+        </Text>
         <Button
           size="sm"
           variant="secondary"

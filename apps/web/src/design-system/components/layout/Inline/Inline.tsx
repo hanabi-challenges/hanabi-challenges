@@ -1,7 +1,6 @@
 // src/design-system/components/layout/Inline/Inline.tsx
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './Inline.css';
 
 export type InlineGap = 'none' | 'xs' | 'sm' | 'md' | 'lg';
 export type InlineAlign = 'start' | 'center' | 'end' | 'baseline';
@@ -47,6 +46,30 @@ export type InlineProps = {
   className?: string;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'className' | 'children'>;
 
+const gapMap: Record<InlineGap, string> = {
+  none: '0',
+  xs: 'var(--ds-space-xs)',
+  sm: 'var(--ds-space-sm)',
+  md: 'var(--ds-space-md)',
+  lg: 'var(--ds-space-lg)',
+};
+
+const alignMap: Record<InlineAlign, CSSProperties['alignItems']> = {
+  start: 'flex-start',
+  center: 'center',
+  end: 'flex-end',
+  baseline: 'baseline',
+};
+
+const justifyMap: Record<InlineJustify, CSSProperties['justifyContent']> = {
+  start: 'flex-start',
+  center: 'center',
+  end: 'flex-end',
+  'space-between': 'space-between',
+  'space-around': 'space-around',
+  'space-evenly': 'space-evenly',
+};
+
 export function Inline({
   children,
   gap = 'sm',
@@ -55,8 +78,9 @@ export function Inline({
   wrap = false,
   columnWidths,
   className,
+  style,
   ...rest
-}: InlineProps) {
+}: InlineProps & { style?: CSSProperties }) {
   const gridTemplate =
     columnWidths && columnWidths.length > 0
       ? columnWidths
@@ -68,28 +92,19 @@ export function Inline({
           .join(' ')
       : undefined;
 
-  const rootClassName = [
-    'ui-inline',
-    `ui-inline--gap-${gap}`,
-    `ui-inline--align-${align}`,
-    `ui-inline--justify-${justify}`,
-    wrap && !columnWidths && 'ui-inline--wrap',
-    columnWidths && 'ui-inline--grid',
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const styleOverrides =
-    gridTemplate != null
-      ? {
-          display: 'grid',
-          gridTemplateColumns: gridTemplate,
-        }
-      : undefined;
+  const inlineStyle: CSSProperties = {
+    display: gridTemplate ? 'grid' : 'flex',
+    flexDirection: gridTemplate ? undefined : 'row',
+    gap: gapMap[gap],
+    alignItems: alignMap[align],
+    justifyContent: justifyMap[justify],
+    ...(wrap && !gridTemplate ? { flexWrap: 'wrap' } : {}),
+    ...(gridTemplate ? { gridTemplateColumns: gridTemplate } : {}),
+    ...style,
+  };
 
   return (
-    <Box className={rootClassName} style={styleOverrides} {...rest}>
+    <Box className={className} style={inlineStyle} {...rest}>
       {children}
     </Box>
   );

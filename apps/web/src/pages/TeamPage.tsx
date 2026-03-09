@@ -1,4 +1,5 @@
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Link } from '../mantine';
 import { NotFoundPage } from './NotFoundPage';
 import { useTeamDetail, type TeamGame } from '../hooks/useTeamDetail';
 import { useTeamTemplates } from '../hooks/useTeamTemplates';

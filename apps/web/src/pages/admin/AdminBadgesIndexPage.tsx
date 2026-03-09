@@ -12,7 +12,7 @@ import {
   CoreTooltip as Tooltip,
 } from '../../design-system';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '../../mantine';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useEvents } from '../../hooks/useEvents';

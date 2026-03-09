@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from '../mantine';
 import {
   Alert,
   Button,

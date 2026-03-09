@@ -10,7 +10,7 @@ import {
   CoreTitle as Title,
 } from '../design-system';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from '../mantine';
 import { ApiError, getJson, getJsonAuth, putJsonAuth } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { MarkdownRenderer } from '../ui/MarkdownRenderer';

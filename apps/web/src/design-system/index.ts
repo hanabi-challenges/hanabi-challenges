@@ -45,6 +45,8 @@ export { ActionIcon, Indicator, Menu, PasswordInput, ScrollArea, SimpleGrid } fr
 // Core wrapper exports for pages/features that need lower-level primitives.
 // Use these via design-system (not direct ../mantine imports) to preserve a single UI boundary.
 export {
+  Combobox as CoreCombobox,
+  useCombobox as useCoreCombobox,
   ActionIcon as CoreActionIcon,
   Alert as CoreAlert,
   Anchor as CoreAnchor,

@@ -1,4 +1,6 @@
 import {
+  Combobox as MantineCombobox,
+  useCombobox as useMantineCombobox,
   ActionIcon as MantineActionIcon,
   Alert as MantineAlert,
   Anchor as MantineAnchor,
@@ -217,6 +219,8 @@ export function SimpleGrid(props: SimpleGridProps): ReactElement {
 }
 
 // Preserve compound APIs (e.g., Menu.Target, Grid.Col, Table.Tbody, List.Item, Radio.Group).
+export const Combobox = MantineCombobox;
+export const useCombobox = useMantineCombobox;
 export const Menu = MantineMenu;
 export const Grid = MantineGrid;
 export const Table = MantineTable;

@@ -37,6 +37,7 @@ import {
   type BadgeSetRecord,
   updateChallengeBadgeConfigAuth,
 } from './badgeSetsApi';
+import { CoreCombobox as Combobox, useCoreCombobox as useCombobox } from '../../design-system';
 import {
   CREATE_EVENT_WIZARD_DRAFT_KEY,
   initialStage,
@@ -61,6 +62,80 @@ import {
   getStageAbbrForSeeds,
   slugify,
 } from '../../features/admin/event-wizard/helpers';
+
+// Module-level cache so we only fetch once per page session.
+let cachedVariants: string[] | null = null;
+
+async function fetchHanabVariants(): Promise<string[]> {
+  if (cachedVariants) return cachedVariants;
+  const resp = await fetch('/api/variants');
+  if (!resp.ok) throw new Error(`Failed to fetch variants (${resp.status})`);
+  const data = (await resp.json()) as { variants: { name: string }[] };
+  const sorted = data.variants.map((v) => v.name).sort((a, b) => a.localeCompare(b));
+  cachedVariants = sorted;
+  return sorted;
+}
+
+function VariantCombobox({
+  value,
+  onChange,
+  variants,
+  loading,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  variants: string[];
+  loading?: boolean;
+}) {
+  const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
+  const trimmed = value.toLowerCase().trim();
+  const filtered = variants.filter((v) => v.toLowerCase().includes(trimmed));
+  const exactMatch = variants.some((v) => v.toLowerCase() === trimmed);
+
+  return (
+    <Combobox
+      store={combobox}
+      onOptionSubmit={(v) => {
+        onChange(v);
+        combobox.closeDropdown();
+      }}
+    >
+      <Combobox.Target>
+        <TextInput
+          label="Variant"
+          value={value}
+          placeholder={loading ? 'Loading variants…' : 'Search variants…'}
+          onChange={(e) => {
+            onChange(e.currentTarget.value);
+            combobox.openDropdown();
+            combobox.updateSelectedOptionIndex();
+          }}
+          onClick={() => combobox.openDropdown()}
+          onFocus={() => combobox.openDropdown()}
+          onBlur={() => combobox.closeDropdown()}
+          required
+        />
+      </Combobox.Target>
+      <Combobox.Dropdown>
+        <Combobox.Options mah={260} style={{ overflowY: 'auto' }}>
+          {loading && <Combobox.Empty>Loading…</Combobox.Empty>}
+          {!loading &&
+            filtered.map((v) => (
+              <Combobox.Option key={v} value={v}>
+                {v}
+              </Combobox.Option>
+            ))}
+          {!loading && filtered.length === 0 && value.trim() && !exactMatch && (
+            <Combobox.Option value={value}>Use &quot;{value}&quot;</Combobox.Option>
+          )}
+          {!loading && filtered.length === 0 && !value.trim() && (
+            <Combobox.Empty>No variants found</Combobox.Empty>
+          )}
+        </Combobox.Options>
+      </Combobox.Dropdown>
+    </Combobox>
+  );
+}
 
 export function AdminCreateEventPage() {
   const { user, token } = useAuth();
@@ -117,9 +192,13 @@ export function AdminCreateEventPage() {
   const [loadingExisting, setLoadingExisting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hanabVariants, setHanabVariants] = useState<string[]>([]);
+  const [hanabVariantsLoading, setHanabVariantsLoading] = useState(false);
 
   const hasLoadedExisting = useRef(false);
+  const prevEditSlugRef = useRef<string | undefined>(undefined);
   const previousEventTypeRef = useRef<EventTypeLabel>('Challenge');
+  const hanabVariantsFetchInitiated = useRef(false);
 
   const isTournament = eventType === 'Tournament';
   const isSessionLadder = eventType === 'League';
@@ -135,7 +214,7 @@ export function AdminCreateEventPage() {
     }
 
     if (isChallenge) {
-      return ['type', 'event', 'registration', 'stage', 'templates', 'badges']
+      return ['type', 'event', 'registration', 'templates', 'badges']
         .map((key) => stepByKey.get(key as StepKey))
         .filter((step): step is { key: StepKey; label: string } => Boolean(step));
     }
@@ -467,7 +546,32 @@ export function AdminCreateEventPage() {
   }, [token, isUnauthorized]);
 
   useEffect(() => {
-    if (!isEdit || !editSlug || hasLoadedExisting.current) return;
+    if (currentStep !== 'templates' || isSessionLadder) return;
+    if (hanabVariants.length > 0 || hanabVariantsFetchInitiated.current) return;
+    hanabVariantsFetchInitiated.current = true;
+    const load = async () => {
+      setHanabVariantsLoading(true);
+      try {
+        const variants = await fetchHanabVariants();
+        setHanabVariants(variants);
+      } catch {
+        // fall through — user can still type a custom value
+      } finally {
+        setHanabVariantsLoading(false);
+      }
+    };
+    void load();
+  }, [currentStep, isSessionLadder, hanabVariants.length]);
+
+  useEffect(() => {
+    if (!isEdit || !editSlug) return;
+
+    if (prevEditSlugRef.current !== editSlug) {
+      prevEditSlugRef.current = editSlug;
+      hasLoadedExisting.current = false;
+    }
+
+    if (hasLoadedExisting.current) return;
 
     const load = async () => {
       setLoadingExisting(true);
@@ -590,6 +694,7 @@ export function AdminCreateEventPage() {
         setChallengeBadgeSetId(challengeLink ? String(challengeLink.badge_set_id) : null);
         setLeagueSeasonBadgeSetId(seasonLink ? String(seasonLink.badge_set_id) : null);
         setLeagueSessionBadgeSetId(sessionLink ? String(sessionLink.badge_set_id) : null);
+        setCurrentStep('event');
       } catch (err) {
         if (err instanceof ApiError) {
           setError(`Failed to load event for editing: ${extractApiErrorMessage(err)}`);
@@ -758,22 +863,22 @@ export function AdminCreateEventPage() {
     Boolean(longDescription) &&
     Boolean(eventAbbr) &&
     !abbrHasSpace &&
-    !formulaHasSpace &&
     !tournamentLimitError;
 
-  const stageValid = isSessionLadder
-    ? true
-    : stages.length > 0 &&
-      stages.every((stage) => {
-        const hasSpace = /\s/.test(stage.abbr);
-        return (
-          Boolean(stage.label) &&
-          Boolean(stage.abbr) &&
-          !hasSpace &&
-          stage.gameCount > 0 &&
-          (stage.timeBound ? datesValid(stage.startsAt, stage.endsAt) : true)
-        );
-      });
+  const stageValid =
+    isSessionLadder || isChallenge
+      ? true
+      : stages.length > 0 &&
+        stages.every((stage) => {
+          const hasSpace = /\s/.test(stage.abbr);
+          return (
+            Boolean(stage.label) &&
+            Boolean(stage.abbr) &&
+            !hasSpace &&
+            stage.gameCount > 0 &&
+            (stage.timeBound ? datesValid(stage.startsAt, stage.endsAt) : true)
+          );
+        });
 
   const templatesValid = isSessionLadder
     ? true
@@ -964,7 +1069,7 @@ export function AdminCreateEventPage() {
         }
       }
 
-      if (!isSessionLadder) {
+      if (!isEdit && !isSessionLadder) {
         for (let idx = 0; idx < stages.length; idx += 1) {
           const stage = stages[idx];
           const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
@@ -1276,7 +1381,11 @@ export function AdminCreateEventPage() {
                           variant="light"
                           onClick={() => {
                             saveWizardDraft();
-                            navigate('/admin/badges/new');
+                            const returnTo =
+                              isEdit && editSlug
+                                ? `/admin/events/${editSlug}/edit`
+                                : '/admin/events/create';
+                            navigate(`/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`);
                           }}
                         >
                           Open Badge Designer
@@ -1487,23 +1596,16 @@ export function AdminCreateEventPage() {
                         <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
                       </Group>
 
-                      {isSessionLadder ? (
-                        <Alert color="blue" variant="light">
-                          League events do not use fixed stages/templates. Configure sessions and
-                          rounds after creation from the League controls.
-                        </Alert>
-                      ) : (
-                        stages.map((stage, idx) => (
-                          <StageBlock
-                            key={idx}
-                            stage={stage}
-                            index={idx}
-                            parsedMaxTeams={parsedMaxTeams}
-                            seedingFormat={seedingFormat}
-                            onPatch={updateStage}
-                          />
-                        ))
-                      )}
+                      {stages.map((stage, idx) => (
+                        <StageBlock
+                          key={idx}
+                          stage={stage}
+                          index={idx}
+                          parsedMaxTeams={parsedMaxTeams}
+                          seedingFormat={seedingFormat}
+                          onPatch={updateStage}
+                        />
+                      ))}
                     </Stack>
                   </SectionCard>
                 )}
@@ -1522,11 +1624,11 @@ export function AdminCreateEventPage() {
                         </Alert>
                       ) : (
                         <>
-                          <TextInput
-                            label="Variant"
+                          <VariantCombobox
                             value={variant}
-                            onChange={(e) => setVariant(e.currentTarget.value)}
-                            required
+                            onChange={setVariant}
+                            variants={hanabVariants}
+                            loading={hanabVariantsLoading}
                           />
 
                           <NumberInput
@@ -1543,16 +1645,6 @@ export function AdminCreateEventPage() {
                             onChange={(e) => setSeedFormula(e.currentTarget.value)}
                             placeholder="{eID}-{rID}-{i}"
                             required
-                            rightSection={
-                              <Button
-                                type="button"
-                                variant="subtle"
-                                size="compact-xs"
-                                onClick={() => setShowFormulaHelp(true)}
-                              >
-                                Info
-                              </Button>
-                            }
                             error={
                               formulaHasSpace
                                 ? 'Formula cannot contain spaces.'
@@ -1561,6 +1653,14 @@ export function AdminCreateEventPage() {
                                   : undefined
                             }
                           />
+                          <Button
+                            type="button"
+                            variant="subtle"
+                            size="compact-xs"
+                            onClick={() => setShowFormulaHelp(true)}
+                          >
+                            Formula reference
+                          </Button>
 
                           {invalidTokens.length > 0 && (
                             <Alert color="red" variant="light">
@@ -1610,7 +1710,7 @@ export function AdminCreateEventPage() {
                       Previous
                     </Button>
 
-                    {currentIndex < stepOrder.length - 1 ? (
+                    {currentIndex < stepOrder.length - 1 && (
                       <Button
                         type="button"
                         onClick={onNext}
@@ -1618,27 +1718,27 @@ export function AdminCreateEventPage() {
                       >
                         Next
                       </Button>
-                    ) : (
-                      <Button
-                        type="submit"
-                        disabled={
-                          !eventValid ||
-                          !badgesValid ||
-                          !registrationValid ||
-                          !stageValid ||
-                          !templatesValid ||
-                          saving
-                        }
-                      >
-                        {saving
-                          ? isEdit
-                            ? 'Saving...'
-                            : 'Creating...'
-                          : isEdit
-                            ? 'Save Event'
-                            : 'Create Event'}
-                      </Button>
                     )}
+
+                    <Button
+                      type="submit"
+                      disabled={
+                        !eventValid ||
+                        !badgesValid ||
+                        !registrationValid ||
+                        !stageValid ||
+                        !templatesValid ||
+                        saving
+                      }
+                    >
+                      {saving
+                        ? isEdit
+                          ? 'Saving...'
+                          : 'Creating...'
+                        : isEdit
+                          ? 'Save Event'
+                          : 'Create Event'}
+                    </Button>
                   </Group>
                 </Group>
               </Stack>

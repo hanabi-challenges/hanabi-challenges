@@ -453,15 +453,6 @@ export function UnplayedRow({
     }
   };
 
-  const zeroReasonFromEndCondition = (
-    code: number | null | undefined,
-  ): 'Strike Out' | 'Time Out' | 'VTK' | null => {
-    if (code === 2) return 'Strike Out';
-    if (code === 3) return 'Time Out';
-    if (code === 4 || code === 10) return 'VTK';
-    return null;
-  };
-
   const handleSubmit = async () => {
     if (!editable) return;
     setSubmitError(null);
@@ -469,34 +460,31 @@ export function UnplayedRow({
       setSubmitError('Not authenticated.');
       return;
     }
-    if (!draft.replayGameId || draft.validateStatus !== 'ok') {
-      setSubmitError('Validate the replay first.');
-      return;
-    }
-    if (draft.derivedScore == null) {
-      setSubmitError('Missing score from validation.');
+    if (!draft.replay) {
+      setSubmitError('Enter a game ID or replay URL.');
       return;
     }
 
     setSubmitting(true);
     try {
-      await postJsonAuth('/results', token, {
-        event_team_id: teamId,
-        event_game_template_id: template.template_id,
-        game_id: Number(draft.replayGameId),
-        score: draft.derivedScore,
-        zero_reason: zeroReasonFromEndCondition(draft.derivedEndConditionCode),
-        bottom_deck_risk: draft.bdr ? Number(draft.bdr) : null,
-        notes: draft.notes || null,
-        played_at: draft.derivedPlayedAt ?? null,
-        players: draft.derivedPlayers ?? [],
-      });
+      await postJsonAuth(
+        `/events/${encodeURIComponent(slug)}/teams/${teamId}/submit-replay`,
+        token,
+        {
+          template_id: template.template_id,
+          replay: draft.replay,
+          bottom_deck_risk: draft.bdr ? Number(draft.bdr) : null,
+          notes: draft.notes || null,
+        },
+      );
       window.location.reload();
     } catch (err) {
+      const body = err instanceof ApiError ? (err.body as { error?: string }) : null;
       const message =
-        err instanceof ApiError
-          ? ((err.body as { error?: string })?.error ?? `Submit failed (status ${err.status})`)
-          : ((err as Error)?.message ?? 'Submit failed');
+        body?.error ??
+        (err instanceof ApiError
+          ? `Submit failed (status ${err.status})`
+          : ((err as Error)?.message ?? 'Submit failed'));
       setSubmitError(message);
     } finally {
       setSubmitting(false);
@@ -583,12 +571,7 @@ export function UnplayedRow({
               <Button
                 variant="primary"
                 size="sm"
-                disabled={
-                  !draft.replayGameId ||
-                  Boolean(draft.replayError) ||
-                  draft.validateStatus !== 'ok' ||
-                  submitting
-                }
+                disabled={!draft.replay || Boolean(draft.replayError) || submitting}
                 onClick={handleSubmit}
                 aria-label="Submit"
               >

@@ -17,7 +17,7 @@ import {
   CoreTitle as Title,
 } from '../../design-system';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError } from '../../lib/api';
 import {
@@ -72,6 +72,8 @@ export function AdminBadgeDesignerPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { badgeSetId } = useParams<{ badgeSetId: string }>();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
   const [shape, setShape] = useState<BadgeShape>('circle');
   const [tier, setTier] = useState<TierKey>('gold');
   const [tierConfig, setTierConfig] = useState<Record<TierKey, TierConfig>>(DEFAULT_TIER_CONFIG);
@@ -280,7 +282,11 @@ export function AdminBadgeDesignerPage() {
       setBadgeSetName(name);
       setSaveNotice(forceNew ? 'Saved as new set.' : 'Saved.');
       setSaveError(null);
-      navigate(`/admin/badges/${String(created.id)}/edit`, { replace: true });
+      if (returnTo) {
+        navigate(returnTo, { replace: true });
+      } else {
+        navigate(`/admin/badges/${String(created.id)}/edit`, { replace: true });
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         const body = err.body as { error?: string } | null;
@@ -349,9 +355,15 @@ export function AdminBadgeDesignerPage() {
           <Button variant="light" onClick={openSaveAs}>
             Save As
           </Button>
-          <Button component={Link} to="/admin/badges" variant="subtle">
-            Back To Badge Sets
-          </Button>
+          {returnTo ? (
+            <Button component={Link} to={returnTo} variant="subtle">
+              Back to Event Wizard
+            </Button>
+          ) : (
+            <Button component={Link} to="/admin/badges" variant="subtle">
+              Back To Badge Sets
+            </Button>
+          )}
         </Group>
       </Stack>
 

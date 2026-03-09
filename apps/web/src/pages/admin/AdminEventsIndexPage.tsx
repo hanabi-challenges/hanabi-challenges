@@ -112,7 +112,6 @@ export function AdminEventsIndexPage() {
                 key={event.id}
                 title={event.name}
                 subtitle={event.short_description}
-                href={`/events/${encodeURIComponent(event.slug)}`}
                 actions={
                   <Group gap={4} wrap="nowrap">
                     <Tooltip label={event.published ? 'Unpublish' : 'Publish'}>

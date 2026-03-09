@@ -68,10 +68,10 @@ let cachedVariants: string[] | null = null;
 
 async function fetchHanabVariants(): Promise<string[]> {
   if (cachedVariants) return cachedVariants;
-  const resp = await fetch('https://hanab.live/api/v1/variants');
+  const resp = await fetch('/api/variants');
   if (!resp.ok) throw new Error(`Failed to fetch variants (${resp.status})`);
-  const data = (await resp.json()) as Record<string, string>;
-  const sorted = Object.values(data).sort((a, b) => a.localeCompare(b));
+  const data = (await resp.json()) as { variants: { name: string }[] };
+  const sorted = data.variants.map((v) => v.name).sort((a, b) => a.localeCompare(b));
   cachedVariants = sorted;
   return sorted;
 }
@@ -195,7 +195,9 @@ export function AdminCreateEventPage() {
   const [hanabVariantsLoading, setHanabVariantsLoading] = useState(false);
 
   const hasLoadedExisting = useRef(false);
+  const prevEditSlugRef = useRef<string | undefined>(undefined);
   const previousEventTypeRef = useRef<EventTypeLabel>('Challenge');
+  const hanabVariantsFetchInitiated = useRef(false);
 
   const isTournament = eventType === 'Tournament';
   const isSessionLadder = eventType === 'League';
@@ -544,27 +546,31 @@ export function AdminCreateEventPage() {
 
   useEffect(() => {
     if (currentStep !== 'templates' || isSessionLadder) return;
-    if (hanabVariants.length > 0 || hanabVariantsLoading) return;
-    let cancelled = false;
+    if (hanabVariants.length > 0 || hanabVariantsFetchInitiated.current) return;
+    hanabVariantsFetchInitiated.current = true;
     const load = async () => {
       setHanabVariantsLoading(true);
       try {
         const variants = await fetchHanabVariants();
-        if (!cancelled) setHanabVariants(variants);
+        setHanabVariants(variants);
       } catch {
         // fall through — user can still type a custom value
       } finally {
-        if (!cancelled) setHanabVariantsLoading(false);
+        setHanabVariantsLoading(false);
       }
     };
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentStep, isSessionLadder, hanabVariants.length, hanabVariantsLoading]);
+  }, [currentStep, isSessionLadder, hanabVariants.length]);
 
   useEffect(() => {
-    if (!isEdit || !editSlug || hasLoadedExisting.current) return;
+    if (!isEdit || !editSlug) return;
+
+    if (prevEditSlugRef.current !== editSlug) {
+      prevEditSlugRef.current = editSlug;
+      hasLoadedExisting.current = false;
+    }
+
+    if (hasLoadedExisting.current) return;
 
     const load = async () => {
       setLoadingExisting(true);
@@ -687,6 +693,7 @@ export function AdminCreateEventPage() {
         setChallengeBadgeSetId(challengeLink ? String(challengeLink.badge_set_id) : null);
         setLeagueSeasonBadgeSetId(seasonLink ? String(seasonLink.badge_set_id) : null);
         setLeagueSessionBadgeSetId(sessionLink ? String(sessionLink.badge_set_id) : null);
+        setCurrentStep('event');
       } catch (err) {
         if (err instanceof ApiError) {
           setError(`Failed to load event for editing: ${extractApiErrorMessage(err)}`);
@@ -1062,7 +1069,7 @@ export function AdminCreateEventPage() {
         }
       }
 
-      if (!isSessionLadder) {
+      if (!isEdit && !isSessionLadder) {
         for (let idx = 0; idx < stages.length; idx += 1) {
           const stage = stages[idx];
           const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
@@ -1374,7 +1381,13 @@ export function AdminCreateEventPage() {
                           variant="light"
                           onClick={() => {
                             saveWizardDraft();
-                            navigate('/admin/badges/new');
+                            const returnTo =
+                              isEdit && editSlug
+                                ? `/admin/events/${editSlug}/edit`
+                                : '/admin/events/create';
+                            navigate(
+                              `/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`,
+                            );
                           }}
                         >
                           Open Badge Designer
@@ -1706,7 +1719,7 @@ export function AdminCreateEventPage() {
                       Previous
                     </Button>
 
-                    {currentIndex < stepOrder.length - 1 ? (
+                    {currentIndex < stepOrder.length - 1 && (
                       <Button
                         type="button"
                         onClick={onNext}
@@ -1714,27 +1727,27 @@ export function AdminCreateEventPage() {
                       >
                         Next
                       </Button>
-                    ) : (
-                      <Button
-                        type="submit"
-                        disabled={
-                          !eventValid ||
-                          !badgesValid ||
-                          !registrationValid ||
-                          !stageValid ||
-                          !templatesValid ||
-                          saving
-                        }
-                      >
-                        {saving
-                          ? isEdit
-                            ? 'Saving...'
-                            : 'Creating...'
-                          : isEdit
-                            ? 'Save Event'
-                            : 'Create Event'}
-                      </Button>
                     )}
+
+                    <Button
+                      type="submit"
+                      disabled={
+                        !eventValid ||
+                        !badgesValid ||
+                        !registrationValid ||
+                        !stageValid ||
+                        !templatesValid ||
+                        saving
+                      }
+                    >
+                      {saving
+                        ? isEdit
+                          ? 'Saving...'
+                          : 'Creating...'
+                        : isEdit
+                          ? 'Save Event'
+                          : 'Create Event'}
+                    </Button>
                   </Group>
                 </Group>
               </Stack>

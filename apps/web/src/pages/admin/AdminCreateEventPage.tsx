@@ -862,7 +862,6 @@ export function AdminCreateEventPage() {
     Boolean(longDescription) &&
     Boolean(eventAbbr) &&
     !abbrHasSpace &&
-    !formulaHasSpace &&
     !tournamentLimitError;
 
   const stageValid =
@@ -1598,23 +1597,16 @@ export function AdminCreateEventPage() {
                         <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
                       </Group>
 
-                      {isSessionLadder ? (
-                        <Alert color="blue" variant="light">
-                          League events do not use fixed stages/templates. Configure sessions and
-                          rounds after creation from the League controls.
-                        </Alert>
-                      ) : (
-                        stages.map((stage, idx) => (
-                          <StageBlock
-                            key={idx}
-                            stage={stage}
-                            index={idx}
-                            parsedMaxTeams={parsedMaxTeams}
-                            seedingFormat={seedingFormat}
-                            onPatch={updateStage}
-                          />
-                        ))
-                      )}
+                      {stages.map((stage, idx) => (
+                        <StageBlock
+                          key={idx}
+                          stage={stage}
+                          index={idx}
+                          parsedMaxTeams={parsedMaxTeams}
+                          seedingFormat={seedingFormat}
+                          onPatch={updateStage}
+                        />
+                      ))}
                     </Stack>
                   </SectionCard>
                 )}

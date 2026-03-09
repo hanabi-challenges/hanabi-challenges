@@ -11,6 +11,7 @@ import {
   Card as MantineCard,
   Checkbox as MantineCheckbox,
   Code as MantineCode,
+  createTheme,
   Divider as MantineDivider,
   Grid as MantineGrid,
   Group as MantineGroup,
@@ -79,9 +80,30 @@ import {
 } from '@mantine/core';
 import type { ReactElement } from 'react';
 
+// Align Mantine's primary color with the design system's blue palette so
+// variant="light" / variant="subtle" buttons use the correct accent color.
+const theme = createTheme({
+  primaryColor: 'blue',
+  primaryShade: 6,
+  colors: {
+    blue: [
+      '#eff6ff', // 0 — blue-50
+      '#dbeafe', // 1 — blue-100 / accent-weak
+      '#bfdbfe', // 2 — blue-200
+      '#93c5fd', // 3 — blue-300
+      '#60a5fa', // 4 — blue-400
+      '#3b82f6', // 5 — blue-500
+      '#2563eb', // 6 — blue-600 / --color-accent  ← primary
+      '#1d4ed8', // 7 — blue-700 / --color-accent-strong
+      '#1e40af', // 8 — blue-800
+      '#1e3a8a', // 9 — blue-900
+    ],
+  },
+});
+
 // Centralized Mantine wrappers with stable defaults so pages/features only invoke primitives.
 export function MantineProvider(props: MantineProviderProps): ReactElement {
-  return <MantineProviderCore {...props} />;
+  return <MantineProviderCore theme={theme} {...props} />;
 }
 
 export function Card(props: CardProps): ReactElement {

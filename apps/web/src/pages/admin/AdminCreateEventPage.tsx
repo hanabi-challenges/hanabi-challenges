@@ -39,13 +39,14 @@ import {
 } from './badgeSetsApi';
 import { CoreCombobox as Combobox, useCoreCombobox as useCombobox } from '../../design-system';
 import {
-  CREATE_EVENT_WIZARD_DRAFT_KEY,
+  CREATE_EVENT_DRAFT_SLUG_KEY,
+  CREATE_EVENT_DRAFT_WIZARD_STATE_KEY,
   initialStage,
   longDescriptionTemplateFor,
   normalizeRoundPattern,
   stagesEqual,
   steps,
-  type CreateEventWizardDraft,
+  type CreateEventWizardState,
   type EventGameTemplate,
   type EventStage,
   type EventTypeLabel,
@@ -189,7 +190,9 @@ export function AdminCreateEventPage() {
   } | null>(null);
 
   const [saving, setSaving] = useState(false);
+  const [stepSaving, setStepSaving] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
+  const [draftEventSlug, setDraftEventSlug] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hanabVariants, setHanabVariants] = useState<string[]>([]);
@@ -226,144 +229,181 @@ export function AdminCreateEventPage() {
   const formulaHasSpace = /\s/.test(seedFormula);
   const formulaHasInvalidChars = !/^[A-Za-z0-9{}:_.-]+$/.test(seedFormula);
 
-  const saveWizardDraft = useCallback(() => {
+  // Save wizard-only state (no DB equivalent) to localStorage so it survives
+  // tab navigation such as opening the Badge Designer.
+  const saveWizardState = useCallback(() => {
     if (isEdit || typeof window === 'undefined') return;
-
-    const draft: CreateEventWizardDraft = {
-      name,
-      eventType,
+    const state: CreateEventWizardState = {
       eventAbbr,
-      slug,
-      shortDescription,
-      longDescription,
-      startsAt,
-      endsAt,
-      published,
-      seedingPlayEnabled,
-      seedingFormat,
-      maxTeams,
       stages,
       variant,
       seedCount,
       seedFormula,
-      allowLateRegistration,
-      registrationOpens,
-      registrationCutoff,
       enforceExactTeamSize,
-      challengeBadgeSetId,
-      leagueSeasonBadgeSetId,
-      leagueSessionBadgeSetId,
-      currentStep,
+    };
+    window.localStorage.setItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY, JSON.stringify(state));
+  }, [isEdit, eventAbbr, stages, variant, seedCount, seedFormula, enforceExactTeamSize]);
+
+  // Create or update the draft event in the DB. Returns the effective slug.
+  const autosaveEventDraft = useCallback(async (): Promise<string> => {
+    if (!token) throw new Error('Authentication required');
+
+    const eventFormat = isSessionLadder
+      ? 'session_ladder'
+      : isTournament
+        ? 'tournament'
+        : 'challenge';
+    const payloadStartsAt = isSessionLadder ? null : startsAt ? `${startsAt}T12:00:00Z` : null;
+    const payloadEndsAt = isSessionLadder ? null : endsAt ? `${endsAt}T23:59:59Z` : null;
+    const payloadMaxTeams = isTournament ? parsedMaxTeams : null;
+    const payloadAllowLate = isTournament ? false : allowLateRegistration;
+    const registrationOpensAt = registrationOpens ? `${registrationOpens}T00:00:00Z` : null;
+
+    const commonFields = {
+      name,
+      short_description: shortDescription || null,
+      long_description: longDescription,
+      published: false,
+      event_format: eventFormat,
+      event_status: 'DORMANT' as const,
+      round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
+      max_teams: payloadMaxTeams,
+      max_rounds: null as null,
+      allow_late_registration: payloadAllowLate,
+      registration_opens_at: registrationOpensAt,
+      registration_cutoff: registrationCutoff || null,
+      starts_at: payloadStartsAt,
+      ends_at: payloadEndsAt,
     };
 
-    window.localStorage.setItem(CREATE_EVENT_WIZARD_DRAFT_KEY, JSON.stringify(draft));
+    if (!draftEventSlug) {
+      const created = await postJsonAuth<{ slug?: string }>('/events', token, {
+        slug,
+        ...commonFields,
+      });
+      const savedSlug = created?.slug ?? slug;
+      setDraftEventSlug(savedSlug);
+      window.localStorage.setItem(CREATE_EVENT_DRAFT_SLUG_KEY, savedSlug);
+      return savedSlug;
+    } else {
+      await putJsonAuth(`/events/${encodeURIComponent(draftEventSlug)}`, token, {
+        new_slug: slug !== draftEventSlug ? slug : undefined,
+        ...commonFields,
+      });
+      const effectiveSlug = slug !== draftEventSlug ? slug : draftEventSlug;
+      if (effectiveSlug !== draftEventSlug) {
+        setDraftEventSlug(effectiveSlug);
+        window.localStorage.setItem(CREATE_EVENT_DRAFT_SLUG_KEY, effectiveSlug);
+      }
+      return effectiveSlug;
+    }
   }, [
-    isEdit,
-    name,
-    eventType,
-    eventAbbr,
+    token,
+    draftEventSlug,
+    isSessionLadder,
+    isTournament,
     slug,
+    name,
     shortDescription,
     longDescription,
     startsAt,
     endsAt,
-    published,
-    seedingPlayEnabled,
-    seedingFormat,
-    maxTeams,
-    stages,
-    variant,
-    seedCount,
-    seedFormula,
+    parsedMaxTeams,
     allowLateRegistration,
     registrationOpens,
     registrationCutoff,
-    enforceExactTeamSize,
-    challengeBadgeSetId,
-    leagueSeasonBadgeSetId,
-    leagueSessionBadgeSetId,
-    currentStep,
+    seedingPlayEnabled,
+    seedingFormat,
   ]);
 
+  // On mount (create mode only): check for a draft slug in localStorage, then
+  // fetch the draft event from the DB and restore all form state from it.
   useEffect(() => {
-    if (isEdit || typeof window === 'undefined') return;
+    if (isEdit || !token || typeof window === 'undefined') return;
 
-    const raw = window.localStorage.getItem(CREATE_EVENT_WIZARD_DRAFT_KEY);
-    if (!raw) return;
+    const draftSlug = window.localStorage.getItem(CREATE_EVENT_DRAFT_SLUG_KEY);
+    if (!draftSlug) return;
 
-    try {
-      const draft = JSON.parse(raw) as Partial<CreateEventWizardDraft>;
-      if (!draft || typeof draft !== 'object') return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const event = await getJsonAuth<EventDetail>(`/events/${draftSlug}`, token);
+        if (cancelled) return;
 
-      if (typeof draft.name === 'string') setName(draft.name);
-      if (
-        draft.eventType === 'Challenge' ||
-        draft.eventType === 'Tournament' ||
-        draft.eventType === 'League'
-      ) {
-        setEventType(draft.eventType);
-      }
-      if (typeof draft.eventAbbr === 'string') setEventAbbr(draft.eventAbbr);
-      if (typeof draft.slug === 'string') {
-        setSlug(draft.slug);
+        setName(event.name);
+        setSlug(event.slug);
         setSlugEdited(true);
+        setShortDescription(event.short_description || '');
+        setLongDescription(event.long_description || '');
+        setStartsAt(event.starts_at ? event.starts_at.slice(0, 10) : '');
+        setEndsAt(event.ends_at ? event.ends_at.slice(0, 10) : '');
+        setPublished(event.published ?? false);
+        setEventType(
+          event.event_format === 'tournament'
+            ? 'Tournament'
+            : event.event_format === 'session_ladder'
+              ? 'League'
+              : 'Challenge',
+        );
+        setSeedingPlayEnabled(Boolean(event.round_robin_enabled));
+        setSeedingFormat(event.round_robin_enabled ? 'round_robin' : '');
+        setMaxTeams(event.max_teams ? String(event.max_teams) : '');
+        setAllowLateRegistration(event.allow_late_registration ?? true);
+        setRegistrationOpens(
+          event.registration_opens_at ? event.registration_opens_at.slice(0, 10) : '',
+        );
+        setRegistrationCutoff(
+          event.registration_cutoff ? event.registration_cutoff.slice(0, 10) : '',
+        );
+
+        // Restore wizard-only state (stages, seed config) from localStorage.
+        const rawState = window.localStorage.getItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
+        if (rawState) {
+          try {
+            const state = JSON.parse(rawState) as Partial<CreateEventWizardState>;
+            if (typeof state.eventAbbr === 'string') setEventAbbr(state.eventAbbr);
+            if (Array.isArray(state.stages) && state.stages.length > 0)
+              setStages(state.stages as StageForm[]);
+            if (typeof state.variant === 'string') setVariant(state.variant);
+            if (typeof state.seedCount === 'number' && Number.isFinite(state.seedCount))
+              setSeedCount(Math.max(1, Math.floor(state.seedCount)));
+            if (typeof state.seedFormula === 'string') setSeedFormula(state.seedFormula);
+            if (typeof state.enforceExactTeamSize === 'boolean')
+              setEnforceExactTeamSize(state.enforceExactTeamSize);
+          } catch {
+            // Ignore invalid wizard state.
+          }
+        }
+
+        // Restore badge selections from DB badge links.
+        if (event.event_format === 'challenge' || event.event_format === 'session_ladder') {
+          const badgeLinks = await listEventBadgeLinksAuth(token, draftSlug);
+          if (!cancelled) {
+            const challengeLink = badgeLinks.find((link) => link.purpose === 'challenge_overall');
+            const seasonLink = badgeLinks.find((link) => link.purpose === 'season_overall');
+            const sessionLink = badgeLinks.find((link) => link.purpose === 'session_winner');
+            setChallengeBadgeSetId(challengeLink ? String(challengeLink.badge_set_id) : null);
+            setLeagueSeasonBadgeSetId(seasonLink ? String(seasonLink.badge_set_id) : null);
+            setLeagueSessionBadgeSetId(sessionLink ? String(sessionLink.badge_set_id) : null);
+          }
+        }
+
+        if (!cancelled) {
+          setDraftEventSlug(draftSlug);
+          setCurrentStep('event');
+        }
+      } catch {
+        // Draft not found or network error — clear stale keys and start fresh.
+        window.localStorage.removeItem(CREATE_EVENT_DRAFT_SLUG_KEY);
+        window.localStorage.removeItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
       }
-      if (typeof draft.shortDescription === 'string') setShortDescription(draft.shortDescription);
-      if (typeof draft.longDescription === 'string') setLongDescription(draft.longDescription);
-      if (typeof draft.startsAt === 'string') setStartsAt(draft.startsAt);
-      if (typeof draft.endsAt === 'string') setEndsAt(draft.endsAt);
-      if (typeof draft.published === 'boolean') setPublished(draft.published);
-      if (typeof draft.seedingPlayEnabled === 'boolean')
-        setSeedingPlayEnabled(draft.seedingPlayEnabled);
-      if (
-        draft.seedingFormat === 'round_robin' ||
-        draft.seedingFormat === 'groups' ||
-        draft.seedingFormat === ''
-      ) {
-        setSeedingFormat(draft.seedingFormat);
-      }
-      if (typeof draft.maxTeams === 'string') setMaxTeams(draft.maxTeams);
-      if (Array.isArray(draft.stages) && draft.stages.length > 0) {
-        setStages(draft.stages as StageForm[]);
-      }
-      if (typeof draft.variant === 'string') setVariant(draft.variant);
-      if (typeof draft.seedCount === 'number' && Number.isFinite(draft.seedCount)) {
-        setSeedCount(Math.max(1, Math.floor(draft.seedCount)));
-      }
-      if (typeof draft.seedFormula === 'string') setSeedFormula(draft.seedFormula);
-      if (typeof draft.allowLateRegistration === 'boolean') {
-        setAllowLateRegistration(draft.allowLateRegistration);
-      }
-      if (typeof draft.registrationOpens === 'string')
-        setRegistrationOpens(draft.registrationOpens);
-      if (typeof draft.registrationCutoff === 'string')
-        setRegistrationCutoff(draft.registrationCutoff);
-      if (typeof draft.enforceExactTeamSize === 'boolean') {
-        setEnforceExactTeamSize(draft.enforceExactTeamSize);
-      }
-      if (typeof draft.challengeBadgeSetId === 'string' || draft.challengeBadgeSetId === null) {
-        setChallengeBadgeSetId(draft.challengeBadgeSetId ?? null);
-      }
-      if (
-        typeof draft.leagueSeasonBadgeSetId === 'string' ||
-        draft.leagueSeasonBadgeSetId === null
-      ) {
-        setLeagueSeasonBadgeSetId(draft.leagueSeasonBadgeSetId ?? null);
-      }
-      if (
-        typeof draft.leagueSessionBadgeSetId === 'string' ||
-        draft.leagueSessionBadgeSetId === null
-      ) {
-        setLeagueSessionBadgeSetId(draft.leagueSessionBadgeSetId ?? null);
-      }
-      // Start at step 2 ('event') when restoring a draft so it is obvious
-      // the wizard has pre-filled data and the type has already been chosen.
-      // Edit mode sets its own step (also 'event') after loading the event.
-      setCurrentStep('event');
-    } catch {
-      // Ignore invalid local draft payloads.
-    }
-  }, [isEdit]);
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, token]);
 
   useEffect(() => {
     if (!slugEdited) {
@@ -909,8 +949,27 @@ export function AdminCreateEventPage() {
     }
   }, [stepOrder, currentStep]);
 
-  const onNext = () => {
+  const onNext = async () => {
     if (!stepValid(currentStep)) return;
+
+    // Autosave event to DB on each step advance past the type selection.
+    if (!isEdit && currentStep !== 'type') {
+      setStepSaving(true);
+      try {
+        await autosaveEventDraft();
+        saveWizardState();
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(extractApiErrorMessage(err));
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to save draft');
+        }
+        return;
+      } finally {
+        setStepSaving(false);
+      }
+    }
+
     const next = stepOrder[currentIndex + 1];
     if (next) setCurrentStep(next);
   };
@@ -948,8 +1007,10 @@ export function AdminCreateEventPage() {
     setEnforceExactTeamSize(false);
     setCurrentStep('type');
     previousEventTypeRef.current = 'Challenge';
+    setDraftEventSlug(null);
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(CREATE_EVENT_WIZARD_DRAFT_KEY);
+      window.localStorage.removeItem(CREATE_EVENT_DRAFT_SLUG_KEY);
+      window.localStorage.removeItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
     }
   };
 
@@ -987,6 +1048,26 @@ export function AdminCreateEventPage() {
         await putJsonAuth(`/events/${encodeURIComponent(editSlug)}`, token, {
           name,
           new_slug: slug,
+          short_description: shortDescription || null,
+          long_description: longDescription,
+          published,
+          event_format: eventFormat,
+          event_status: payloadEventStatus,
+          round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
+          max_teams: payloadMaxTeams,
+          max_rounds: payloadMaxRounds,
+          allow_late_registration: payloadAllowLate,
+          registration_opens_at: registrationOpensAt,
+          registration_cutoff: registrationCutoff || null,
+          starts_at: payloadStartsAt,
+          ends_at: payloadEndsAt,
+        });
+        targetSlug = slug;
+      } else if (draftEventSlug) {
+        // Draft was autosaved to DB — do a final PUT to apply remaining fields.
+        await putJsonAuth(`/events/${encodeURIComponent(draftEventSlug)}`, token, {
+          name,
+          new_slug: slug !== draftEventSlug ? slug : undefined,
           short_description: shortDescription || null,
           long_description: longDescription,
           published,
@@ -1374,11 +1455,56 @@ export function AdminCreateEventPage() {
                           type="button"
                           variant="light"
                           onClick={() => {
-                            saveWizardDraft();
+                            const activeSlug = isEdit ? editSlug : draftEventSlug;
                             const returnTo =
                               isEdit && editSlug
                                 ? `/admin/events/${editSlug}/edit`
                                 : '/admin/events/create';
+                            // Persist badge selections and wizard state to DB / localStorage
+                            // before navigating so they are restored when returning.
+                            if (activeSlug && token && hasBadgesStep) {
+                              const links: Array<{
+                                badge_set_id: number;
+                                purpose:
+                                  | 'season_overall'
+                                  | 'session_winner'
+                                  | 'challenge_overall';
+                                sort_order: number;
+                              }> = [];
+                              if (isSessionLadder) {
+                                if (leagueSeasonBadgeSetId) {
+                                  const parsed = Number(leagueSeasonBadgeSetId);
+                                  if (Number.isInteger(parsed) && parsed > 0)
+                                    links.push({
+                                      badge_set_id: parsed,
+                                      purpose: 'season_overall',
+                                      sort_order: 0,
+                                    });
+                                }
+                                if (leagueSessionBadgeSetId) {
+                                  const parsed = Number(leagueSessionBadgeSetId);
+                                  if (Number.isInteger(parsed) && parsed > 0)
+                                    links.push({
+                                      badge_set_id: parsed,
+                                      purpose: 'session_winner',
+                                      sort_order: 1,
+                                    });
+                                }
+                              }
+                              if (isChallenge && challengeBadgeSetId) {
+                                const parsed = Number(challengeBadgeSetId);
+                                if (Number.isInteger(parsed) && parsed > 0)
+                                  links.push({
+                                    badge_set_id: parsed,
+                                    purpose: 'challenge_overall',
+                                    sort_order: 0,
+                                  });
+                              }
+                              void replaceEventBadgeLinksAuth(token, activeSlug, links).catch(
+                                () => undefined,
+                              );
+                            }
+                            saveWizardState();
                             navigate(`/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`);
                           }}
                         >
@@ -1707,10 +1833,10 @@ export function AdminCreateEventPage() {
                     {currentIndex < stepOrder.length - 1 && (
                       <Button
                         type="button"
-                        onClick={onNext}
-                        disabled={!stepValid(currentStep) || saving}
+                        onClick={() => void onNext()}
+                        disabled={!stepValid(currentStep) || saving || stepSaving}
                       >
-                        Next
+                        {stepSaving ? 'Saving...' : 'Next'}
                       </Button>
                     )}
 

@@ -93,34 +93,25 @@ export type StageForm = {
   roundPattern?: RoundPattern;
 };
 
-export type CreateEventWizardDraft = {
-  name: string;
-  eventType: EventTypeLabel;
+/**
+ * Wizard-specific state that has no direct DB equivalent.
+ * Stored in localStorage alongside the draft slug so it survives
+ * tab navigation (e.g., opening the Badge Designer).
+ */
+export type CreateEventWizardState = {
   eventAbbr: string;
-  slug: string;
-  shortDescription: string;
-  longDescription: string;
-  startsAt: string;
-  endsAt: string;
-  published: boolean;
-  seedingPlayEnabled: boolean;
-  seedingFormat: 'round_robin' | 'groups' | '';
-  maxTeams: string;
   stages: StageForm[];
   variant: string;
   seedCount: number;
   seedFormula: string;
-  allowLateRegistration: boolean;
-  registrationOpens: string;
-  registrationCutoff: string;
   enforceExactTeamSize: boolean;
-  challengeBadgeSetId: string | null;
-  leagueSeasonBadgeSetId: string | null;
-  leagueSessionBadgeSetId: string | null;
-  currentStep: StepKey;
 };
 
-export const CREATE_EVENT_WIZARD_DRAFT_KEY = 'hanabi.admin.create-event.wizard.draft.v1';
+/** Key storing just the draft event slug in localStorage. */
+export const CREATE_EVENT_DRAFT_SLUG_KEY = 'hanabi.admin.wizard.draft-slug.v1';
+
+/** Key storing wizard-only state (stages, seed config) that has no DB equivalent. */
+export const CREATE_EVENT_DRAFT_WIZARD_STATE_KEY = 'hanabi.admin.wizard.draft-wizard-state.v1';
 
 export const defaultRoundPattern: RoundPattern = {
   namePattern: 'Round {i}',

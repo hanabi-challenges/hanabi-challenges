@@ -1469,10 +1469,7 @@ export function AdminCreateEventPage() {
                             if (activeSlug && token && hasBadgesStep) {
                               const links: Array<{
                                 badge_set_id: number;
-                                purpose:
-                                  | 'season_overall'
-                                  | 'session_winner'
-                                  | 'challenge_overall';
+                                purpose: 'season_overall' | 'session_winner' | 'challenge_overall';
                                 sort_order: number;
                               }> = [];
                               if (isSessionLadder) {

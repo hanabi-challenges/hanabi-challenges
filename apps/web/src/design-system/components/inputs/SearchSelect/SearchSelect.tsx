@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Box, TextInput, UnstyledButton } from '../../../../mantine';
 import { Inline } from '../../layout/Inline/Inline';
-import './SearchSelect.css';
 
 export type SearchSuggestion<T> = {
   key: string | number;
@@ -40,6 +39,7 @@ export function SearchSelect<T>({
   const isDisabled = disabled || reachedLimit;
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [isFocused, setIsFocused] = useState(false);
+  const [isControlHovered, setIsControlHovered] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -91,23 +91,35 @@ export function SearchSelect<T>({
     }
   }, [highlightIndex, suggestions.length]);
 
+  const controlBorderColor = isFocused
+    ? 'var(--ds-color-accent-strong)'
+    : isControlHovered && !isDisabled
+      ? 'color-mix(in srgb, var(--ds-color-border) 70%, var(--ds-color-accent-strong) 30%)'
+      : 'var(--ds-color-border)';
+
+  const controlBoxShadow = isFocused
+    ? '0 0 0 1px color-mix(in srgb, var(--ds-color-accent-strong) 50%, transparent)'
+    : undefined;
+
   return (
     <Box style={{ position: 'relative', width: '100%' }}>
       <Box
-        className="ds-search-select__control"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           gap: 'var(--ds-space-xxs)',
-          border: '1px solid var(--ds-color-border)',
+          border: `1px solid ${controlBorderColor}`,
           borderRadius: 'var(--ds-radius-md)',
           background: isDisabled ? 'var(--ds-color-surface-muted)' : 'var(--ds-color-surface)',
           color: isDisabled ? 'var(--ds-color-text-muted)' : undefined,
           minHeight: 'var(--ds-size-control-md-height)',
           padding: '0 var(--ds-size-control-md-paddingX)',
           transition: 'border-color 120ms ease, box-shadow 120ms ease',
+          boxShadow: controlBoxShadow,
         }}
+        onMouseEnter={() => setIsControlHovered(true)}
+        onMouseLeave={() => setIsControlHovered(false)}
       >
         {tokens.map((token, idx) => (
           <Box
@@ -164,7 +176,6 @@ export function SearchSelect<T>({
             return (
               <UnstyledButton
                 key={s.key}
-                className={`ds-search-select__item${active ? ' is-active' : ''}`}
                 data-active={active || undefined}
                 onMouseEnter={() => setHighlightIndex(idx)}
                 onMouseDown={(e) => {
@@ -173,8 +184,10 @@ export function SearchSelect<T>({
                 }}
                 style={{
                   width: '100%',
-                  border: '1px solid transparent',
-                  background: 'transparent',
+                  border: `1px solid ${active ? 'var(--ds-color-border)' : 'transparent'}`,
+                  background: active
+                    ? 'color-mix(in srgb, var(--ds-color-accent-weak) 30%, transparent)'
+                    : 'transparent',
                   borderRadius: 'var(--ds-radius-sm)',
                   padding: 'var(--ds-space-xxs) var(--ds-space-xs)',
                   textAlign: 'left',

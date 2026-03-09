@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { Alert as MantineAlert } from '../../../../mantine';
 import { MaterialIcon } from '../../data-display/MaterialIcon/MaterialIcon';
 
@@ -11,11 +11,25 @@ type AlertProps = {
   className?: string;
 };
 
-const colorMap: Record<AlertVariant, string> = {
-  info: 'blue',
-  success: 'green',
-  warning: 'yellow',
-  error: 'red',
+type AlertTokens = { bg: string; text: string };
+
+const variantTokens: Record<AlertVariant, AlertTokens> = {
+  info: {
+    bg: 'var(--ds-color-alert-info-bg)',
+    text: 'var(--ds-color-alert-info-text)',
+  },
+  success: {
+    bg: 'var(--ds-color-alert-success-bg)',
+    text: 'var(--ds-color-alert-success-text)',
+  },
+  warning: {
+    bg: 'var(--ds-color-alert-warning-bg)',
+    text: 'var(--ds-color-alert-warning-text)',
+  },
+  error: {
+    bg: 'var(--ds-color-alert-error-bg)',
+    text: 'var(--ds-color-alert-error-text)',
+  },
 };
 
 const iconMap: Record<AlertVariant, string> = {
@@ -26,13 +40,20 @@ const iconMap: Record<AlertVariant, string> = {
 };
 
 export function Alert({ variant = 'info', title, message, className }: AlertProps): ReactElement {
+  const { bg, text } = variantTokens[variant];
   return (
     <MantineAlert
-      color={colorMap[variant]}
+      variant="default"
       title={title}
       icon={<MaterialIcon name={iconMap[variant]} />}
       className={className}
       role="status"
+      styles={{
+        root: { background: bg, borderColor: text } as CSSProperties,
+        title: { color: text } as CSSProperties,
+        body: { color: text } as CSSProperties,
+        icon: { color: text } as CSSProperties,
+      }}
     >
       {message}
     </MantineAlert>

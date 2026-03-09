@@ -5,8 +5,8 @@ import type {
   ReactElement,
   ReactNode,
 } from 'react';
+import { useState } from 'react';
 import { UnstyledButton } from '../../../../mantine';
-import './Button.css';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 export type ButtonSize = 'md' | 'sm';
@@ -17,9 +17,10 @@ export type ButtonProps<T extends ElementType = 'button'> = {
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
-} & Omit<ComponentPropsWithoutRef<T>, 'as' | 'className' | 'children'>;
+  disabled?: boolean;
+} & Omit<ComponentPropsWithoutRef<T>, 'as' | 'className' | 'children' | 'disabled'>;
 
-const variantStyles: Record<ButtonVariant, CSSProperties> = {
+const baseStyles: Record<ButtonVariant, CSSProperties> = {
   primary: {
     background: 'var(--ds-color-accent-strong)',
     color: '#fff',
@@ -35,6 +36,40 @@ const variantStyles: Record<ButtonVariant, CSSProperties> = {
     background: 'transparent',
     color: 'var(--ds-color-text)',
     borderColor: 'transparent',
+  },
+};
+
+const hoverStyles: Record<ButtonVariant, CSSProperties> = {
+  primary: {
+    boxShadow: 'var(--ds-shadow-hover)',
+  },
+  secondary: {
+    background: 'color-mix(in srgb, var(--ds-color-accent-weak) 25%, var(--ds-color-surface))',
+    borderColor: 'var(--ds-color-accent-strong)',
+    boxShadow: 'var(--ds-elevation-2, 0 4px 12px rgba(0, 0, 0, 0.08))',
+  },
+  ghost: {
+    background: 'color-mix(in srgb, var(--ds-color-accent-weak) 20%, transparent)',
+    borderColor: 'var(--ds-color-border)',
+    boxShadow: 'var(--ds-elevation-2, 0 4px 12px rgba(0, 0, 0, 0.08))',
+  },
+};
+
+const disabledStyles: Record<ButtonVariant, CSSProperties> = {
+  primary: {
+    background: 'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-surface) 65%)',
+    borderColor: 'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-border) 65%)',
+    color: 'color-mix(in srgb, var(--ds-color-surface) 70%, var(--ds-color-text) 30%)',
+  },
+  secondary: {
+    background: 'var(--ds-color-surface-muted)',
+    borderColor: 'var(--ds-color-border)',
+    color: 'var(--ds-color-text-muted)',
+  },
+  ghost: {
+    background: 'transparent',
+    borderColor: 'transparent',
+    color: 'var(--ds-color-text-muted)',
   },
 };
 
@@ -62,9 +97,11 @@ export function Button<T extends ElementType = 'button'>({
   size = 'md',
   className,
   style,
+  disabled = false,
   ...rest
 }: ButtonProps<T> & { style?: CSSProperties }): ReactElement {
-  const rootClassName = ['ds-btn', className].filter(Boolean).join(' ');
+  const [hovered, setHovered] = useState(false);
+  const isHovered = hovered && !disabled;
 
   const inlineStyle: CSSProperties = {
     display: 'inline-flex',
@@ -73,17 +110,18 @@ export function Button<T extends ElementType = 'button'>({
     gap: 'var(--ds-space-xxs)',
     border: '1px solid transparent',
     fontWeight: 600,
-    cursor: 'pointer',
+    cursor: disabled ? 'not-allowed' : 'pointer',
     transition:
       'background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease',
     textDecoration: 'none',
     verticalAlign: 'middle',
-    ...variantStyles[variant],
+    ...baseStyles[variant],
     ...sizeStyles[size],
+    ...(isHovered ? hoverStyles[variant] : {}),
+    ...(disabled ? disabledStyles[variant] : {}),
     ...style,
   };
 
-  // Only apply default type="button" when rendering a native button
   const typeProp =
     !as || as === 'button'
       ? { type: (rest as ComponentPropsWithoutRef<'button'>).type ?? 'button' }
@@ -92,10 +130,11 @@ export function Button<T extends ElementType = 'button'>({
   return (
     <UnstyledButton
       component={(as ?? 'button') as 'button'}
-      className={rootClassName}
-      data-variant={variant}
-      data-size={size}
+      className={className}
       style={inlineStyle}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       {...typeProp}
       {...(rest as Record<string, unknown>)}
     >

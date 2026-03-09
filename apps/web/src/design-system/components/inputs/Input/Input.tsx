@@ -1,10 +1,5 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes, ReactElement } from 'react';
-import {
-  Box,
-  TextInput as MantineTextInput,
-  Textarea as MantineTextarea,
-} from '../../../../mantine';
-import './Input.css';
+import type { CSSProperties, InputHTMLAttributes, ReactElement, TextareaHTMLAttributes } from 'react';
+import { Box, TextInput as MantineTextInput, Textarea as MantineTextarea } from '../../../../mantine';
 
 type BaseProps = {
   label?: string;
@@ -30,6 +25,20 @@ type TextAreaProps = BaseProps &
 
 export type InputProps = TextInputProps | TextAreaProps;
 
+const sizeInputStyles: Record<'sm' | 'md', CSSProperties> = {
+  sm: {
+    height: 'var(--ds-size-control-sm-height)',
+    minHeight: 'var(--ds-size-control-sm-height)',
+    padding: '0 var(--ds-size-control-sm-paddingX)',
+    fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+  },
+  md: {
+    height: 'var(--ds-size-control-md-height)',
+    minHeight: 'var(--ds-size-control-md-height)',
+    padding: '0 var(--ds-size-control-md-paddingX)',
+  },
+};
+
 export function Input(props: InputProps): ReactElement {
   const {
     label,
@@ -48,6 +57,11 @@ export function Input(props: InputProps): ReactElement {
     id ?? (label ? `ds-input-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined);
   const describedBy = error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined;
   const hasError = Boolean(error);
+
+  const inputStyle: CSSProperties = {
+    ...sizeInputStyles[size],
+    width: fullWidth ? '100%' : undefined,
+  };
 
   return (
     <Box
@@ -86,22 +100,21 @@ export function Input(props: InputProps): ReactElement {
       {multiline ? (
         <MantineTextarea
           id={inputId}
-          classNames={{
-            input: `ds-input ds-input--${size}${fullWidth ? ' ds-input--full' : ''}${hasError ? ' ds-input--error' : ''}${className ? ` ${className}` : ''}`,
-          }}
+          className={className}
+          error={hasError}
           aria-invalid={hasError}
           aria-describedby={describedBy}
+          styles={{ input: inputStyle }}
           {...(rest as TextAreaProps)}
         />
       ) : (
         <MantineTextInput
           id={inputId}
-          classNames={{
-            input: `ds-input ds-input--${size}${fullWidth ? ' ds-input--full' : ''}${hasError ? ' ds-input--error' : ''}${className ? ` ${className}` : ''}`,
-          }}
+          className={className}
+          error={hasError}
           aria-invalid={hasError}
           aria-describedby={describedBy}
-          styles={{ input: { width: '100%' }, section: { display: 'none' } }}
+          styles={{ input: inputStyle, section: { display: 'none' } }}
           {...(rest as TextInputProps)}
         />
       )}
@@ -111,7 +124,7 @@ export function Input(props: InputProps): ReactElement {
           component="span"
           style={{
             fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
-            color: 'var(--ds-color-semantic-alert-error-light-text, #b91c1c)',
+            color: 'var(--ds-color-error-text)',
           }}
         >
           {error}

@@ -32,6 +32,6 @@
 }
 
 .ds-prose a {
-  color: var(--ds-color-accent-strong);
+  color: var(--color-accent);
   text-decoration: underline;
 }

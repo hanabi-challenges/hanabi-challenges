@@ -356,9 +356,10 @@ export function AdminCreateEventPage() {
       ) {
         setLeagueSessionBadgeSetId(draft.leagueSessionBadgeSetId ?? null);
       }
-      // Do not restore currentStep — always start at 'type' so the wizard
-      // begins at step 1. Draft data is preserved for convenience but step
-      // position is not, preventing stale step jumps on re-entry.
+      // Start at step 2 ('event') when restoring a draft so it is obvious
+      // the wizard has pre-filled data and the type has already been chosen.
+      // Edit mode sets its own step (also 'event') after loading the event.
+      setCurrentStep('event');
     } catch {
       // Ignore invalid local draft payloads.
     }

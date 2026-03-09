@@ -356,16 +356,9 @@ export function AdminCreateEventPage() {
       ) {
         setLeagueSessionBadgeSetId(draft.leagueSessionBadgeSetId ?? null);
       }
-      if (
-        draft.currentStep === 'type' ||
-        draft.currentStep === 'event' ||
-        draft.currentStep === 'badges' ||
-        draft.currentStep === 'registration' ||
-        draft.currentStep === 'stage' ||
-        draft.currentStep === 'templates'
-      ) {
-        setCurrentStep(draft.currentStep);
-      }
+      // Do not restore currentStep — always start at 'type' so the wizard
+      // begins at step 1. Draft data is preserved for convenience but step
+      // position is not, preventing stale step jumps on re-entry.
     } catch {
       // Ignore invalid local draft payloads.
     }

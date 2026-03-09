@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
-  Alert,
+  CoreAlert as Alert,
   ActionIcon,
   MaterialIcon,
   SectionCard,
@@ -702,9 +702,13 @@ export function AdminCreateEventPage() {
 
           setStages(mapped.length > 0 ? mapped : [initialStage()]);
 
-          const enforce =
-            ((loadedStages[0]?.config_json ?? {}) as { enforce_exact_team_size?: boolean })
-              .enforce_exact_team_size ?? false;
+          const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
+            event_abbreviation?: string;
+            enforce_exact_team_size?: boolean;
+          };
+          if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
+
+          const enforce = firstConfig.enforce_exact_team_size ?? false;
 
           setEnforceExactTeamSize(format === 'tournament' ? true : !!enforce);
         }

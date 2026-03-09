@@ -62,8 +62,9 @@ export function Pill<T extends ElementType = 'div'>({
   trailingIcon,
   hoverIcon,
   as,
+  style: externalStyle,
   ...rest
-}: PillProps<T>): ReactElement {
+}: PillProps<T> & { style?: CSSProperties }): ReactElement {
   const [hovered, setHovered] = useState(false);
   const Component = (as || 'div') as ElementType;
 
@@ -89,7 +90,7 @@ export function Pill<T extends ElementType = 'div'>({
     <Box
       component={Component}
       className={className}
-      style={baseStyle}
+      style={{ ...baseStyle, ...externalStyle }}
       onMouseEnter={interactive || hoverIcon ? () => setHovered(true) : undefined}
       onMouseLeave={interactive || hoverIcon ? () => setHovered(false) : undefined}
       {...rest}

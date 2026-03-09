@@ -5,7 +5,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/web... && pnpm -C apps/web run build
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/web... && pnpm -C apps/web run build
     staticPublishPath: ./apps/web/dist
     domains:
       - hanabi-challenges.com
@@ -36,7 +36,7 @@ services:
           property: connectionString
       - key: JWT_SECRET
         sync: false
-    buildCommand: corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
     startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:

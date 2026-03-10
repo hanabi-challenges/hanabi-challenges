@@ -1,5 +1,14 @@
-import type { CSSProperties, InputHTMLAttributes, ReactElement, TextareaHTMLAttributes } from 'react';
-import { Box, TextInput as MantineTextInput, Textarea as MantineTextarea } from '../../../../mantine';
+import type {
+  CSSProperties,
+  InputHTMLAttributes,
+  ReactElement,
+  TextareaHTMLAttributes,
+} from 'react';
+import {
+  Box,
+  TextInput as MantineTextInput,
+  Textarea as MantineTextarea,
+} from '../../../../mantine';
 
 type BaseProps = {
   label?: string;

@@ -57,8 +57,10 @@ const hoverStyles: Record<ButtonVariant, CSSProperties> = {
 
 const disabledStyles: Record<ButtonVariant, CSSProperties> = {
   primary: {
-    background: 'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-surface) 65%)',
-    borderColor: 'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-border) 65%)',
+    background:
+      'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-surface) 65%)',
+    borderColor:
+      'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-border) 65%)',
     color: 'color-mix(in srgb, var(--ds-color-surface) 70%, var(--ds-color-text) 30%)',
   },
   secondary: {

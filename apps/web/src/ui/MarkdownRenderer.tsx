@@ -6,13 +6,13 @@ import {
   Code,
   Divider,
   Image,
+  Link,
   List,
   Stack,
   Table,
   Text,
   Title,
 } from '../mantine';
-import { Link as RouterLink } from 'react-router-dom';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -148,9 +148,9 @@ function renderInline(
           );
         }
         return (
-          <Anchor key={key} component={RouterLink} to={node.url}>
+          <Link key={key} to={node.url}>
             {content}
-          </Anchor>
+          </Link>
         );
       }
       case 'linkReference': {
@@ -165,9 +165,9 @@ function renderInline(
           );
         }
         return (
-          <Anchor key={key} component={RouterLink} to={def.url}>
+          <Link key={key} to={def.url}>
             {content}
-          </Anchor>
+          </Link>
         );
       }
       case 'break':

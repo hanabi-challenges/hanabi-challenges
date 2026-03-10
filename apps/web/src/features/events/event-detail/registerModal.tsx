@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Link } from '../../../mantine';
 import { ApiError, postJsonAuth } from '../../../lib/api';
 import { UserPill } from '../../users/UserPill';
 import { UserSearchSelect, type UserSuggestion } from '../../users/UserSearchSelect';

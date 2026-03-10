@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Link } from '../mantine';
 import { useAuth } from '../context/AuthContext';
 import { ApiError, getJsonAuth, postJsonAuth } from '../lib/api';
 import { useEventDetail } from '../hooks/useEventDetail';

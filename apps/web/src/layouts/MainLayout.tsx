@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from '../mantine';
 import { useAuth } from '../context/AuthContext';
 import {
   Button,

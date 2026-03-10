@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from '../../../mantine';
 import { useState } from 'react';
 import { ApiError, postJsonAuth } from '../../../lib/api';
 import {

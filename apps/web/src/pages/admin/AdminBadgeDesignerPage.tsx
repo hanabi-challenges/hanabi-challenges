@@ -17,7 +17,8 @@ import {
   CoreTitle as Title,
 } from '../../design-system';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link } from '../../mantine';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError } from '../../lib/api';
 import {

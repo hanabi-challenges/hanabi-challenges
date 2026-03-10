@@ -9,7 +9,8 @@ import {
   CoreText as Text,
   CoreTooltip as Tooltip,
 } from '../../design-system';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Link } from '../../mantine';
 import { useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { useAuth } from '../../context/AuthContext';

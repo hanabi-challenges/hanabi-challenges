@@ -1,6 +1,12 @@
-import type { ComponentPropsWithoutRef, ElementType, ReactElement, ReactNode } from 'react';
+import type {
+  ComponentPropsWithoutRef,
+  CSSProperties,
+  ElementType,
+  ReactElement,
+  ReactNode,
+} from 'react';
+import { useState } from 'react';
 import { Box } from '../../../../mantine';
-import './Pill.css';
 
 export type PillSize = 'sm' | 'md' | 'lg';
 export type PillVariant = 'default' | 'accent';
@@ -16,6 +22,37 @@ export type PillProps<T extends ElementType = 'div'> = {
   hoverIcon?: ReactNode;
 } & Omit<ComponentPropsWithoutRef<T>, 'as' | 'children' | 'className'>;
 
+const sizeStyles: Record<PillSize, CSSProperties> = {
+  sm: {
+    padding: 'calc(var(--ds-space-xxs) + 2px) var(--ds-space-xs)',
+    fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+    lineHeight: 'var(--ds-textScale-3-lineHeight, 1.2)',
+  },
+  md: {
+    padding: 'var(--ds-space-xs) var(--ds-space-sm)',
+    fontSize: 'var(--ds-textScale-4-fontSize, 14px)',
+    lineHeight: 'var(--ds-textScale-4-lineHeight, 1.4)',
+  },
+  lg: {
+    padding: 'var(--ds-space-xs) var(--ds-space-md)',
+    fontSize: 'var(--ds-textScale-4-fontSize, 14px)',
+    lineHeight: 'var(--ds-textScale-4-lineHeight, 1.4)',
+  },
+};
+
+const variantStyles: Record<PillVariant, CSSProperties> = {
+  default: {
+    background: 'var(--ds-color-surface-muted)',
+    borderColor: 'var(--ds-color-border)',
+    color: 'var(--ds-color-text)',
+  },
+  accent: {
+    background: 'var(--ds-color-accent-weak)',
+    borderColor: 'var(--ds-color-accent-weak)',
+    color: 'var(--ds-color-accent-strong)',
+  },
+};
+
 export function Pill<T extends ElementType = 'div'>({
   children,
   size = 'md',
@@ -25,29 +62,69 @@ export function Pill<T extends ElementType = 'div'>({
   trailingIcon,
   hoverIcon,
   as,
+  style: externalStyle,
   ...rest
-}: PillProps<T>): ReactElement {
+}: PillProps<T> & { style?: CSSProperties }): ReactElement {
+  const [hovered, setHovered] = useState(false);
   const Component = (as || 'div') as ElementType;
-  const classes = [
-    'ds-pill',
-    `ds-pill--${size}`,
-    `ds-pill--${variant}`,
-    interactive ? 'ds-pill--interactive' : '',
-    hoverIcon ? 'ds-pill--has-hover-icon' : '',
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+
+  const baseStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--ds-space-xxs)',
+    borderRadius: 'var(--ds-radius-pill)',
+    fontWeight: 600,
+    border: '1px solid var(--ds-color-border)',
+    ...variantStyles[variant],
+    ...sizeStyles[size],
+    ...(interactive
+      ? {
+          cursor: 'pointer',
+          transition: 'filter 0.15s ease',
+          filter: hovered ? 'brightness(0.97)' : undefined,
+        }
+      : {}),
+  };
+
   return (
-    <Box component={Component} className={classes} {...rest}>
+    <Box
+      component={Component}
+      className={className}
+      style={{ ...baseStyle, ...externalStyle }}
+      onMouseEnter={interactive || hoverIcon ? () => setHovered(true) : undefined}
+      onMouseLeave={interactive || hoverIcon ? () => setHovered(false) : undefined}
+      {...rest}
+    >
       {children}
       {trailingIcon ? (
-        <Box className="ds-pill__icon" component="span">
+        <Box
+          component="span"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginLeft: 'var(--ds-space-xxs)',
+            lineHeight: 1,
+            color: 'inherit',
+          }}
+        >
           {trailingIcon}
         </Box>
       ) : null}
       {hoverIcon ? (
-        <Box className="ds-pill__icon ds-pill__icon--hover" component="span">
+        <Box
+          component="span"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            lineHeight: 1,
+            color: 'inherit',
+            opacity: hovered ? 1 : 0,
+            width: hovered ? 'auto' : 0,
+            marginLeft: hovered ? 'var(--ds-space-xxs)' : 0,
+            overflow: 'hidden',
+            transition: 'opacity 120ms ease, width 120ms ease, margin-left 120ms ease',
+          }}
+        >
           {hoverIcon}
         </Box>
       ) : null}

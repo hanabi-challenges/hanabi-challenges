@@ -1,6 +1,5 @@
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './Grid.css';
 
 export type GridGap = 'none' | 'xs' | 'sm' | 'md' | 'lg';
 
@@ -14,6 +13,14 @@ type GridProps = {
   style?: CSSProperties;
 };
 
+const gapTokenMap: Record<GridGap, string> = {
+  none: '0',
+  xs: 'var(--ds-space-xxs)',
+  sm: 'var(--ds-space-xs)',
+  md: 'var(--ds-space-sm)',
+  lg: 'var(--ds-space-md)',
+};
+
 export function Grid({
   children,
   columns,
@@ -23,21 +30,18 @@ export function Grid({
   className,
   style,
 }: GridProps): ReactElement {
-  const classes = [
-    'ds-grid',
-    `ds-grid--gap-${gap}`,
-    rowGap && `ds-grid--rowgap-${rowGap}`,
-    colGap && `ds-grid--colgap-${colGap}`,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const inlineStyle: CSSProperties = { ...style };
-  if (columns) inlineStyle.gridTemplateColumns = columns;
+  const inlineStyle: CSSProperties = {
+    display: 'grid',
+    width: '100%',
+    gap: gapTokenMap[gap],
+    ...(rowGap ? { rowGap: gapTokenMap[rowGap] } : {}),
+    ...(colGap ? { columnGap: gapTokenMap[colGap] } : {}),
+    ...(columns ? { gridTemplateColumns: columns } : {}),
+    ...style,
+  };
 
   return (
-    <Box className={classes} style={inlineStyle}>
+    <Box className={className} style={inlineStyle}>
       {children}
     </Box>
   );

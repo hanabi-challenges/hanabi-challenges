@@ -1391,7 +1391,7 @@ export function EventDetailPage() {
                         <Inline align="center" justify="space-between" wrap>
                           <Heading level={3}>Teams</Heading>
                           <Button
-                            variant="primary"
+                            variant={registrationWindow.canRegister ? 'primary' : 'secondary'}
                             size="md"
                             onClick={() => {
                               if (!registrationWindow.canRegister) return;

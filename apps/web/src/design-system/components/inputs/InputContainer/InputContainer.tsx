@@ -1,6 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './InputContainer.css';
 
 type InputContainerProps = {
   label?: string;
@@ -25,27 +24,66 @@ export function InputContainer({
 }: InputContainerProps): ReactElement {
   const hasError = Boolean(error);
   return (
-    <Box className={['ds-input-container', className].filter(Boolean).join(' ')}>
+    <Box
+      className={className}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--ds-space-xxs)',
+        width: '100%',
+      }}
+    >
       {label && (
-        <Box className="ds-input-container__label-row">
-          <Box className="ds-input-container__label">{label}</Box>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--ds-space-xs)',
+          }}
+        >
+          <Box
+            style={{
+              fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+              fontWeight: 600,
+              color: 'var(--ds-color-text)',
+            }}
+          >
+            {label}
+          </Box>
           {labelAction}
         </Box>
       )}
       <Box
-        className={[
-          'ds-input-container__control',
-          hasError ? 'ds-input-container__control--error' : undefined,
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--ds-space-xxs)',
+          minHeight: '40px',
+          justifyContent: 'center',
+          ...(hasError ? { color: 'var(--ds-color-semantic-alert-error-light-text)' } : {}),
+        }}
       >
         {children}
       </Box>
       {hasError ? (
-        <Box className="ds-input-container__helper ds-input-container__helper--error">{error}</Box>
+        <Box
+          style={{
+            fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+            color: 'var(--ds-color-semantic-alert-error-light-text)',
+          }}
+        >
+          {error}
+        </Box>
       ) : helperText ? (
-        <Box className="ds-input-container__helper">{helperText}</Box>
+        <Box
+          style={{
+            fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+            color: 'var(--ds-color-text-muted)',
+          }}
+        >
+          {helperText}
+        </Box>
       ) : null}
     </Box>
   );

@@ -1,6 +1,6 @@
+import React from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './Prose.css';
 import { textStyles } from '../../../primitives/text-styles';
 
 /**
@@ -9,14 +9,17 @@ import { textStyles } from '../../../primitives/text-styles';
  */
 export function Prose({ children }: { children: ReactNode }): ReactElement {
   const prose = textStyles.prose.md;
-  const style = {
-    // Bridge token values into CSS custom props for the stylesheet to consume
-    ['--ds-prose-font-family' as string]: prose.fontFamily,
-    ['--ds-prose-font-size' as string]: prose.fontSize,
-    ['--ds-prose-line-height' as string]: prose.lineHeight.toString(),
-  };
+
   return (
-    <Box className="ds-prose" style={style}>
+    <Box
+      style={{
+        color: 'var(--ds-color-text)',
+        fontFamily: prose.fontFamily,
+        fontSize: prose.fontSize,
+        lineHeight: prose.lineHeight,
+        fontWeight: prose.fontWeight,
+      }}
+    >
       {wrapInline(children)}
     </Box>
   );
@@ -35,7 +38,11 @@ function wrapInline(node: ReactNode): ReactNode {
 
   // If it's a string/number/boolean/null/undefined, wrap in a paragraph for spacing
   if (typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
-    return <Box component="p">{node}</Box>;
+    return (
+      <Box component="p" style={{ margin: '0 0 var(--ds-space-sm)' }}>
+        {node}
+      </Box>
+    );
   }
 
   // For anything else (null/undefined), just return as-is

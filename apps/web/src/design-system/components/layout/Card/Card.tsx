@@ -7,12 +7,72 @@ import type {
   ReactElement,
   ReactNode,
 } from 'react';
+import { useState } from 'react';
 import { Box, Paper } from '../../../../mantine';
-import './Card.css';
 
 export type CardVariant = 'elevated' | 'outline' | 'subtle' | 'ghost';
 export type CardTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 export type CardPadding = 'none' | 'xs' | 'sm' | 'md' | 'lg';
+
+const paddingMap: Record<CardPadding, string> = {
+  none: '0',
+  xs: 'var(--ds-space-xs)',
+  sm: 'var(--ds-space-sm)',
+  md: 'var(--ds-space-md)',
+  lg: 'var(--ds-space-lg)',
+};
+
+function getVariantStyle(variant: CardVariant): CSSProperties {
+  switch (variant) {
+    case 'elevated':
+      return {
+        boxShadow: 'var(--ds-elevation-2, 0 4px 12px rgba(0, 0, 0, 0.08))',
+        borderColor: 'var(--ds-color-border)',
+      };
+    case 'outline':
+      return {
+        boxShadow: 'none',
+        borderColor: 'var(--ds-color-border)',
+      };
+    case 'subtle':
+      return {
+        boxShadow: 'none',
+        borderColor: 'var(--ds-color-border)',
+        background: 'var(--ds-color-surface-muted)',
+      };
+    case 'ghost':
+      return {
+        boxShadow: 'none',
+        borderColor: 'transparent',
+        background: 'transparent',
+      };
+  }
+}
+
+function getToneStyle(tone: CardTone): CSSProperties {
+  switch (tone) {
+    case 'neutral':
+      return {};
+    case 'info':
+      return {
+        background: 'color-mix(in srgb, var(--ds-color-accent-weak) 20%, transparent)',
+      };
+    case 'success':
+      return {
+        background:
+          'color-mix(in srgb, var(--ds-color-categorical-cat6-light, #14b8a6) 12%, transparent)',
+      };
+    case 'warning':
+      return {
+        background:
+          'color-mix(in srgb, var(--ds-color-categorical-cat4-light, #d97706) 12%, transparent)',
+      };
+    case 'danger':
+      return {
+        background: 'color-mix(in srgb, var(--ds-color-scale-amber-5, #b45309) 12%, transparent)',
+      };
+  }
+}
 
 type CommonProps = {
   children: ReactNode;
@@ -47,10 +107,56 @@ export type AnchorCardProps = CommonProps &
 
 export type CardProps = DivCardProps | AnchorCardProps;
 
+function buildCardStyle(
+  variant: CardVariant,
+  tone: CardTone,
+  padding: CardPadding,
+  isInteractive: boolean,
+  disabled: boolean,
+  hovered: boolean,
+  maxWidth?: CSSProperties['maxWidth'],
+): CSSProperties {
+  const base: CSSProperties = {
+    display: 'block',
+    maxWidth: maxWidth ?? '100%',
+    borderRadius: 'var(--ds-radius-md)',
+    border: '1px solid var(--ds-color-border)',
+    background: 'var(--ds-color-surface)',
+    color: 'var(--ds-color-text)',
+    textDecoration: 'none',
+    position: 'relative',
+    padding: paddingMap[padding],
+    ...getVariantStyle(variant),
+    ...getToneStyle(tone),
+  };
+
+  if (isInteractive) {
+    base.cursor = 'pointer';
+    base.transition =
+      'box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease, background-color 120ms ease';
+    if (hovered) {
+      base.boxShadow = 'var(--ds-elevation-3, 0 6px 16px rgba(0, 0, 0, 0.12))';
+      base.transform = 'translateY(-1px)';
+      base.backgroundColor =
+        'color-mix(in srgb, var(--ds-color-accent-weak) 25%, var(--ds-color-surface))';
+    }
+  }
+
+  if (disabled) {
+    base.opacity = 0.5;
+    base.cursor = 'not-allowed';
+    base.pointerEvents = 'none';
+  }
+
+  return base;
+}
+
 // Overloads so consumers get correct intellisense for href/no-href cases
 export function Card(props: AnchorCardProps): ReactElement;
 export function Card(props: DivCardProps): ReactElement;
 export function Card(props: CardProps): ReactElement {
+  const [hovered, setHovered] = useState(false);
+
   // Anchor branch: href present and is a string
   if ('href' in props && typeof props.href === 'string') {
     const {
@@ -62,7 +168,8 @@ export function Card(props: CardProps): ReactElement {
       padding = 'md',
       interactive,
       disabled = false,
-      separated = false,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      separated: _sep,
       href,
       onClick,
       'aria-label': ariaLabel,
@@ -70,29 +177,25 @@ export function Card(props: CardProps): ReactElement {
     } = props as AnchorCardProps;
 
     const isInteractive = !disabled && (interactive || !!href || !!onClick);
-
-    const rootClassName = [
-      'ui-card',
-      `ui-card--variant-${variant}`,
-      `ui-card--tone-${tone}`,
-      `ui-card--padding-${padding}`,
-      isInteractive && 'ui-card--interactive',
-      disabled && 'ui-card--disabled',
-      separated && 'ui-card--separated',
-      className,
-    ]
-      .filter(Boolean)
-      .join(' ');
-
-    const style: CSSProperties | undefined = maxWidth ? { maxWidth } : undefined;
+    const cardStyle = buildCardStyle(
+      variant,
+      tone,
+      padding,
+      isInteractive,
+      disabled,
+      hovered,
+      maxWidth,
+    );
 
     return (
       <Paper
         component="a"
-        className={rootClassName}
-        style={style}
+        className={className}
+        style={cardStyle}
         href={href}
         onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
+        onMouseEnter={isInteractive ? () => setHovered(true) : undefined}
+        onMouseLeave={isInteractive ? () => setHovered(false) : undefined}
         aria-disabled={disabled || undefined}
         aria-label={ariaLabel}
         {...(rest as AnchorHTMLAttributes<HTMLAnchorElement>)}
@@ -112,34 +215,31 @@ export function Card(props: CardProps): ReactElement {
     padding = 'md',
     interactive,
     disabled = false,
-    separated = false,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    separated: _sep2,
     onClick,
     'aria-label': ariaLabel,
     ...rest
   } = props as DivCardProps;
 
   const isInteractive = !disabled && (interactive || !!onClick);
-
-  const rootClassName = [
-    'ui-card',
-    `ui-card--variant-${variant}`,
-    `ui-card--tone-${tone}`,
-    `ui-card--padding-${padding}`,
-    isInteractive && 'ui-card--interactive',
-    disabled && 'ui-card--disabled',
-    separated && 'ui-card--separated',
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const style: CSSProperties | undefined = maxWidth ? { maxWidth } : undefined;
+  const cardStyle = buildCardStyle(
+    variant,
+    tone,
+    padding,
+    isInteractive,
+    disabled,
+    hovered,
+    maxWidth,
+  );
 
   return (
     <Box
-      className={rootClassName}
-      style={style}
+      className={className}
+      style={cardStyle}
       onClick={onClick as MouseEventHandler<HTMLDivElement> | undefined}
+      onMouseEnter={isInteractive ? () => setHovered(true) : undefined}
+      onMouseLeave={isInteractive ? () => setHovered(false) : undefined}
       aria-disabled={disabled || undefined}
       aria-label={ariaLabel}
       {...(rest as HTMLAttributes<HTMLDivElement>)}

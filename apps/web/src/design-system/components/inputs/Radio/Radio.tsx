@@ -1,6 +1,5 @@
 import type { InputHTMLAttributes, ReactElement } from 'react';
 import { Radio as MantineRadio } from '../../../../mantine';
-import './Radio.css';
 
 export type RadioProps = {
   label?: string;
@@ -20,7 +19,7 @@ export function Radio({
   return (
     <MantineRadio
       id={id}
-      className={['ds-radio-field', className].filter(Boolean).join(' ')}
+      className={className}
       label={label}
       description={helperText}
       error={error ?? undefined}

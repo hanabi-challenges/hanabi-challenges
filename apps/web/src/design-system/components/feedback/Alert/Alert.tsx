@@ -1,7 +1,6 @@
-import type { ReactElement } from 'react';
-import { Box } from '../../../../mantine';
+import type { CSSProperties, ReactElement } from 'react';
+import { Alert as MantineAlert } from '../../../../mantine';
 import { MaterialIcon } from '../../data-display/MaterialIcon/MaterialIcon';
-import './Alert.css';
 
 export type AlertVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -12,21 +11,51 @@ type AlertProps = {
   className?: string;
 };
 
+type AlertTokens = { bg: string; text: string };
+
+const variantTokens: Record<AlertVariant, AlertTokens> = {
+  info: {
+    bg: 'var(--ds-color-alert-info-bg)',
+    text: 'var(--ds-color-alert-info-text)',
+  },
+  success: {
+    bg: 'var(--ds-color-alert-success-bg)',
+    text: 'var(--ds-color-alert-success-text)',
+  },
+  warning: {
+    bg: 'var(--ds-color-alert-warning-bg)',
+    text: 'var(--ds-color-alert-warning-text)',
+  },
+  error: {
+    bg: 'var(--ds-color-alert-error-bg)',
+    text: 'var(--ds-color-alert-error-text)',
+  },
+};
+
+const iconMap: Record<AlertVariant, string> = {
+  success: 'check_circle',
+  info: 'info',
+  warning: 'warning',
+  error: 'error',
+};
+
 export function Alert({ variant = 'info', title, message, className }: AlertProps): ReactElement {
-  const rootClass = ['ds-alert', `ds-alert--${variant}`, className].filter(Boolean).join(' ');
-  const iconMap: Record<AlertVariant, string> = {
-    success: 'check_circle',
-    info: 'info',
-    warning: 'warning',
-    error: 'error',
-  };
+  const { bg, text } = variantTokens[variant];
   return (
-    <Box className={rootClass} role="status">
-      <Box className="ds-alert__icon" aria-hidden="true">
-        <MaterialIcon name={iconMap[variant]} />
-      </Box>
-      {title ? <Box className="ds-alert__title">{title}</Box> : null}
-      <Box className="ds-alert__message">{message}</Box>
-    </Box>
+    <MantineAlert
+      variant="default"
+      title={title}
+      icon={<MaterialIcon name={iconMap[variant]} />}
+      className={className}
+      role="status"
+      styles={{
+        root: { background: bg, borderColor: text } as CSSProperties,
+        title: { color: text } as CSSProperties,
+        body: { color: text } as CSSProperties,
+        icon: { color: text } as CSSProperties,
+      }}
+    >
+      {message}
+    </MantineAlert>
   );
 }

@@ -1,11 +1,16 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './PageContainer.css';
 
 type PageContainerProps = {
   children: ReactNode;
   variant?: 'page' | 'panel' | 'narrow';
   className?: string;
+};
+
+const maxWidthMap: Record<'page' | 'panel' | 'narrow', string> = {
+  page: 'var(--ds-layout-maxWidth-page, 1100px)',
+  panel: 'var(--ds-layout-maxWidth-panel, 720px)',
+  narrow: 'var(--ds-layout-maxWidth-narrow, 640px)',
 };
 
 /**
@@ -16,8 +21,16 @@ export function PageContainer({
   variant = 'page',
   className,
 }: PageContainerProps): ReactElement {
-  const classes = ['ds-page-container', `ds-page-container--${variant}`, className]
-    .filter(Boolean)
-    .join(' ');
-  return <Box className={classes}>{children}</Box>;
+  const style: CSSProperties = {
+    width: '100%',
+    margin: '0 auto',
+    padding: '0 var(--ds-layout-pagePadding, 16px)',
+    maxWidth: maxWidthMap[variant],
+  };
+
+  return (
+    <Box className={className} style={style}>
+      {children}
+    </Box>
+  );
 }

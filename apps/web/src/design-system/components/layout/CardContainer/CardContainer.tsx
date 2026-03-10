@@ -1,12 +1,17 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './CardContainer.css';
 
 type CardContainerProps = {
   children: ReactNode;
   columns?: string;
   gap?: 'sm' | 'md' | 'lg';
   className?: string;
+};
+
+const gapMap: Record<'sm' | 'md' | 'lg', string> = {
+  sm: 'var(--ds-space-xs)',
+  md: 'var(--ds-space-sm)',
+  lg: 'var(--ds-space-md)',
 };
 
 /**
@@ -18,11 +23,15 @@ export function CardContainer({
   gap = 'md',
   className,
 }: CardContainerProps): ReactElement {
-  const classes = ['ds-card-container', `ds-card-container--gap-${gap}`, className]
-    .filter(Boolean)
-    .join(' ');
+  const style: CSSProperties = {
+    display: 'grid',
+    width: '100%',
+    gap: gapMap[gap],
+    ...(columns ? { gridTemplateColumns: columns } : {}),
+  };
+
   return (
-    <Box className={classes} style={columns ? { gridTemplateColumns: columns } : undefined}>
+    <Box className={className} style={style}>
       {children}
     </Box>
   );

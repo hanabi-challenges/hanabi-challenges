@@ -1,10 +1,20 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { Inline } from '../../layout/Inline/Inline';
+
+type ButtonGroupProps = {
+  children: ReactNode;
+  gap?: 'xs' | 'sm' | 'md';
+  className?: string;
+};
 
 /**
- * TODO: ButtonGroup
- * Horizontal arrangement of Buttons with shared spacing/selection styles.
- * Note: Inline layout may supersede this; keep thin wrapper if needed.
+ * ButtonGroup
+ * Horizontal arrangement of Buttons with shared spacing styles.
  */
-export function ButtonGroup(): ReactElement | null {
-  return null;
+export function ButtonGroup({ children, gap = 'xs', className }: ButtonGroupProps): ReactElement {
+  return (
+    <Inline gap={gap} align="center" className={className}>
+      {children}
+    </Inline>
+  );
 }

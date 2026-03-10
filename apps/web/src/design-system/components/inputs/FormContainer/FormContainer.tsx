@@ -1,11 +1,17 @@
-import type { ReactElement, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../../mantine';
-import './FormContainer.css';
 
 type FormContainerProps = {
   children: ReactNode;
   gap?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
+};
+
+const gapMap: Record<'xs' | 'sm' | 'md' | 'lg', string> = {
+  xs: 'var(--ds-space-xxs)',
+  sm: 'var(--ds-space-xs)',
+  md: 'var(--ds-space-sm)',
+  lg: 'var(--ds-space-md)',
 };
 
 /**
@@ -17,8 +23,14 @@ export function FormContainer({
   gap = 'md',
   className,
 }: FormContainerProps): ReactElement {
+  const style: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: gapMap[gap],
+  };
+
   return (
-    <Box className={['ds-form', `ds-form--gap-${gap}`, className].filter(Boolean).join(' ')}>
+    <Box className={className} style={style}>
       {children}
     </Box>
   );

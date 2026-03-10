@@ -3,7 +3,6 @@ import { Box } from '../../../../mantine';
 import { Heading } from '../../typography/Heading/Heading';
 import { Text } from '../../typography/Text/Text';
 import { Inline } from '../Inline/Inline';
-import './PageHeader.css';
 
 export type PageHeaderProps = {
   title: ReactNode;
@@ -18,13 +17,22 @@ export type PageHeaderProps = {
  */
 export function PageHeader({ title, subtitle, actions, level = 1 }: PageHeaderProps) {
   return (
-    <Box className="ui-page-header">
-      <Inline className="ui-page-header__main" justify="space-between" align="start" wrap>
-        <Box className="ui-page-header__text">
+    <Box style={{ display: 'block' }}>
+      <Inline style={{ width: '100%' }} justify="space-between" align="start" wrap>
+        <Box
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--ds-space-xs)',
+            minWidth: 0,
+          }}
+        >
           <Heading level={level}>{title}</Heading>
           {subtitle ? <Text variant="muted">{subtitle}</Text> : null}
         </Box>
-        {actions ? <Box className="ui-page-header__actions">{actions}</Box> : null}
+        {actions ? (
+          <Box style={{ display: 'inline-flex', alignItems: 'center' }}>{actions}</Box>
+        ) : null}
       </Inline>
     </Box>
   );

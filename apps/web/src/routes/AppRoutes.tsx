@@ -4,6 +4,7 @@ import { MainLayout } from '../layouts/MainLayout';
 import { LandingPage } from '../pages/LandingPage';
 import { AboutPage } from '../pages/AboutPage';
 import { AboutFAQPage } from '../pages/AboutFAQPage';
+import { AboutContributingPage } from '../pages/AboutContributingPage';
 import { ContactPage } from '../pages/ContactPage';
 import { FeedbackPage } from '../pages/FeedbackPage';
 import { CodeOfConductPage } from '../pages/CodeOfConductPage';
@@ -110,6 +111,7 @@ export function AppRoutes() {
           <Route index element={<LandingPage />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="about/FAQ" element={<AboutFAQPage />} />
+          <Route path="about/contributing" element={<AboutContributingPage />} />
           <Route path="contact" element={<ContactPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="code-of-conduct" element={<CodeOfConductPage />} />

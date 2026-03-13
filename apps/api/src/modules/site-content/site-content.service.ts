@@ -173,6 +173,36 @@ Admins may limit access for abuse, cheating, or conduct that harms event integri
 Questions about these terms can be directed through project community channels.`,
   },
   {
+    slug: 'contributing',
+    title: 'Contributing',
+    markdown: `# Contributing
+
+We welcome contributions to Hanabi Challenges. Whether you are fixing a bug, improving the UI, or adding a new feature, this page explains how to get involved.
+
+## Getting started
+
+- Fork the repository and clone it locally.
+- Install dependencies with \`pnpm install\`.
+- Copy any required environment files and configure your local database.
+- Run \`pnpm run dev\` to start the development server.
+
+## Making changes
+
+- Work on a feature branch off \`main\`.
+- Follow existing code style and project conventions.
+- Run \`pnpm run format && pnpm run lint && pnpm run test:unit && pnpm run build\` before submitting.
+
+## Submitting a pull request
+
+- Open a PR against \`main\` with a clear description of what changed and why.
+- Small, focused PRs are easier to review and merge.
+- All CI checks must pass before a PR can be merged.
+
+## Reporting issues
+
+Open an issue in the project repository with steps to reproduce, expected behavior, and actual behavior. Screenshots and URLs are helpful.`,
+  },
+  {
     slug: 'privacy',
     title: 'Privacy Policy',
     markdown: `# Privacy Policy

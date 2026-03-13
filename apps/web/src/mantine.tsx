@@ -2,6 +2,7 @@ import {
   Combobox as MantineCombobox,
   useCombobox as useMantineCombobox,
   ActionIcon as MantineActionIcon,
+  Skeleton as MantineSkeleton,
   Alert as MantineAlert,
   Anchor as MantineAnchor,
   Badge as MantineBadge,
@@ -556,6 +557,7 @@ export const List = MantineList;
 export const Radio = MantineRadio;
 export const Stepper = MantineStepper;
 export const Popover = MantinePopover;
+export const Skeleton = MantineSkeleton;
 
 export type {
   MenuProps,

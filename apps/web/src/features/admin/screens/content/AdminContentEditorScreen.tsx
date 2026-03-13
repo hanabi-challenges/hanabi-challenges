@@ -12,6 +12,7 @@ const EDITABLE_SLUGS = new Set([
   'legal',
   'terms',
   'privacy',
+  'contributing',
 ]);
 
 export function AdminContentEditorScreen() {

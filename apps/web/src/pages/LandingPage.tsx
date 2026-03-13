@@ -70,7 +70,7 @@ export const LandingPage: React.FC = () => {
             {!loading && !error && activeEvents.length > 0 && (
               <Stack gap="sm">
                 {visibleActive.map((event) => (
-                  <EventCard key={event.id} event={event} description="long" now={now} />
+                  <EventCard key={event.id} event={event} description="short" now={now} />
                 ))}
                 <Inline>
                   <Link to="/events">See more events</Link>

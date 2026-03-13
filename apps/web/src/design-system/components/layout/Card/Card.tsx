@@ -121,7 +121,7 @@ function buildCardStyle(
     maxWidth: maxWidth ?? '100%',
     borderRadius: 'var(--ds-radius-md)',
     border: '1px solid var(--ds-color-border)',
-    background: 'var(--ds-color-surface)',
+    background: 'var(--ds-color-surface-muted)',
     color: 'var(--ds-color-text)',
     textDecoration: 'none',
     position: 'relative',
@@ -134,11 +134,17 @@ function buildCardStyle(
     base.cursor = 'pointer';
     base.transition =
       'box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease, background-color 120ms ease';
+    // Always set backgroundColor explicitly (not just on hover) so the CSS
+    // transition has two concrete values to interpolate between. Without this,
+    // removing the inline backgroundColor on mouse-leave causes the browser to
+    // skip the transition and snap to the shorthand-computed value.
+    const restingBackground = (base.background as string) || 'var(--ds-color-surface)';
     if (hovered) {
       base.boxShadow = 'var(--ds-elevation-3, 0 6px 16px rgba(0, 0, 0, 0.12))';
       base.transform = 'translateY(-1px)';
-      base.backgroundColor =
-        'color-mix(in srgb, var(--ds-color-accent-weak) 25%, var(--ds-color-surface))';
+      base.backgroundColor = `color-mix(in srgb, var(--ds-color-accent-weak) 25%, ${restingBackground})`;
+    } else {
+      base.backgroundColor = restingBackground;
     }
   }
 

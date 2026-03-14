@@ -19,7 +19,7 @@ const adminNav: AdminNavItem[] = [
   { label: 'Badges', to: '/admin/badges' },
   { label: 'Content', to: '/admin/content' },
   { label: 'Users', to: '/admin/users', superAdminOnly: true },
-  { label: 'Data Deletion', to: '/admin/data-deletion', superAdminOnly: true },
+  { label: 'System', to: '/admin/system', superAdminOnly: true },
 ];
 
 function isActivePath(currentPath: string, targetPath: string, exact = false) {

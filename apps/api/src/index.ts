@@ -1,6 +1,6 @@
 import { app } from './app';
 import { env } from './config/env';
-import { info } from './utils/logger';
+import { info, warn } from './utils/logger';
 import { runMigrations } from './modules/migrations/migrations.runner';
 import { startVariantSyncScheduler } from './modules/variants/variants.service';
 import { ensureNotificationsSchema } from './modules/notifications/notifications.service';
@@ -13,7 +13,7 @@ import { ensureChallengeBadgeConfigSchema } from './modules/events/event.service
 
 const server = app.listen(env.BACKEND_PORT, () => {
   info(`Backend running at http://localhost:${env.BACKEND_PORT}`);
-  void runMigrations()
+  runMigrations()
     .then(() => {
       startVariantSyncScheduler();
       return Promise.all([
@@ -22,7 +22,10 @@ const server = app.listen(env.BACKEND_PORT, () => {
         ensureChallengeBadgeConfigSchema(),
       ]);
     })
-    .then(() => startNotificationDbListener());
+    .then(() => startNotificationDbListener())
+    .catch((err: unknown) => {
+      warn('Startup sequence failed:', err);
+    });
 });
 
 initNotificationsWebSocketServer(server);

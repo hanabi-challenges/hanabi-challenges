@@ -1,11 +1,21 @@
 -- Migration 001: store variant as numeric ID instead of string name
 --
 -- event_game_templates.variant (TEXT) → variant_id (INTEGER FK → hanabi_variants.code)
--- The hanabi_variants catalog must be populated before this migration runs.
--- Any template whose variant name has no matching entry in hanabi_variants
--- defaults to 0 (No Variant).
+-- Self-contained: seeds the No Variant catalog row so the FK default always resolves.
 
 BEGIN;
+
+-- Ensure hanabi_variants exists and has the No Variant fallback row
+CREATE TABLE IF NOT EXISTS hanabi_variants (
+  code INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  label TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO hanabi_variants (code, name, label)
+VALUES (0, 'No Variant', 'No Variant')
+ON CONFLICT (code) DO NOTHING;
 
 -- 1. Add new integer column (nullable for now so existing rows are accepted)
 ALTER TABLE event_game_templates

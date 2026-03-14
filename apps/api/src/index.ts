@@ -11,21 +11,23 @@ import {
 import { ensureAdminAccessSchema } from './modules/admin-access/admin-access.service';
 import { ensureChallengeBadgeConfigSchema } from './modules/events/event.service';
 
-const server = app.listen(env.BACKEND_PORT, () => {
-  info(`Backend running at http://localhost:${env.BACKEND_PORT}`);
-  runMigrations()
-    .then(() => {
-      startVariantSyncScheduler();
-      return Promise.all([
-        ensureNotificationsSchema(),
-        ensureAdminAccessSchema(),
-        ensureChallengeBadgeConfigSchema(),
-      ]);
-    })
-    .then(() => startNotificationDbListener())
-    .catch((err: unknown) => {
-      warn('Startup sequence failed:', err);
+runMigrations()
+  .then(() => {
+    const server = app.listen(env.BACKEND_PORT, () => {
+      info(`Backend running at http://localhost:${env.BACKEND_PORT}`);
     });
-});
 
-initNotificationsWebSocketServer(server);
+    initNotificationsWebSocketServer(server);
+
+    startVariantSyncScheduler();
+    return Promise.all([
+      ensureNotificationsSchema(),
+      ensureAdminAccessSchema(),
+      ensureChallengeBadgeConfigSchema(),
+    ]);
+  })
+  .then(() => startNotificationDbListener())
+  .catch((err: unknown) => {
+    warn('Startup sequence failed — process will exit:', err);
+    process.exit(1);
+  });

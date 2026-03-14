@@ -293,8 +293,12 @@ function extractCanonicalDisplayName(payload: unknown): string | null {
 }
 
 export async function resolveHanabIdentityToken(token: string): Promise<TokenIdentityResult> {
-  const endpoint = `https://hanab.live/api/v1/identity/${encodeURIComponent(token)}`;
-  const response = await fetch(endpoint, { method: 'GET' });
+  const endpoint = `https://hanab.live/api/v1/identity`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
   if (!response.ok) {
     throw new InvalidTokenError('Invalid or expired token');
   }

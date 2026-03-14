@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CoreGroup as Group,
   CoreStack as Stack,
@@ -12,12 +12,23 @@ import {
 } from '../../../../design-system';
 import { useAuth } from '../../../../context/AuthContext';
 import { useEvents } from '../../../../hooks/useEvents';
-import { ApiError, deleteJsonAuth, getJsonAuth } from '../../../../lib/api';
+import { ApiError, deleteJsonAuth, getJsonAuth, postJsonAuth } from '../../../../lib/api';
 import { MaterialIcon } from '../../../../design-system';
 import {
   DestructiveActionModal,
   type DestructiveConsequence,
 } from '../../../shared/modals/DestructiveActionModal';
+
+type VariantSyncResult = {
+  fetched_count: number;
+  stored_count: number;
+  synced_at: string;
+};
+
+type VariantSyncState = {
+  last_synced_at: string | null;
+  stored_count: number | null;
+};
 
 export function AdminSystemHomeScreen() {
   const { token } = useAuth();
@@ -29,6 +40,50 @@ export function AdminSystemHomeScreen() {
   } = useEvents({
     includeUnpublishedForAdmin: true,
   });
+
+  // Variant sync state
+  const [variantSync, setVariantSync] = useState<VariantSyncState>({
+    last_synced_at: null,
+    stored_count: null,
+  });
+  const [syncingVariants, setSyncingVariants] = useState(false);
+  const [syncResult, setSyncResult] = useState<VariantSyncResult | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    void getJsonAuth<{ variants: unknown[]; last_synced_at: string | null }>(
+      '/variants',
+      token,
+    ).then((data) => {
+      setVariantSync({
+        last_synced_at: data.last_synced_at,
+        stored_count: data.variants.length,
+      });
+    });
+  }, [token]);
+
+  async function triggerVariantSync() {
+    if (!token) return;
+    setSyncingVariants(true);
+    setSyncResult(null);
+    setSyncError(null);
+    try {
+      const result = await postJsonAuth<VariantSyncResult>('/variants/sync', token, {});
+      setSyncResult(result);
+      setVariantSync({ last_synced_at: result.synced_at, stored_count: result.stored_count });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const body = err.body as { error?: string } | null;
+        setSyncError(body?.error ?? `Sync failed (${err.status})`);
+      } else {
+        setSyncError('Sync failed');
+      }
+    } finally {
+      setSyncingVariants(false);
+    }
+  }
+
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -139,6 +194,53 @@ export function AdminSystemHomeScreen() {
 
   return (
     <Stack gap="md">
+      <Title order={3}>Variant Catalog</Title>
+
+      <SectionCard>
+        <Stack gap="sm">
+          <Text fw={700}>Hanabi variant sync</Text>
+          <Text size="sm" c="dimmed">
+            Syncs the variant catalog from the hanab.live repository. Runs automatically on startup
+            and weekly thereafter.
+          </Text>
+          <Group align="center" gap="sm">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={syncingVariants}
+              onClick={() => void triggerVariantSync()}
+            >
+              {syncingVariants ? 'Syncing…' : 'Sync now'}
+            </Button>
+            {variantSync.last_synced_at && (
+              <Text size="sm" c="dimmed">
+                Last synced:{' '}
+                {new Date(variantSync.last_synced_at).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+                {variantSync.stored_count !== null && ` · ${variantSync.stored_count} variants`}
+              </Text>
+            )}
+            {!variantSync.last_synced_at && variantSync.stored_count === null && (
+              <Text size="sm" c="dimmed">
+                Never synced
+              </Text>
+            )}
+          </Group>
+          {syncResult && (
+            <Text size="sm" c="green">
+              Sync complete — {syncResult.fetched_count} fetched, {syncResult.stored_count} stored.
+            </Text>
+          )}
+          {syncError && (
+            <Text size="sm" c="red">
+              {syncError}
+            </Text>
+          )}
+        </Stack>
+      </SectionCard>
+
       <Title order={3}>Data Deletion</Title>
 
       <SectionCard>

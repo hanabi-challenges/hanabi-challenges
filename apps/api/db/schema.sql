@@ -564,3 +564,18 @@ CREATE INDEX idx_admin_access_requests_requester_created
 CREATE UNIQUE INDEX uq_admin_access_requests_pending_per_user
   ON admin_access_requests (requester_user_id)
   WHERE status = 'pending';
+
+------------------------------------------------------------
+-- SCHEMA MIGRATIONS TRACKER
+------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  name TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Mark all migrations that are already reflected in this schema as applied
+-- so the runtime migration runner skips them on fresh installs.
+INSERT INTO schema_migrations (name) VALUES
+  ('001_variant_id.sql')
+ON CONFLICT (name) DO NOTHING;

@@ -85,7 +85,7 @@ function AdminRoutes() {
       </Route>
 
       <Route
-        path="data-deletion"
+        path="system"
         element={
           <RequireSuperAdmin>
             <AdminSystemLayoutScreen />
@@ -97,7 +97,7 @@ function AdminRoutes() {
 
       <Route path="create-event" element={<Navigate to="/admin/events/create" replace />} />
       <Route path="manage-users" element={<Navigate to="/admin/users" replace />} />
-      <Route path="system" element={<Navigate to="/admin/data-deletion" replace />} />
+      <Route path="data-deletion" element={<Navigate to="/admin/system" replace />} />
     </Route>
   );
 }

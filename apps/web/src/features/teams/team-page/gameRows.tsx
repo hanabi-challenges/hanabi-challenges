@@ -413,7 +413,6 @@ export function UnplayedRow({
         update({
           validateStatus: 'error',
           validateMessage: 'Validation failed.',
-          replay: '',
           replayGameId: null,
           derivedScore: null,
           derivedEndCondition: null,
@@ -438,7 +437,6 @@ export function UnplayedRow({
       update({
         validateStatus: 'error',
         validateMessage: `${message}${detail ? ' - ' + detail : ''}`,
-        replay: '',
         replayGameId: null,
         derivedScore: null,
         derivedEndCondition: null,
@@ -571,7 +569,12 @@ export function UnplayedRow({
               <Button
                 variant="primary"
                 size="sm"
-                disabled={!draft.replay || Boolean(draft.replayError) || submitting}
+                disabled={
+                  !draft.replay ||
+                  Boolean(draft.replayError) ||
+                  draft.validateStatus !== 'ok' ||
+                  submitting
+                }
                 onClick={handleSubmit}
                 aria-label="Submit"
               >
@@ -599,6 +602,13 @@ export function UnplayedRow({
               disabled={!editable}
               fullWidth
             />
+          </Table.Td>
+        </Table.Tr>
+      )}
+      {draft.validateStatus === 'error' && draft.validateMessage && (
+        <Table.Tr className="teamgame-error-row">
+          <Table.Td colSpan={9} className="teamgame-error-cell">
+            {draft.validateMessage}
           </Table.Td>
         </Table.Tr>
       )}

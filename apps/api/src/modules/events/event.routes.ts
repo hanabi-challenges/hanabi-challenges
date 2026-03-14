@@ -53,6 +53,7 @@ type ReplayHistoryGame = {
   variant?: string | null;
   options?: {
     variantName?: string | null;
+    variantID?: number | null;
     variant?: string | null;
     cardCycle?: boolean | null;
     deckPlays?: boolean | null;
@@ -758,7 +759,7 @@ type ReplayValidationSuccess = {
   derived: {
     seedSuffix: string;
     teamSize: number;
-    variant: string;
+    variantId: number;
     score: number | null;
     endCondition: number | null;
     playedAt: string | null;
@@ -800,7 +801,7 @@ async function runReplayValidation(
 
     step = 'lookup template';
     const tplResult = await pool.query(
-      `SELECT egt.id, egt.seed_payload, egt.variant, es.event_id, es.config_json
+      `SELECT egt.id, egt.seed_payload, egt.variant_id, es.event_id, es.config_json
        FROM event_game_templates egt
        JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
        WHERE egt.id = $1`,
@@ -810,7 +811,7 @@ async function runReplayValidation(
     const tpl = tplResult.rows[0] as {
       id: number;
       seed_payload: string | null;
-      variant: string;
+      variant_id: number;
       event_id: number;
       config_json: unknown;
     };
@@ -863,12 +864,13 @@ async function runReplayValidation(
       }
     }
 
-    const seedMatch = seedString.match(/p(\d+)v\d+s([A-Za-z0-9]+)/);
+    const seedMatch = seedString.match(/p(\d+)v(\d+)s([A-Za-z0-9]+)/);
     if (!seedMatch) {
       return err(400, 'Seed string from replay is not in expected format');
     }
     const seedPlayers = Number(seedMatch[1]);
-    const seedSuffix = seedMatch[2];
+    const seedVariantId = Number(seedMatch[2]);
+    const seedSuffix = seedMatch[3];
 
     if (seedPlayers !== team.team_size) {
       return err(400, `Replay is for ${seedPlayers}p but team is ${team.team_size}p`);
@@ -886,7 +888,7 @@ async function runReplayValidation(
       );
     }
 
-    let historyVariant: string | null = null;
+    let historyVariantId: number | null = null;
     let flagsOk = true;
     let score: number | null = null;
     let endCondition: number | null = null;
@@ -899,8 +901,13 @@ async function runReplayValidation(
       );
       if (game) {
         const opts = game.options ?? {};
-        historyVariant =
-          game.variantName ?? opts.variantName ?? game.variant ?? opts.variant ?? null;
+        historyVariantId = opts.variantID ?? null;
+        if (historyVariantId != null && historyVariantId !== seedVariantId) {
+          return err(
+            400,
+            `Replay variant ID ${historyVariantId} does not match seed variant ID ${seedVariantId}`,
+          );
+        }
         const flags = {
           cardCycle: game.cardCycle ?? opts.cardCycle,
           deckPlays: game.deckPlays ?? opts.deckPlays,
@@ -918,10 +925,10 @@ async function runReplayValidation(
       }
     }
 
-    if (historyVariant && historyVariant !== tpl.variant) {
+    if (historyVariantId != null && historyVariantId !== tpl.variant_id) {
       return err(
         400,
-        `Replay variant ${historyVariant} does not match template variant ${tpl.variant}`,
+        `Replay variant ID ${historyVariantId} does not match template variant ID ${tpl.variant_id}`,
       );
     }
     if (!flagsOk) {
@@ -937,7 +944,7 @@ async function runReplayValidation(
       derived: {
         seedSuffix,
         teamSize: seedPlayers,
-        variant: historyVariant ?? tpl.variant,
+        variantId: historyVariantId ?? tpl.variant_id,
         score,
         endCondition,
         playedAt,
@@ -1775,7 +1782,8 @@ router.get('/:slug/stats', async (req: Request, res: Response) => {
         egt.id AS template_id,
         egt.template_index,
         egt.seed_payload,
-        egt.variant,
+        egt.variant_id,
+        hv.name AS variant,
         egt.max_score,
         COALESCE(AVG(g.score)::numeric, 0) AS avg_score,
         COALESCE(AVG(g.bottom_deck_risk)::numeric, 0) AS avg_bdr,
@@ -1783,10 +1791,11 @@ router.get('/:slug/stats', async (req: Request, res: Response) => {
         COUNT(g.id) AS games_played
       FROM event_game_templates egt
       JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
+      LEFT JOIN hanabi_variants hv ON hv.code = egt.variant_id
       LEFT JOIN event_games g ON g.event_game_template_id = egt.id
       LEFT JOIN event_teams t ON t.id = g.event_team_id AND ($2::int IS NULL OR t.team_size = $2::int)
       WHERE es.event_id = $1
-      GROUP BY egt.id, egt.template_index, egt.seed_payload, egt.variant, egt.max_score
+      GROUP BY egt.id, egt.template_index, egt.seed_payload, egt.variant_id, hv.name, egt.max_score
       ORDER BY egt.template_index;
       `,
       [eventId, teamSize],

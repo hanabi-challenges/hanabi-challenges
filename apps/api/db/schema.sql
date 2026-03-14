@@ -361,7 +361,7 @@ CREATE TABLE event_game_templates (
   id SERIAL PRIMARY KEY,
   event_stage_id INTEGER NOT NULL REFERENCES event_stages(event_stage_id) ON DELETE CASCADE,
   template_index INTEGER NOT NULL,
-  variant TEXT NOT NULL DEFAULT 'No Variant',  -- e.g. 'No Variant', 'Rainbow', etc.
+  variant_id INTEGER NOT NULL DEFAULT 0 REFERENCES hanabi_variants(code),  -- numeric variant code from hanabi_variants
   max_score INTEGER NOT NULL DEFAULT 25,
   seed_payload TEXT, -- payload for this template
   metadata_json JSONB DEFAULT '{}'::jsonb,

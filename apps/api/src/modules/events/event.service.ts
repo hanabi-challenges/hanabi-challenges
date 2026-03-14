@@ -1,5 +1,6 @@
 // src/modules/events/event.service.ts
 import { pool } from '../../config/db';
+import { getVariantCodeByName } from '../variants/variants.service';
 
 export class EventNameExistsError extends Error {
   code = 'EVENT_NAME_EXISTS';
@@ -45,7 +46,8 @@ export interface EventGameTemplate {
   id: number;
   event_stage_id: number;
   template_index: number;
-  variant: string;
+  variant_id: number;
+  variant: string; // resolved name from hanabi_variants — for API/display only
   seed_payload: string | null;
   metadata_json: unknown;
   created_at: string;
@@ -661,13 +663,15 @@ export async function listEventGameTemplates(eventId: number): Promise<EventGame
       egt.id,
       egt.event_stage_id,
       egt.template_index,
-      egt.variant,
+      egt.variant_id,
+      hv.name AS variant,
       egt.seed_payload,
       egt.max_score,
       egt.metadata_json,
       egt.created_at
     FROM event_game_templates egt
     JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
+    LEFT JOIN hanabi_variants hv ON hv.code = egt.variant_id
     WHERE es.event_id = $1
     ORDER BY es.stage_index, egt.template_index;
     `,
@@ -697,28 +701,34 @@ export async function createEventGameTemplate(
     max_score = 25,
     metadata_json = {},
   } = input;
-  const normalizedVariant = variant ?? 'No Variant';
+  const variantName = variant ?? 'No Variant';
+  const variantId = await getVariantCodeByName(variantName);
   const normalizedMaxScore = max_score ?? 25;
   const normalizedMetadata = metadata_json ?? {};
 
   try {
     const result = await pool.query<EventGameTemplate>(
       `
-      INSERT INTO event_game_templates (
-        event_stage_id,
-        template_index,
-        variant,
-        seed_payload,
-        max_score,
-        metadata_json
+      WITH inserted AS (
+        INSERT INTO event_game_templates (
+          event_stage_id,
+          template_index,
+          variant_id,
+          seed_payload,
+          max_score,
+          metadata_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, event_stage_id, template_index, variant_id, seed_payload, max_score, metadata_json, created_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, event_stage_id, template_index, variant, seed_payload, max_score, metadata_json, created_at;
+      SELECT i.*, hv.name AS variant
+      FROM inserted i
+      LEFT JOIN hanabi_variants hv ON hv.code = i.variant_id;
       `,
       [
         eventStageId,
         template_index,
-        normalizedVariant,
+        variantId,
         seed_payload,
         normalizedMaxScore,
         normalizedMetadata,
@@ -790,16 +800,11 @@ export async function replaceEventGameTemplates(
     const stageId = stageResult.rows[0].event_stage_id;
 
     for (const tpl of templates) {
+      const variantId = await getVariantCodeByName(tpl.variant ?? 'No Variant');
       await client.query(
-        `INSERT INTO event_game_templates (event_stage_id, template_index, variant, seed_payload, max_score, metadata_json)
+        `INSERT INTO event_game_templates (event_stage_id, template_index, variant_id, seed_payload, max_score, metadata_json)
          VALUES ($1, $2, $3, $4, 25, $5)`,
-        [
-          stageId,
-          tpl.template_index,
-          tpl.variant ?? 'No Variant',
-          tpl.seed_payload ?? null,
-          tpl.metadata_json ?? {},
-        ],
+        [stageId, tpl.template_index, variantId, tpl.seed_payload ?? null, tpl.metadata_json ?? {}],
       );
     }
 

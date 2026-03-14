@@ -61,7 +61,7 @@ const disabledStyles: Record<ButtonVariant, CSSProperties> = {
       'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-surface) 65%)',
     borderColor:
       'color-mix(in srgb, var(--ds-color-accent-strong) 35%, var(--ds-color-border) 65%)',
-    color: 'color-mix(in srgb, var(--ds-color-surface) 70%, var(--ds-color-text) 30%)',
+    color: 'var(--ds-color-text-muted)',
   },
   secondary: {
     background: 'var(--ds-color-surface-muted)',

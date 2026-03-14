@@ -5,8 +5,8 @@ export function AdminSystemLayoutScreen() {
   return (
     <Box component="section">
       <PageHeader
-        title="Data Deletion"
-        subtitle="Destructive maintenance tools for event data."
+        title="System"
+        subtitle="Variant catalog, data maintenance, and other superadmin tools."
         level={2}
       />
       <Divider my="md" />

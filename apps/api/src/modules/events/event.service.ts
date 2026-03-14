@@ -748,6 +748,81 @@ export async function createEventGameTemplate(
 }
 
 /* ------------------------------------------
+ * Replace all game templates for an event
+ * (challenge edit path — fails if games exist)
+ * ----------------------------------------*/
+export async function replaceEventGameTemplates(
+  eventId: number,
+  templates: Array<{
+    template_index: number;
+    variant?: string | null;
+    seed_payload?: string | null;
+    metadata_json?: unknown;
+  }>,
+): Promise<{ replaced: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Fail if any games have been played against existing templates
+    const gamesCheck = await client.query<{ count: string }>(
+      `SELECT COUNT(*) AS count
+       FROM event_games g
+       JOIN event_game_templates egt ON egt.id = g.event_game_template_id
+       JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
+       WHERE es.event_id = $1`,
+      [eventId],
+    );
+    if (parseInt(gamesCheck.rows[0].count, 10) > 0) {
+      throw Object.assign(new Error('Cannot replace templates: games already exist'), {
+        code: 'TEMPLATES_HAVE_GAMES',
+      });
+    }
+
+    // Delete existing templates (cascade deletes any orphaned games)
+    await client.query(
+      `DELETE FROM event_game_templates
+       WHERE event_stage_id IN (
+         SELECT event_stage_id FROM event_stages WHERE event_id = $1
+       )`,
+      [eventId],
+    );
+
+    // Get the first stage id
+    const stageResult = await client.query<{ event_stage_id: number }>(
+      `SELECT event_stage_id FROM event_stages WHERE event_id = $1 ORDER BY stage_index LIMIT 1`,
+      [eventId],
+    );
+    if (stageResult.rowCount === 0) {
+      throw new Error('No stage found for event');
+    }
+    const stageId = stageResult.rows[0].event_stage_id;
+
+    for (const tpl of templates) {
+      await client.query(
+        `INSERT INTO event_game_templates (event_stage_id, template_index, variant, seed_payload, max_score, metadata_json)
+         VALUES ($1, $2, $3, $4, 25, $5)`,
+        [
+          stageId,
+          tpl.template_index,
+          tpl.variant ?? 'No Variant',
+          tpl.seed_payload ?? null,
+          tpl.metadata_json ?? {},
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+    return { replaced: templates.length };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/* ------------------------------------------
  * List teams for an event (by event ID)
  * ----------------------------------------*/
 export async function listEventTeams(eventId: number): Promise<EventTeam[]> {

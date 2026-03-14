@@ -675,9 +675,15 @@ export function AdminCreateEventPage() {
           event.registration_cutoff ? event.registration_cutoff.slice(0, 10) : '',
         );
 
-        if (format !== 'challenge') {
-          const loadedStages = await getJson<EventStage[]>(`/events/${editSlug}/stages`);
-          if (loadedStages.length > 0) {
+        const loadedStages = await getJson<EventStage[]>(`/events/${editSlug}/stages`);
+        if (loadedStages.length > 0) {
+          const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
+            event_abbreviation?: string;
+            enforce_exact_team_size?: boolean;
+          };
+          if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
+
+          if (format !== 'challenge') {
             const mapped = loadedStages.map((stage) => {
               const config = (stage.config_json ?? {}) as {
                 stage_abbreviation?: string;
@@ -718,12 +724,6 @@ export function AdminCreateEventPage() {
             });
 
             setStages(mapped.length > 0 ? mapped : [initialStage()]);
-
-            const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
-              event_abbreviation?: string;
-              enforce_exact_team_size?: boolean;
-            };
-            if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
 
             const enforce = firstConfig.enforce_exact_team_size ?? false;
 
@@ -1209,6 +1209,25 @@ export function AdminCreateEventPage() {
             metadata_json: {},
           });
         }
+      }
+
+      if (isEdit && isChallenge) {
+        const seeds = buildSeedsFromFormula(
+          seedFormula,
+          eventAbbr,
+          '',
+          'C',
+          seedCount,
+          seedHashToken,
+        );
+        await putJsonAuth(`/events/${encodeURIComponent(targetSlug)}/game-templates`, token, {
+          templates: seeds.map((seed, i) => ({
+            template_index: i + 1,
+            variant,
+            seed_payload: seed,
+            metadata_json: {},
+          })),
+        });
       }
 
       if (!isEdit && isTournament) {

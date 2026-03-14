@@ -22,6 +22,7 @@ import {
   updateEventBySlug,
   deleteEventBySlug,
   getEventDeletePreviewBySlug,
+  replaceEventGameTemplates,
 } from './event.service';
 import {
   findEligibilityForUsers,
@@ -1682,6 +1683,50 @@ router.post(
       console.error('Error creating game template:', err);
       res.status(500).json({
         error: 'Failed to create game template',
+        detail: getErrorDetail(err),
+        code: getErrorCode(err),
+      });
+    }
+  },
+);
+
+/* ------------------------------------------
+ *  PUT /api/events/:slug/game-templates  (ADMIN)
+ *  Replace all templates for a challenge event.
+ *  Fails with 409 if any games already exist.
+ * ----------------------------------------*/
+router.put(
+  '/:slug/game-templates',
+  authRequired,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const slug = String(req.params.slug);
+    const { templates } = req.body;
+
+    if (!Array.isArray(templates)) {
+      return res.status(400).json({ error: 'templates array is required' });
+    }
+
+    for (const tpl of templates) {
+      if (tpl.template_index == null) {
+        return res.status(400).json({ error: 'Each template must have template_index' });
+      }
+    }
+
+    try {
+      const eventId = await getEventId(slug);
+      if (!eventId) return res.status(404).json({ error: 'Event not found' });
+
+      const result = await replaceEventGameTemplates(eventId, templates);
+      res.json(result);
+    } catch (err) {
+      const e = err as { code?: string };
+      if (e.code === 'TEMPLATES_HAVE_GAMES') {
+        return res.status(409).json({ error: 'Cannot replace templates: games already exist' });
+      }
+      console.error('Error replacing game templates:', err);
+      res.status(500).json({
+        error: 'Failed to replace game templates',
         detail: getErrorDetail(err),
         code: getErrorCode(err),
       });

@@ -105,7 +105,6 @@ export interface EventDeletePreview {
     rounds_removed: number;
     badges_removed: number;
     badge_awards_removed: number;
-    memberships_removed: number;
   };
 }
 
@@ -491,7 +490,6 @@ export async function deleteEventBySlug(slug: string): Promise<boolean> {
     await client.query(`DELETE FROM event_badge_set_links WHERE event_id = $1`, [eventId]);
 
     // Membership/eligibility records
-    await client.query(`DELETE FROM event_memberships WHERE event_id = $1`, [eventId]);
     await client.query(`DELETE FROM event_player_eligibilities WHERE event_id = $1`, [eventId]);
 
     const result = await client.query(
@@ -595,12 +593,6 @@ export async function getEventDeletePreviewBySlug(
           [row.id],
         )
       : 0;
-  const membershipsRemoved = await countIfExists(
-    'event_memberships',
-    `SELECT COUNT(*)::text AS count FROM event_memberships WHERE event_id = $1`,
-    [row.id],
-  );
-
   return {
     id: row.id,
     slug: row.slug,
@@ -612,7 +604,6 @@ export async function getEventDeletePreviewBySlug(
       rounds_removed: roundsRemoved,
       badges_removed: badgesRemoved,
       badge_awards_removed: badgeAwardsRemoved,
-      memberships_removed: membershipsRemoved,
     },
   };
 }

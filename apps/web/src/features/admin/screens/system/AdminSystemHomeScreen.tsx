@@ -83,7 +83,6 @@ export function AdminSystemHomeScreen() {
           rounds_removed: number;
           badges_removed: number;
           badge_awards_removed: number;
-          memberships_removed: number;
         };
       }>(`/events/${encodeURIComponent(selectedEvent.slug)}/delete-preview`, token);
 

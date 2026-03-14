@@ -1,12 +1,12 @@
 export function encodeRoundSeedPayload(input: {
-  variant?: string | null;
+  variant_id?: number | null;
   seed?: string | null;
 }): string | null {
-  const variant = input.variant?.trim() ?? '';
   const seed = input.seed?.trim() ?? '';
-  if (!variant && !seed) return null;
+  const variantId = input.variant_id ?? 0;
+  if (!variantId && !seed) return null;
   return JSON.stringify({
-    variant: variant || null,
+    variant_id: variantId,
     seed: seed || null,
   });
 }
@@ -20,18 +20,25 @@ export function parseGameId(input: string | null | undefined): string | null {
 }
 
 export function parseSeedPayload(seedPayload: string | null): {
-  variant: string | null;
+  variant_id: number | null;
   seed: string | null;
 } {
-  if (!seedPayload) return { variant: null, seed: null };
+  if (!seedPayload) return { variant_id: null, seed: null };
   try {
-    const parsed = JSON.parse(seedPayload) as { variant?: unknown; seed?: unknown };
+    const parsed = JSON.parse(seedPayload) as {
+      variant_id?: unknown;
+      variant?: unknown;
+      seed?: unknown;
+    };
+    // New format: { variant_id: number, seed: string }
+    // Legacy format (pre-migration): { variant: string, seed: string }
+    const variantId = typeof parsed.variant_id === 'number' ? parsed.variant_id : null; // legacy rows handled by migration; treat missing as null
     return {
-      variant: typeof parsed.variant === 'string' ? parsed.variant : null,
+      variant_id: variantId,
       seed: typeof parsed.seed === 'string' ? parsed.seed : null,
     };
   } catch {
-    return { variant: null, seed: seedPayload };
+    return { variant_id: null, seed: seedPayload };
   }
 }
 

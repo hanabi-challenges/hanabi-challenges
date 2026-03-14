@@ -37,10 +37,10 @@ import { hasConcededEventSpoilers } from '../events/spoiler-concession.service';
 import {
   encodeRoundSeedPayload,
   fetchJsonWithTimeout,
-  normalizeVariantName,
   parseGameId,
   parseSeedPayload,
 } from './session-ladder.utils';
+import { getVariantCodeByName } from '../variants/variants.service';
 import {
   extractReplayExportPlayers,
   extractReplayHistoryGames,
@@ -57,6 +57,7 @@ type ReplayHistoryGame = {
   variant?: string | null;
   options?: {
     variantName?: string | null;
+    variantID?: number | null;
     variant?: string | null;
   } | null;
   score?: number | string | null;
@@ -515,9 +516,10 @@ router.post(
     }
 
     try {
+      const variantId = variant != null ? await getVariantCodeByName(variant) : 0;
       const round = await createSessionRound({
         sessionId,
-        seedPayload: encodeRoundSeedPayload({ variant, seed }),
+        seedPayload: encodeRoundSeedPayload({ variant_id: variantId, seed }),
       });
       res.status(201).json(round);
     } catch (err) {
@@ -740,7 +742,7 @@ router.post(
     }
 
     const expected = parseSeedPayload(context.seed_payload);
-    const expectedVariant = normalizeVariantName(expected.variant);
+    const expectedVariantId = expected.variant_id;
     const expectedSeed = (expected.seed ?? '').trim();
 
     try {
@@ -777,19 +779,16 @@ router.post(
         });
       }
 
-      if (expectedSeed) {
-        const seedMatch = seedString.match(/p(\d+)v\d+s([A-Za-z0-9]+)/);
-        if (!seedMatch) {
-          return res
-            .status(400)
-            .json({ error: 'Seed string from replay is not in expected format' });
-        }
-        const seedSuffix = seedMatch[2];
-        if (seedSuffix !== expectedSeed) {
-          return res.status(400).json({
-            error: `Replay seed ${seedSuffix} does not match expected seed ${expectedSeed}`,
-          });
-        }
+      const seedMatch = seedString.match(/p(\d+)v(\d+)s([A-Za-z0-9]+)/);
+      if (!seedMatch) {
+        return res.status(400).json({ error: 'Seed string from replay is not in expected format' });
+      }
+      const seedVariantId = Number(seedMatch[2]);
+      const seedSuffix = seedMatch[3];
+      if (expectedSeed && seedSuffix !== expectedSeed) {
+        return res.status(400).json({
+          error: `Replay seed ${seedSuffix} does not match expected seed ${expectedSeed}`,
+        });
       }
 
       const historyData = await fetchJsonWithTimeout(
@@ -805,12 +804,19 @@ router.post(
       }
 
       const opts = game.options ?? {};
-      const replayVariantRaw =
-        game.variantName ?? opts.variantName ?? game.variant ?? opts.variant ?? null;
-      const replayVariant = normalizeVariantName(replayVariantRaw);
-      if (expectedVariant && replayVariant && replayVariant !== expectedVariant) {
+      const historyVariantId = opts.variantID ?? null;
+      if (historyVariantId != null && historyVariantId !== seedVariantId) {
         return res.status(400).json({
-          error: `Replay variant ${String(replayVariantRaw)} does not match expected variant ${String(expected.variant)}`,
+          error: `Replay variant ID ${historyVariantId} does not match seed variant ID ${seedVariantId}`,
+        });
+      }
+      if (
+        expectedVariantId != null &&
+        historyVariantId != null &&
+        historyVariantId !== expectedVariantId
+      ) {
+        return res.status(400).json({
+          error: `Replay variant ID ${historyVariantId} does not match expected variant ID ${expectedVariantId}`,
         });
       }
 
@@ -829,7 +835,7 @@ router.post(
           seed: seedString,
         },
         derived: {
-          variant: replayVariantRaw ?? expected.variant,
+          variantId: historyVariantId ?? expectedVariantId,
           score,
           endCondition,
           playedAt:

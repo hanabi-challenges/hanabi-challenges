@@ -95,13 +95,13 @@ describe('event.service (integration)', () => {
 
     await pool.query(
       `
-      INSERT INTO event_game_templates (event_stage_id, template_index, variant, seed_payload)
-      VALUES 
-        ($1, 1, 'BASE', 'TEMPLATE-1'),
-        ($1, 2, 'BASE', 'TEMPLATE-2'),
-        ($1, 3, 'BASE', 'TEMPLATE-3'),
-        ($1, 4, 'BASE', 'TEMPLATE-4'),
-        ($1, 5, 'BASE', 'TEMPLATE-5');
+      INSERT INTO event_game_templates (event_stage_id, template_index, variant_id, seed_payload)
+      VALUES
+        ($1, 1, 0, 'TEMPLATE-1'),
+        ($1, 2, 0, 'TEMPLATE-2'),
+        ($1, 3, 0, 'TEMPLATE-3'),
+        ($1, 4, 0, 'TEMPLATE-4'),
+        ($1, 5, 0, 'TEMPLATE-5');
       `,
       [stageRes.event_stage_id],
     );

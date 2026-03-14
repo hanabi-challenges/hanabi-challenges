@@ -57,7 +57,8 @@ export interface TeamGameSummary {
   stage_label: string;
   stage_type: 'SINGLE' | 'ROUND_ROBIN' | 'BRACKET' | 'GAUNTLET';
   template_index: number;
-  variant: string;
+  variant_id: number;
+  variant: string; // resolved name from hanabi_variants — for display only
   players: {
     display_name: string;
     color_hex: string;
@@ -72,7 +73,8 @@ export interface TeamTemplateWithResult {
   stage_status?: string | null;
   template_id: number;
   template_index: number;
-  variant: string;
+  variant_id: number;
+  variant: string; // resolved name from hanabi_variants — for display only
   max_score: number | null;
   seed_payload: string | null;
   stats?: {
@@ -417,7 +419,8 @@ export async function listTeamGames(eventTeamId: number): Promise<TeamGameSummar
       es.label AS stage_label,
       es.stage_type,
       egt.template_index,
-      egt.variant,
+      egt.variant_id,
+      hv.name AS variant,
       COALESCE(
         json_agg(
           json_build_object(
@@ -432,6 +435,7 @@ export async function listTeamGames(eventTeamId: number): Promise<TeamGameSummar
     FROM event_games g
     JOIN event_game_templates egt ON egt.id = g.event_game_template_id
     JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
+    LEFT JOIN hanabi_variants hv ON hv.code = egt.variant_id
     LEFT JOIN game_participants gp ON gp.event_game_id = g.id
     LEFT JOIN users u ON u.id = gp.user_id
     WHERE g.event_team_id = $1
@@ -449,7 +453,8 @@ export async function listTeamGames(eventTeamId: number): Promise<TeamGameSummar
       es.label,
       es.stage_type,
       egt.template_index,
-      egt.variant
+      egt.variant_id,
+      hv.name
     ORDER BY es.stage_index, egt.template_index, g.id;
     `,
     [eventTeamId],
@@ -472,7 +477,8 @@ export async function listTeamTemplatesWithResults(
       st.status AS stage_status,
       egt.id AS template_id,
       egt.template_index,
-      egt.variant,
+      egt.variant_id,
+      hv.name AS variant,
       egt.max_score,
       egt.seed_payload,
       g.id AS result_id,
@@ -498,6 +504,7 @@ export async function listTeamTemplatesWithResults(
     FROM event_game_templates egt
     JOIN event_stages es ON es.event_stage_id = egt.event_stage_id
     JOIN event_teams t ON t.event_id = es.event_id
+    LEFT JOIN hanabi_variants hv ON hv.code = egt.variant_id
     LEFT JOIN event_games g ON g.event_game_template_id = egt.id AND g.event_team_id = t.id
     LEFT JOIN game_participants gp ON gp.event_game_id = g.id
     LEFT JOIN users u ON u.id = gp.user_id
@@ -520,7 +527,8 @@ export async function listTeamTemplatesWithResults(
       st.status,
       egt.id,
       egt.template_index,
-      egt.variant,
+      egt.variant_id,
+      hv.name,
       egt.max_score,
       egt.seed_payload,
       g.id,
@@ -544,6 +552,7 @@ export async function listTeamTemplatesWithResults(
     stage_status: row.stage_status,
     template_id: row.template_id,
     template_index: row.template_index,
+    variant_id: row.variant_id,
     variant: row.variant,
     max_score: row.max_score,
     seed_payload: row.seed_payload,

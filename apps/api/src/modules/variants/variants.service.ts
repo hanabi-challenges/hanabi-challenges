@@ -141,6 +141,19 @@ export async function syncHanabiVariants(): Promise<{
   }
 }
 
+export async function getVariantCodeByName(name: string): Promise<number> {
+  await ensureVariantTables();
+  const result = await pool.query<{ code: number }>(
+    `SELECT code FROM hanabi_variants WHERE name = $1`,
+    [name],
+  );
+  if (result.rowCount === 0) {
+    // Fallback: No Variant = 0
+    return 0;
+  }
+  return result.rows[0].code;
+}
+
 export async function listHanabiVariants(): Promise<HanabiVariant[]> {
   await ensureVariantTables();
   const result = await pool.query<HanabiVariant>(

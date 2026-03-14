@@ -271,6 +271,10 @@ CREATE TABLE hanabi_variant_sync_state (
   last_synced_at TIMESTAMPTZ
 );
 
+-- Seed the canonical "No Variant" row so variant_id = 0 FK always resolves
+INSERT INTO hanabi_variants (code, name, label) VALUES (0, 'No Variant', 'No Variant')
+  ON CONFLICT (code) DO NOTHING;
+
 CREATE INDEX idx_event_rating_ledger_user_time
   ON event_rating_ledger(event_id, user_id, created_at DESC);
 

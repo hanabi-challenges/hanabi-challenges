@@ -56,11 +56,11 @@ describe('result.service (games, integration)', () => {
     // Template
     const templateRes = await pool.query(
       `
-      INSERT INTO event_game_templates (event_stage_id, template_index, variant, seed_payload)
+      INSERT INTO event_game_templates (event_stage_id, template_index, variant_id, seed_payload)
       VALUES ($1, $2, $3, $4)
       RETURNING id, template_index;
       `,
-      [eventStageId, 1, 'NO_VARIANT', 'RESULT-TEST-TEMPLATE-1'],
+      [eventStageId, 1, 0, 'RESULT-TEST-TEMPLATE-1'],
     );
     const templateId = templateRes.rows[0].id as number;
     const templateIndex = templateRes.rows[0].template_index as number;

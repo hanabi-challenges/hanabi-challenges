@@ -162,7 +162,11 @@ export function LoginPage() {
 
     const timeout = setTimeout(async () => {
       try {
-        const identityRes = await fetch(`/api/auth/identity/${encodeURIComponent(trimmedToken)}`);
+        const identityRes = await fetch(`/api/auth/identity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: trimmedToken }),
+        });
 
         let identityBody: unknown = null;
         try {

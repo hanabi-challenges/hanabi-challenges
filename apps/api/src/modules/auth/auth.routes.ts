@@ -62,9 +62,9 @@ router.get('/auth/username-status', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/auth/identity/:token
-router.get('/auth/identity/:token', async (req: Request, res: Response) => {
-  const token = String(req.params.token ?? '').trim();
+// POST /api/auth/identity
+router.post('/auth/identity', async (req: Request, res: Response) => {
+  const token = String(req.body?.token ?? '').trim();
   if (!token) {
     return res.status(400).json({ error: 'token is required' });
   }

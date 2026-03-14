@@ -469,13 +469,19 @@ export function AdminCreateEventPage() {
   }, [eventAbbr, eventType]);
 
   useEffect(() => {
+    if (isChallenge) return;
     const games = stages[0]?.gameCount;
     if (games != null) {
       setSeedCount(games);
     }
-  }, [stages]);
+  }, [isChallenge, stages]);
 
   useEffect(() => {
+    if (isChallenge) {
+      setStages([]);
+      return;
+    }
+
     setStages((prev) => {
       const stage0 = prev[0];
       const stage1 = prev[1];
@@ -537,7 +543,17 @@ export function AdminCreateEventPage() {
 
       return unchanged ? prev : next;
     });
-  }, [eventType, seedingPlayEnabled, seedingFormat, eventAbbr, name, startsAt, endsAt, seedCount]);
+  }, [
+    isChallenge,
+    eventType,
+    seedingPlayEnabled,
+    seedingFormat,
+    eventAbbr,
+    name,
+    startsAt,
+    endsAt,
+    seedCount,
+  ]);
 
   useEffect(() => {
     if (endsAt && !registrationCutoff) {
@@ -659,70 +675,74 @@ export function AdminCreateEventPage() {
           event.registration_cutoff ? event.registration_cutoff.slice(0, 10) : '',
         );
 
-        const loadedStages = await getJson<EventStage[]>(`/events/${editSlug}/stages`);
-        if (loadedStages.length > 0) {
-          const mapped = loadedStages.map((stage) => {
-            const config = (stage.config_json ?? {}) as {
-              stage_abbreviation?: string;
-              event_abbreviation?: string;
-              bracket_round_pattern?: {
-                name_pattern?: string;
-                abbr_pattern?: string;
-                play_days?: number;
-                gap_days?: number;
-                games_per_round?: string;
+        if (format !== 'challenge') {
+          const loadedStages = await getJson<EventStage[]>(`/events/${editSlug}/stages`);
+          if (loadedStages.length > 0) {
+            const mapped = loadedStages.map((stage) => {
+              const config = (stage.config_json ?? {}) as {
+                stage_abbreviation?: string;
+                event_abbreviation?: string;
+                bracket_round_pattern?: {
+                  name_pattern?: string;
+                  abbr_pattern?: string;
+                  play_days?: number;
+                  gap_days?: number;
+                  games_per_round?: string;
+                };
               };
+
+              const stStart = stage.starts_at ? stage.starts_at.slice(0, 10) : '';
+              const stEnd = stage.ends_at ? stage.ends_at.slice(0, 10) : '';
+              const pattern = config.bracket_round_pattern;
+
+              return {
+                id: stage.event_stage_id,
+                label: stage.label,
+                abbr: config.stage_abbreviation || config.event_abbreviation || '',
+                gameCount: seedCount,
+                startsAt: stStart,
+                endsAt: stEnd,
+                timeBound: Boolean(stStart || stEnd),
+                stageType: stage.stage_type,
+                roundPattern:
+                  stage.stage_type === 'BRACKET'
+                    ? normalizeRoundPattern({
+                        namePattern: pattern?.name_pattern,
+                        abbrPattern: pattern?.abbr_pattern,
+                        playDays: pattern?.play_days,
+                        gapDays: pattern?.gap_days,
+                        gamesPerRound: pattern?.games_per_round,
+                      })
+                    : undefined,
+              } as StageForm;
+            });
+
+            setStages(mapped.length > 0 ? mapped : [initialStage()]);
+
+            const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
+              event_abbreviation?: string;
+              enforce_exact_team_size?: boolean;
             };
+            if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
 
-            const stStart = stage.starts_at ? stage.starts_at.slice(0, 10) : '';
-            const stEnd = stage.ends_at ? stage.ends_at.slice(0, 10) : '';
-            const pattern = config.bracket_round_pattern;
+            const enforce = firstConfig.enforce_exact_team_size ?? false;
 
-            return {
-              id: stage.event_stage_id,
-              label: stage.label,
-              abbr: config.stage_abbreviation || config.event_abbreviation || '',
-              gameCount: seedCount,
-              startsAt: stStart,
-              endsAt: stEnd,
-              timeBound: Boolean(stStart || stEnd),
-              stageType: stage.stage_type,
-              roundPattern:
-                stage.stage_type === 'BRACKET'
-                  ? normalizeRoundPattern({
-                      namePattern: pattern?.name_pattern,
-                      abbrPattern: pattern?.abbr_pattern,
-                      playDays: pattern?.play_days,
-                      gapDays: pattern?.gap_days,
-                      gamesPerRound: pattern?.games_per_round,
-                    })
-                  : undefined,
-            } as StageForm;
-          });
-
-          setStages(mapped.length > 0 ? mapped : [initialStage()]);
-
-          const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
-            event_abbreviation?: string;
-            enforce_exact_team_size?: boolean;
-          };
-          if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
-
-          const enforce = firstConfig.enforce_exact_team_size ?? false;
-
-          setEnforceExactTeamSize(format === 'tournament' ? true : !!enforce);
+            setEnforceExactTeamSize(format === 'tournament' ? true : !!enforce);
+          }
         }
 
         const templates = await getJson<EventGameTemplate[]>(`/events/${editSlug}/game-templates`);
         if (templates.length > 0) {
           setVariant(templates[0].variant || 'No Variant');
           setSeedCount(templates.length);
-          setStages((prev) => {
-            if (prev.length === 0) return prev;
-            const next = [...prev];
-            next[0] = { ...next[0], gameCount: templates.length };
-            return next;
-          });
+          if (format !== 'challenge') {
+            setStages((prev) => {
+              if (prev.length === 0) return prev;
+              const next = [...prev];
+              next[0] = { ...next[0], gameCount: templates.length };
+              return next;
+            });
+          }
         }
 
         const badgeLinks = await listEventBadgeLinksAuth(token, editSlug);
@@ -1148,7 +1168,50 @@ export function AdminCreateEventPage() {
         }
       }
 
-      if (!isEdit && !isSessionLadder) {
+      if (!isEdit && isChallenge) {
+        const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
+          `/events/${encodeURIComponent(targetSlug)}/stages`,
+          token,
+          {
+            stage_index: 1,
+            label: name,
+            stage_type: 'SINGLE',
+            starts_at: startsAt ? `${startsAt}T00:00:00Z` : null,
+            ends_at: endsAt ? `${endsAt}T23:59:59Z` : null,
+            config_json: {
+              event_abbreviation: eventAbbr || null,
+              stage_abbreviation: null,
+              enforce_exact_team_size: false,
+              bracket_type: null,
+              include_round_robin: false,
+              bracket_max_teams: null,
+              bracket_max_rounds: null,
+              seeding_play_enabled: false,
+              seeding_format: '',
+            },
+          },
+        );
+
+        const seeds = buildSeedsFromFormula(
+          seedFormula,
+          eventAbbr,
+          '',
+          'C',
+          seedCount,
+          seedHashToken,
+        );
+        for (let i = 0; i < seeds.length; i += 1) {
+          await postJsonAuth(`/events/${encodeURIComponent(targetSlug)}/game-templates`, token, {
+            event_stage_id: stagePayload.event_stage_id,
+            template_index: i + 1,
+            variant,
+            seed_payload: seeds[i],
+            metadata_json: {},
+          });
+        }
+      }
+
+      if (!isEdit && isTournament) {
         for (let idx = 0; idx < stages.length; idx += 1) {
           const stage = stages[idx];
           const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
@@ -1168,8 +1231,8 @@ export function AdminCreateEventPage() {
                 include_round_robin: stage.stageType === 'ROUND_ROBIN',
                 bracket_max_teams: payloadMaxTeams,
                 bracket_max_rounds: payloadMaxRounds,
-                seeding_play_enabled: isTournament ? seedingPlayEnabled : false,
-                seeding_format: isTournament ? seedingFormat : '',
+                seeding_play_enabled: seedingPlayEnabled,
+                seeding_format: seedingFormat,
                 bracket_round_pattern:
                   stage.stageType === 'BRACKET'
                     ? {

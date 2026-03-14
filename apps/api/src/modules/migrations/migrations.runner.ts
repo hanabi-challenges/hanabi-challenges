@@ -3,7 +3,16 @@ import path from 'path';
 import { pool } from '../../config/db';
 import { info, warn } from '../../utils/logger';
 
-const MIGRATIONS_DIR = path.resolve(process.cwd(), 'db/migrations');
+// Resolve migrations dir relative to this file — works in both dev (src/) and prod (dist/src/)
+// src/modules/migrations/ → ../../../db/migrations  → apps/api/db/migrations
+// dist/src/modules/migrations/ → ../../../../db/migrations → apps/api/db/migrations
+function findMigrationsDir(): string {
+  for (const rel of ['../../../db/migrations', '../../../../db/migrations']) {
+    const candidate = path.resolve(__dirname, rel);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error('Could not locate migrations directory relative to ' + __dirname);
+}
 
 async function ensureMigrationsTable(): Promise<void> {
   await pool.query(`
@@ -23,21 +32,29 @@ export async function runMigrations(): Promise<void> {
   await ensureMigrationsTable();
   const applied = await getAppliedMigrations();
 
+  let migrationsDir: string;
+  try {
+    migrationsDir = findMigrationsDir();
+  } catch (err) {
+    warn((err as Error).message + ' — skipping migrations');
+    return;
+  }
+
   let files: string[];
   try {
     files = fs
-      .readdirSync(MIGRATIONS_DIR)
+      .readdirSync(migrationsDir)
       .filter((f) => f.endsWith('.sql'))
       .sort();
   } catch {
-    warn(`Migrations directory not found at ${MIGRATIONS_DIR} — skipping`);
+    warn(`Migrations directory not found at ${migrationsDir} — skipping`);
     return;
   }
 
   for (const file of files) {
     if (applied.has(file)) continue;
 
-    const filePath = path.join(MIGRATIONS_DIR, file);
+    const filePath = path.join(migrationsDir, file);
     const sql = fs.readFileSync(filePath, 'utf-8');
 
     info(`Running migration: ${file}`);

@@ -12,6 +12,10 @@ export function put(path: string) {
   return api().put(path);
 }
 
+export function patch(path: string) {
+  return api().patch(path);
+}
+
 export function del(path: string) {
   return api().delete(path);
 }

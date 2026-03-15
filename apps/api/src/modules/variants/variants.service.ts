@@ -37,6 +37,19 @@ export async function ensureVariantTables(): Promise<void> {
   `);
 }
 
+/**
+ * Ensures the "No Variant" seed row (code = 0) is present in hanabi_variants.
+ * This row is referenced by event_stage_games.variant_id = 0 (the default).
+ * The sync service deletes unknown codes, so this must be called after sync.
+ */
+async function ensureNoVariantRow(): Promise<void> {
+  await pool.query(`
+    INSERT INTO hanabi_variants (code, name, label, updated_at)
+    VALUES (0, 'No Variant', 'No Variant (#0)', NOW())
+    ON CONFLICT (code) DO NOTHING
+  `);
+}
+
 function parseVariantsText(raw: string): HanabiVariant[] {
   const variants: HanabiVariant[] = [];
   const lines = raw.split('\n').map((line) => line.trim());
@@ -76,6 +89,7 @@ export async function syncHanabiVariants(): Promise<{
   syncInFlight = true;
   try {
     await ensureVariantTables();
+    await ensureNoVariantRow();
     const response = await fetch(VARIANTS_SOURCE_URL);
     if (!response.ok) {
       throw new Error(`Variant source fetch failed: HTTP ${response.status}`);
@@ -127,6 +141,9 @@ export async function syncHanabiVariants(): Promise<{
       client.release();
     }
 
+    // Re-insert No Variant seed row in case it was removed by the sync DELETE.
+    await ensureNoVariantRow();
+
     const { last_synced_at } = await getVariantSyncState();
     const countResult = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM hanabi_variants`,
@@ -156,6 +173,7 @@ export async function getVariantCodeByName(name: string): Promise<number> {
 
 export async function listHanabiVariants(): Promise<HanabiVariant[]> {
   await ensureVariantTables();
+  await ensureNoVariantRow();
   const result = await pool.query<HanabiVariant>(
     `
     SELECT code, name, label

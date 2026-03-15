@@ -239,23 +239,32 @@ router.get('/users/:display_name/events', async (req: Request, res: Response) =>
       `
       SELECT
         et.id AS event_team_id,
-        et.name AS team_name,
+        'Team ' || (
+          SELECT u2.display_name
+          FROM event_team_members etm2
+          JOIN users u2 ON u2.id = etm2.user_id
+          WHERE etm2.event_team_id = et.id
+          ORDER BY LOWER(u2.display_name) ASC
+          LIMIT 1
+        ) AS team_name,
         et.team_size,
         et.event_id,
         e.name AS event_name,
         e.slug AS event_slug,
         e.short_description,
         e.long_description,
-        e.starts_at,
-        e.ends_at,
-        e.event_format,
-        e.event_status
+        (SELECT MIN(es.starts_at) FROM event_stages es WHERE es.event_id = e.id) AS starts_at,
+        (SELECT MAX(es.ends_at) FROM event_stages es WHERE es.event_id = e.id) AS ends_at,
+        e.registration_opens_at,
+        e.registration_cutoff,
+        e.allow_late_registration
       FROM event_teams et
-      JOIN team_memberships tm ON tm.event_team_id = et.id
-      JOIN users u ON u.id = tm.user_id
+      JOIN event_team_members etm ON etm.event_team_id = et.id
+      JOIN users u ON u.id = etm.user_id
       JOIN events e ON e.id = et.event_id
       WHERE u.display_name = $1
-      ORDER BY e.starts_at NULLS LAST, et.id;
+        AND et.stage_id IS NULL
+      ORDER BY (SELECT MIN(es.starts_at) FROM event_stages es WHERE es.event_id = e.id) NULLS LAST, et.id;
       `,
       [display_name],
     );

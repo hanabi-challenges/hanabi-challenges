@@ -1,2008 +1,407 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   CoreAlert as Alert,
-  ActionIcon,
-  MaterialIcon,
-  SectionCard,
-  CoreBadge as Badge,
-  CoreBox as Box,
   CoreButton as Button,
   CoreCheckbox as Checkbox,
-  CoreCode as Code,
-  CoreGrid as Grid,
   CoreGroup as Group,
-  CoreImage as Image,
-  CoreModal as Modal,
-  CoreNumberInput as NumberInput,
-  CoreRadio as Radio,
-  CoreSelect as Select,
   CoreStack as Stack,
-  CoreStepper as Stepper,
   CoreSwitch as Switch,
   CoreText as Text,
   CoreTextInput as TextInput,
   CoreTextarea as Textarea,
-  CoreTitle as Title,
-  CoreTooltip as Tooltip,
+  DatePicker,
+  FormContainer,
+  InputContainer,
+  PageHeader,
+  SectionCard,
 } from '../../design-system';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ApiError, getJson, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
-import type { EventDetail } from '../../hooks/useEventDetail';
-import { MarkdownRenderer } from '../../ui/MarkdownRenderer';
-import {
-  listBadgeSetsAuth,
-  listEventBadgeLinksAuth,
-  replaceEventBadgeLinksAuth,
-  type BadgeSetRecord,
-  updateChallengeBadgeConfigAuth,
-} from './badgeSetsApi';
-import { CoreCombobox as Combobox, useCoreCombobox as useCombobox } from '../../design-system';
-import {
-  CREATE_EVENT_DRAFT_SLUG_KEY,
-  CREATE_EVENT_DRAFT_WIZARD_STATE_KEY,
-  initialStage,
-  longDescriptionTemplateFor,
-  normalizeRoundPattern,
-  stagesEqual,
-  steps,
-  type CreateEventWizardState,
-  type EventGameTemplate,
-  type EventStage,
-  type EventTypeLabel,
-  type StageForm,
-  type StepKey,
-} from '../../features/admin/event-wizard/config';
-import { StageBlock } from '../../features/admin/event-wizard/stageBlocks';
-import {
-  buildSeedsFromFormula,
-  datesValid,
-  extractApiErrorMessage,
-  generateHashToken,
-  getRoundIdForStage,
-  getStageAbbrForSeeds,
-  slugify,
-} from '../../features/admin/event-wizard/helpers';
+import { ApiError, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
+import type { EventSummary } from '../../hooks/useEvents';
 
-// Module-level cache so we only fetch once per page session.
-let cachedVariants: string[] | null = null;
+const TEAM_SIZES = [2, 3, 4, 5, 6] as const;
 
-async function fetchHanabVariants(): Promise<string[]> {
-  if (cachedVariants) return cachedVariants;
-  const resp = await fetch('/api/variants');
-  if (!resp.ok) throw new Error(`Failed to fetch variants (${resp.status})`);
-  const data = (await resp.json()) as { variants: { name: string }[] };
-  const sorted = data.variants.map((v) => v.name).sort((a, b) => a.localeCompare(b));
-  cachedVariants = sorted;
-  return sorted;
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
-function VariantCombobox({
-  value,
-  onChange,
-  variants,
-  loading,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  variants: string[];
-  loading?: boolean;
-}) {
-  const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
-  const trimmed = value.toLowerCase().trim();
-  const filtered = variants.filter((v) => v.toLowerCase().includes(trimmed));
-  const exactMatch = variants.some((v) => v.toLowerCase() === trimmed);
-
-  return (
-    <Combobox
-      store={combobox}
-      onOptionSubmit={(v) => {
-        onChange(v);
-        combobox.closeDropdown();
-      }}
-    >
-      <Combobox.Target>
-        <TextInput
-          label="Variant"
-          value={value}
-          placeholder={loading ? 'Loading variants…' : 'Search variants…'}
-          onChange={(e) => {
-            onChange(e.currentTarget.value);
-            combobox.openDropdown();
-            combobox.updateSelectedOptionIndex();
-          }}
-          onClick={() => combobox.openDropdown()}
-          onFocus={() => combobox.openDropdown()}
-          onBlur={() => combobox.closeDropdown()}
-          required
-        />
-      </Combobox.Target>
-      <Combobox.Dropdown>
-        <Combobox.Options mah={260} style={{ overflowY: 'auto' }}>
-          {loading && <Combobox.Empty>Loading…</Combobox.Empty>}
-          {!loading &&
-            filtered.map((v) => (
-              <Combobox.Option key={v} value={v}>
-                {v}
-              </Combobox.Option>
-            ))}
-          {!loading && filtered.length === 0 && value.trim() && !exactMatch && (
-            <Combobox.Option value={value}>Use &quot;{value}&quot;</Combobox.Option>
-          )}
-          {!loading && filtered.length === 0 && !value.trim() && (
-            <Combobox.Empty>No variants found</Combobox.Empty>
-          )}
-        </Combobox.Options>
-      </Combobox.Dropdown>
-    </Combobox>
-  );
+function dateToIso(date: string): string | null {
+  if (!date) return null;
+  return new Date(date).toISOString();
 }
+
+function isoToDate(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+type FormState = {
+  name: string;
+  slug: string;
+  shortDescription: string;
+  longDescription: string;
+  allowedTeamSizes: Set<number>;
+  combinedLeaderboard: boolean;
+  registrationMode: 'ACTIVE' | 'PASSIVE';
+  allowLateRegistration: boolean;
+  registrationOpensAt: string;
+  registrationCutoff: string;
+  defaultVariantId: string;
+  seedFormula: string;
+};
+
+type FieldErrors = Partial<Record<keyof FormState, string>>;
 
 export function AdminCreateEventPage() {
-  const { user, token } = useAuth();
-  const { slug: editSlug } = useParams();
-  const navigate = useNavigate();
-
+  const { slug: editSlug } = useParams<{ slug: string }>();
   const isEdit = Boolean(editSlug);
-  const isUnauthorized = !user || (user.role !== 'ADMIN' && user.role !== 'SUPERADMIN');
+  const navigate = useNavigate();
+  const { token } = useAuth();
 
-  const [name, setName] = useState('');
-  const [eventType, setEventType] = useState<EventTypeLabel>('Challenge');
-  const [eventStatus, setEventStatus] = useState<'DORMANT' | 'LIVE' | 'COMPLETE'>('DORMANT');
-  const [eventAbbr, setEventAbbr] = useState('');
-  const [slug, setSlug] = useState('');
-  const [slugEdited, setSlugEdited] = useState(false);
-  const [shortDescription, setShortDescription] = useState('');
-  const [longDescription, setLongDescription] = useState(() =>
-    longDescriptionTemplateFor('Challenge'),
-  );
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
+  const [form, setForm] = useState<FormState>({
+    name: '',
+    slug: '',
+    shortDescription: '',
+    longDescription: '',
+    allowedTeamSizes: new Set([2]),
+    combinedLeaderboard: false,
+    registrationMode: 'ACTIVE',
+    allowLateRegistration: true,
+    registrationOpensAt: '',
+    registrationCutoff: '',
+    defaultVariantId: '',
+    seedFormula: '',
+  });
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [seedingPlayEnabled, setSeedingPlayEnabled] = useState(false);
-  const [seedingFormat, setSeedingFormat] = useState<'round_robin' | 'groups' | ''>('');
-  const [maxTeams, setMaxTeams] = useState('');
-
-  const [stages, setStages] = useState<StageForm[]>([initialStage()]);
-
-  const [variant, setVariant] = useState('No Variant');
-  const [seedCount, setSeedCount] = useState(100);
-  const [seedFormula, setSeedFormula] = useState('{eID}-{i}');
-  const [seedHashToken] = useState(() => generateHashToken());
-
-  const [published, setPublished] = useState(false);
-  const [badgeSets, setBadgeSets] = useState<BadgeSetRecord[]>([]);
-  const [badgeSetsLoading, setBadgeSetsLoading] = useState(false);
-  const [leagueSeasonBadgeSetId, setLeagueSeasonBadgeSetId] = useState<string | null>(null);
-  const [leagueSessionBadgeSetId, setLeagueSessionBadgeSetId] = useState<string | null>(null);
-  const [challengeBadgeSetId, setChallengeBadgeSetId] = useState<string | null>(null);
-  const [allowLateRegistration, setAllowLateRegistration] = useState(true);
-  const [registrationOpens, setRegistrationOpens] = useState('');
-  const [registrationCutoff, setRegistrationCutoff] = useState('');
-  const [enforceExactTeamSize, setEnforceExactTeamSize] = useState(false);
-
-  const [currentStep, setCurrentStep] = useState<StepKey>('type');
-  const [showPreview, setShowPreview] = useState(false);
-  const [showFormulaHelp, setShowFormulaHelp] = useState(false);
-  const [badgePreviewModal, setBadgePreviewModal] = useState<{
-    title: string;
-    svg: string;
-  } | null>(null);
-
-  const [saving, setSaving] = useState(false);
-  const [stepSaving, setStepSaving] = useState(false);
-  const [loadingExisting, setLoadingExisting] = useState(false);
-  const [draftEventSlug, setDraftEventSlug] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [hanabVariants, setHanabVariants] = useState<string[]>([]);
-  const [hanabVariantsLoading, setHanabVariantsLoading] = useState(false);
-
-  const hasLoadedExisting = useRef(false);
-  const prevEditSlugRef = useRef<string | undefined>(undefined);
-  const previousEventTypeRef = useRef<EventTypeLabel>('Challenge');
-  const hanabVariantsFetchInitiated = useRef(false);
-
-  const isTournament = eventType === 'Tournament';
-  const isSessionLadder = eventType === 'League';
-  const isChallenge = eventType === 'Challenge';
-  const hasBadgesStep = isSessionLadder || isChallenge;
-  const parsedMaxTeams = maxTeams ? Number(maxTeams) : null;
-  const stepByKey = useMemo(() => new Map(steps.map((step) => [step.key, step] as const)), []);
-  const visibleSteps = useMemo(() => {
-    if (isSessionLadder) {
-      return ['type', 'event', 'badges']
-        .map((key) => stepByKey.get(key as StepKey))
-        .filter((step): step is { key: StepKey; label: string } => Boolean(step));
-    }
-
-    if (isChallenge) {
-      return ['type', 'event', 'registration', 'templates', 'badges']
-        .map((key) => stepByKey.get(key as StepKey))
-        .filter((step): step is { key: StepKey; label: string } => Boolean(step));
-    }
-
-    return steps.filter((step) => step.key !== 'badges');
-  }, [isSessionLadder, isChallenge, stepByKey]);
-
-  const abbrHasSpace = /\s/.test(eventAbbr);
-  const formulaHasSpace = /\s/.test(seedFormula);
-  const formulaHasInvalidChars = !/^[A-Za-z0-9{}:_.-]+$/.test(seedFormula);
-
-  // Save wizard-only state (no DB equivalent) to localStorage so it survives
-  // tab navigation such as opening the Badge Designer.
-  const saveWizardState = useCallback(() => {
-    if (isEdit || typeof window === 'undefined') return;
-    const state: CreateEventWizardState = {
-      eventAbbr,
-      stages,
-      variant,
-      seedCount,
-      seedFormula,
-      enforceExactTeamSize,
-    };
-    window.localStorage.setItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY, JSON.stringify(state));
-  }, [isEdit, eventAbbr, stages, variant, seedCount, seedFormula, enforceExactTeamSize]);
-
-  // Create or update the draft event in the DB. Returns the effective slug.
-  const autosaveEventDraft = useCallback(async (): Promise<string> => {
-    if (!token) throw new Error('Authentication required');
-
-    const eventFormat = isSessionLadder
-      ? 'session_ladder'
-      : isTournament
-        ? 'tournament'
-        : 'challenge';
-    const payloadStartsAt = isSessionLadder ? null : startsAt ? `${startsAt}T12:00:00Z` : null;
-    const payloadEndsAt = isSessionLadder ? null : endsAt ? `${endsAt}T23:59:59Z` : null;
-    const payloadMaxTeams = isTournament ? parsedMaxTeams : null;
-    const payloadAllowLate = isTournament ? false : allowLateRegistration;
-    const registrationOpensAt = registrationOpens ? `${registrationOpens}T00:00:00Z` : null;
-
-    const commonFields = {
-      name,
-      short_description: shortDescription || null,
-      long_description: longDescription,
-      published: false,
-      event_format: eventFormat,
-      event_status: 'DORMANT' as const,
-      round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
-      max_teams: payloadMaxTeams,
-      max_rounds: null as null,
-      allow_late_registration: payloadAllowLate,
-      registration_opens_at: registrationOpensAt,
-      registration_cutoff: registrationCutoff || null,
-      starts_at: payloadStartsAt,
-      ends_at: payloadEndsAt,
-    };
-
-    if (!draftEventSlug) {
-      const created = await postJsonAuth<{ slug?: string }>('/events', token, {
-        slug,
-        ...commonFields,
-      });
-      const savedSlug = created?.slug ?? slug;
-      setDraftEventSlug(savedSlug);
-      window.localStorage.setItem(CREATE_EVENT_DRAFT_SLUG_KEY, savedSlug);
-      return savedSlug;
-    } else {
-      await putJsonAuth(`/events/${encodeURIComponent(draftEventSlug)}`, token, {
-        new_slug: slug !== draftEventSlug ? slug : undefined,
-        ...commonFields,
-      });
-      const effectiveSlug = slug !== draftEventSlug ? slug : draftEventSlug;
-      if (effectiveSlug !== draftEventSlug) {
-        setDraftEventSlug(effectiveSlug);
-        window.localStorage.setItem(CREATE_EVENT_DRAFT_SLUG_KEY, effectiveSlug);
-      }
-      return effectiveSlug;
-    }
-  }, [
-    token,
-    draftEventSlug,
-    isSessionLadder,
-    isTournament,
-    slug,
-    name,
-    shortDescription,
-    longDescription,
-    startsAt,
-    endsAt,
-    parsedMaxTeams,
-    allowLateRegistration,
-    registrationOpens,
-    registrationCutoff,
-    seedingPlayEnabled,
-    seedingFormat,
-  ]);
-
-  // On mount (create mode only): check for a draft slug in localStorage, then
-  // fetch the draft event from the DB and restore all form state from it.
+  // Load existing event for edit mode
   useEffect(() => {
-    if (isEdit || !token || typeof window === 'undefined') return;
-
-    const draftSlug = window.localStorage.getItem(CREATE_EVENT_DRAFT_SLUG_KEY);
-    if (!draftSlug) return;
-
+    if (!isEdit || !editSlug || !token) return;
     let cancelled = false;
-    const load = async () => {
+
+    async function load() {
       try {
-        const event = await getJsonAuth<EventDetail>(`/events/${draftSlug}`, token);
+        const data = await getJsonAuth<EventSummary>(
+          `/events/${encodeURIComponent(editSlug!)}`,
+          token as string,
+        );
         if (cancelled) return;
-
-        setName(event.name);
-        setSlug(event.slug);
-        setSlugEdited(true);
-        setShortDescription(event.short_description || '');
-        setLongDescription(event.long_description || '');
-        setStartsAt(event.starts_at ? event.starts_at.slice(0, 10) : '');
-        setEndsAt(event.ends_at ? event.ends_at.slice(0, 10) : '');
-        setPublished(event.published ?? false);
-        setEventType(
-          event.event_format === 'tournament'
-            ? 'Tournament'
-            : event.event_format === 'session_ladder'
-              ? 'League'
-              : 'Challenge',
-        );
-        setSeedingPlayEnabled(Boolean(event.round_robin_enabled));
-        setSeedingFormat(event.round_robin_enabled ? 'round_robin' : '');
-        setMaxTeams(event.max_teams ? String(event.max_teams) : '');
-        setAllowLateRegistration(event.allow_late_registration ?? true);
-        setRegistrationOpens(
-          event.registration_opens_at ? event.registration_opens_at.slice(0, 10) : '',
-        );
-        setRegistrationCutoff(
-          event.registration_cutoff ? event.registration_cutoff.slice(0, 10) : '',
-        );
-
-        // Restore wizard-only state (stages, seed config) from localStorage.
-        const rawState = window.localStorage.getItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
-        if (rawState) {
-          try {
-            const state = JSON.parse(rawState) as Partial<CreateEventWizardState>;
-            if (typeof state.eventAbbr === 'string') setEventAbbr(state.eventAbbr);
-            if (Array.isArray(state.stages) && state.stages.length > 0)
-              setStages(state.stages as StageForm[]);
-            if (typeof state.variant === 'string') setVariant(state.variant);
-            if (typeof state.seedCount === 'number' && Number.isFinite(state.seedCount))
-              setSeedCount(Math.max(1, Math.floor(state.seedCount)));
-            if (typeof state.seedFormula === 'string') setSeedFormula(state.seedFormula);
-            if (typeof state.enforceExactTeamSize === 'boolean')
-              setEnforceExactTeamSize(state.enforceExactTeamSize);
-          } catch {
-            // Ignore invalid wizard state.
-          }
-        }
-
-        // Restore badge selections from DB badge links.
-        if (event.event_format === 'challenge' || event.event_format === 'session_ladder') {
-          const badgeLinks = await listEventBadgeLinksAuth(token, draftSlug);
-          if (!cancelled) {
-            const challengeLink = badgeLinks.find((link) => link.purpose === 'challenge_overall');
-            const seasonLink = badgeLinks.find((link) => link.purpose === 'season_overall');
-            const sessionLink = badgeLinks.find((link) => link.purpose === 'session_winner');
-            setChallengeBadgeSetId(challengeLink ? String(challengeLink.badge_set_id) : null);
-            setLeagueSeasonBadgeSetId(seasonLink ? String(seasonLink.badge_set_id) : null);
-            setLeagueSessionBadgeSetId(sessionLink ? String(sessionLink.badge_set_id) : null);
-          }
-        }
-
-        if (!cancelled) {
-          setDraftEventSlug(draftSlug);
-          setCurrentStep('event');
-        }
+        setForm({
+          name: data.name,
+          slug: data.slug,
+          shortDescription: data.short_description ?? '',
+          longDescription: data.long_description,
+          allowedTeamSizes: new Set(data.allowed_team_sizes),
+          combinedLeaderboard: data.combined_leaderboard,
+          registrationMode: data.registration_mode,
+          allowLateRegistration: data.allow_late_registration,
+          registrationOpensAt: isoToDate(data.registration_opens_at),
+          registrationCutoff: isoToDate(data.registration_cutoff),
+          defaultVariantId: '',
+          seedFormula: '',
+        });
+        setSlugManuallyEdited(true); // don't overwrite slug when editing name
       } catch {
-        // Draft not found or network error — clear stale keys and start fresh.
-        window.localStorage.removeItem(CREATE_EVENT_DRAFT_SLUG_KEY);
-        window.localStorage.removeItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
+        if (!cancelled) setLoadError('Failed to load event.');
       }
-    };
+    }
 
-    void load();
+    load();
     return () => {
       cancelled = true;
     };
-  }, [isEdit, token]);
+  }, [isEdit, editSlug, token]);
 
-  useEffect(() => {
-    if (!slugEdited) {
-      setSlug(slugify(name));
+  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function handleNameChange(value: string) {
+    setField('name', value);
+    if (!slugManuallyEdited) {
+      setField('slug', slugify(value));
     }
+  }
 
-    setStages((prev) => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
-      next[0] = { ...next[0], label: name };
-      return next;
-    });
-  }, [name, slugEdited]);
+  function handleSlugChange(value: string) {
+    setSlugManuallyEdited(true);
+    setField('slug', value.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+  }
 
-  useEffect(() => {
-    if (isTournament) {
-      setAllowLateRegistration(false);
-      setEnforceExactTeamSize(true);
-    }
-  }, [isTournament]);
-
-  useEffect(() => {
-    if (isEdit) {
-      previousEventTypeRef.current = eventType;
-      return;
-    }
-
-    const previousType = previousEventTypeRef.current;
-    const previousTemplate = longDescriptionTemplateFor(previousType);
-    const nextTemplate = longDescriptionTemplateFor(eventType);
-
-    if (!longDescription.trim() || longDescription === previousTemplate) {
-      setLongDescription(nextTemplate);
-    }
-
-    previousEventTypeRef.current = eventType;
-  }, [eventType, isEdit, longDescription]);
-
-  useEffect(() => {
-    if (
-      isSessionLadder &&
-      (currentStep === 'registration' || currentStep === 'stage' || currentStep === 'templates')
-    ) {
-      setCurrentStep('event');
-    }
-  }, [isSessionLadder, currentStep]);
-
-  useEffect(() => {
-    if (!hasBadgesStep && currentStep === 'badges') {
-      setCurrentStep('event');
-    }
-  }, [hasBadgesStep, currentStep]);
-
-  useEffect(() => {
-    if (eventType !== 'Challenge' && eventType !== 'League') return;
-
-    setStages((prev) => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
-      next[0] = { ...next[0], abbr: eventAbbr };
-      return next;
-    });
-  }, [eventAbbr, eventType]);
-
-  useEffect(() => {
-    if (isChallenge) return;
-    const games = stages[0]?.gameCount;
-    if (games != null) {
-      setSeedCount(games);
-    }
-  }, [isChallenge, stages]);
-
-  useEffect(() => {
-    if (isChallenge) {
-      setStages([]);
-      return;
-    }
-
-    setStages((prev) => {
-      const stage0 = prev[0];
-      const stage1 = prev[1];
-      const desired: StageForm[] = [];
-
-      if (eventType === 'Tournament') {
-        if (seedingPlayEnabled) {
-          desired.push({
-            label: seedingFormat === 'groups' ? 'Group Stage' : 'Round Robin',
-            abbr: stage0?.abbr || eventAbbr || '',
-            gameCount: stage0?.gameCount || 25,
-            startsAt: stage0?.startsAt || startsAt,
-            endsAt: stage0?.endsAt || endsAt,
-            timeBound: stage0?.timeBound ?? Boolean(startsAt || endsAt),
-            stageType: 'ROUND_ROBIN',
-            roundPattern: normalizeRoundPattern(stage0?.roundPattern),
-          });
-        }
-
-        desired.push({
-          label: 'Bracket',
-          abbr: stage1?.abbr || eventAbbr || '',
-          gameCount: stage1?.gameCount || seedCount,
-          startsAt: stage1?.startsAt || startsAt,
-          endsAt: stage1?.endsAt || endsAt,
-          timeBound: stage1?.timeBound ?? Boolean(startsAt || endsAt),
-          stageType: 'BRACKET',
-          roundPattern: normalizeRoundPattern(stage1?.roundPattern),
-        });
+  function toggleTeamSize(size: number) {
+    setForm((prev) => {
+      const next = new Set(prev.allowedTeamSizes);
+      if (next.has(size)) {
+        next.delete(size);
       } else {
-        desired.push({
-          label: name,
-          abbr: eventAbbr || '',
-          gameCount: stage0?.gameCount || seedCount,
-          startsAt: stage0?.startsAt || startsAt,
-          endsAt: stage0?.endsAt || endsAt,
-          timeBound: stage0?.timeBound ?? Boolean(startsAt || endsAt),
-          stageType: 'SINGLE',
-          roundPattern: normalizeRoundPattern(stage0?.roundPattern),
-        });
+        next.add(size);
       }
-
-      const next = desired.map((desiredStage, idx) => {
-        const existing = prev[idx];
-        return {
-          ...desiredStage,
-          label: desiredStage.label || existing?.label || '',
-          abbr: desiredStage.abbr || existing?.abbr || '',
-          gameCount: existing?.gameCount ?? desiredStage.gameCount,
-          startsAt: existing?.startsAt ?? desiredStage.startsAt,
-          endsAt: existing?.endsAt ?? desiredStage.endsAt,
-          timeBound: existing?.timeBound ?? desiredStage.timeBound,
-          roundPattern: existing?.roundPattern ?? desiredStage.roundPattern,
-        };
-      });
-
-      const unchanged =
-        next.length === prev.length && next.every((stage, idx) => stagesEqual(stage, prev[idx]));
-
-      return unchanged ? prev : next;
+      return { ...prev, allowedTeamSizes: next };
     });
-  }, [
-    isChallenge,
-    eventType,
-    seedingPlayEnabled,
-    seedingFormat,
-    eventAbbr,
-    name,
-    startsAt,
-    endsAt,
-    seedCount,
-  ]);
+    setFieldErrors((prev) => ({ ...prev, allowedTeamSizes: undefined }));
+  }
 
-  useEffect(() => {
-    if (endsAt && !registrationCutoff) {
-      setRegistrationCutoff(endsAt);
-    }
-  }, [endsAt, registrationCutoff]);
-
-  useEffect(() => {
-    if (startsAt && !registrationOpens) {
-      setRegistrationOpens(startsAt);
-    }
-  }, [startsAt, registrationOpens]);
-
-  useEffect(() => {
-    if (!token || isUnauthorized) return;
-
-    let cancelled = false;
-    const loadBadgeSets = async () => {
-      try {
-        setBadgeSetsLoading(true);
-        const sets = await listBadgeSetsAuth(token);
-        if (!cancelled) {
-          setBadgeSets(sets);
-        }
-      } catch {
-        if (!cancelled) {
-          setBadgeSets([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setBadgeSetsLoading(false);
-        }
-      }
-    };
-
-    void loadBadgeSets();
-    return () => {
-      cancelled = true;
-    };
-  }, [token, isUnauthorized]);
-
-  useEffect(() => {
-    if (currentStep !== 'templates' || isSessionLadder) return;
-    if (hanabVariants.length > 0 || hanabVariantsFetchInitiated.current) return;
-    hanabVariantsFetchInitiated.current = true;
-    const load = async () => {
-      setHanabVariantsLoading(true);
-      try {
-        const variants = await fetchHanabVariants();
-        setHanabVariants(variants);
-      } catch {
-        // fall through — user can still type a custom value
-      } finally {
-        setHanabVariantsLoading(false);
-      }
-    };
-    void load();
-  }, [currentStep, isSessionLadder, hanabVariants.length]);
-
-  useEffect(() => {
-    if (!isEdit || !editSlug) return;
-
-    if (prevEditSlugRef.current !== editSlug) {
-      prevEditSlugRef.current = editSlug;
-      hasLoadedExisting.current = false;
-    }
-
-    if (hasLoadedExisting.current) return;
-
-    const load = async () => {
-      setLoadingExisting(true);
-      setError(null);
-
-      if (!token) {
-        setError('Missing auth token');
-        setLoadingExisting(false);
-        return;
-      }
-
-      try {
-        const event = await getJsonAuth<EventDetail>(`/events/${editSlug}`, token);
-
-        setName(event.name);
-        setSlug(event.slug);
-        setShortDescription(event.short_description || '');
-        setLongDescription(event.long_description || '');
-
-        const evStart = event.starts_at ? event.starts_at.slice(0, 10) : '';
-        const evEnd = event.ends_at ? event.ends_at.slice(0, 10) : '';
-
-        setStartsAt(evStart);
-        setEndsAt(evEnd);
-        setPublished(event.published ?? false);
-
-        const format =
-          event.event_format === 'tournament'
-            ? 'tournament'
-            : event.event_format === 'session_ladder'
-              ? 'session_ladder'
-              : 'challenge';
-        setEventType(
-          format === 'tournament'
-            ? 'Tournament'
-            : format === 'session_ladder'
-              ? 'League'
-              : 'Challenge',
-        );
-        setEventStatus(event.event_status ?? 'DORMANT');
-        setSeedingPlayEnabled(Boolean(event.round_robin_enabled));
-        setSeedingFormat(event.round_robin_enabled ? 'round_robin' : '');
-        setMaxTeams(event.max_teams ? String(event.max_teams) : '');
-        setAllowLateRegistration(
-          format === 'tournament' ? false : (event.allow_late_registration ?? true),
-        );
-        setRegistrationOpens(
-          event.registration_opens_at ? event.registration_opens_at.slice(0, 10) : evStart,
-        );
-        setRegistrationCutoff(
-          event.registration_cutoff ? event.registration_cutoff.slice(0, 10) : '',
-        );
-
-        const loadedStages = await getJson<EventStage[]>(`/events/${editSlug}/stages`);
-        if (loadedStages.length > 0) {
-          const firstConfig = (loadedStages[0]?.config_json ?? {}) as {
-            event_abbreviation?: string;
-            enforce_exact_team_size?: boolean;
-          };
-          if (firstConfig.event_abbreviation) setEventAbbr(firstConfig.event_abbreviation);
-
-          if (format !== 'challenge') {
-            const mapped = loadedStages.map((stage) => {
-              const config = (stage.config_json ?? {}) as {
-                stage_abbreviation?: string;
-                event_abbreviation?: string;
-                bracket_round_pattern?: {
-                  name_pattern?: string;
-                  abbr_pattern?: string;
-                  play_days?: number;
-                  gap_days?: number;
-                  games_per_round?: string;
-                };
-              };
-
-              const stStart = stage.starts_at ? stage.starts_at.slice(0, 10) : '';
-              const stEnd = stage.ends_at ? stage.ends_at.slice(0, 10) : '';
-              const pattern = config.bracket_round_pattern;
-
-              return {
-                id: stage.event_stage_id,
-                label: stage.label,
-                abbr: config.stage_abbreviation || config.event_abbreviation || '',
-                gameCount: seedCount,
-                startsAt: stStart,
-                endsAt: stEnd,
-                timeBound: Boolean(stStart || stEnd),
-                stageType: stage.stage_type,
-                roundPattern:
-                  stage.stage_type === 'BRACKET'
-                    ? normalizeRoundPattern({
-                        namePattern: pattern?.name_pattern,
-                        abbrPattern: pattern?.abbr_pattern,
-                        playDays: pattern?.play_days,
-                        gapDays: pattern?.gap_days,
-                        gamesPerRound: pattern?.games_per_round,
-                      })
-                    : undefined,
-              } as StageForm;
-            });
-
-            setStages(mapped.length > 0 ? mapped : [initialStage()]);
-
-            const enforce = firstConfig.enforce_exact_team_size ?? false;
-
-            setEnforceExactTeamSize(format === 'tournament' ? true : !!enforce);
-          }
-        }
-
-        const templates = await getJson<EventGameTemplate[]>(`/events/${editSlug}/game-templates`);
-        if (templates.length > 0) {
-          setVariant(templates[0].variant || 'No Variant');
-          setSeedCount(templates.length);
-          if (format !== 'challenge') {
-            setStages((prev) => {
-              if (prev.length === 0) return prev;
-              const next = [...prev];
-              next[0] = { ...next[0], gameCount: templates.length };
-              return next;
-            });
-          }
-        }
-
-        const badgeLinks = await listEventBadgeLinksAuth(token, editSlug);
-        const challengeLink = badgeLinks.find((link) => link.purpose === 'challenge_overall');
-        const seasonLink = badgeLinks.find((link) => link.purpose === 'season_overall');
-        const sessionLink = badgeLinks.find((link) => link.purpose === 'session_winner');
-        setChallengeBadgeSetId(challengeLink ? String(challengeLink.badge_set_id) : null);
-        setLeagueSeasonBadgeSetId(seasonLink ? String(seasonLink.badge_set_id) : null);
-        setLeagueSessionBadgeSetId(sessionLink ? String(sessionLink.badge_set_id) : null);
-        setCurrentStep('event');
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(`Failed to load event for editing: ${extractApiErrorMessage(err)}`);
-        } else {
-          setError(
-            `Failed to load event for editing${err instanceof Error ? `: ${err.message}` : ''}`,
-          );
-        }
-      } finally {
-        hasLoadedExisting.current = true;
-        setLoadingExisting(false);
-      }
-    };
-
-    void load();
-  }, [isEdit, editSlug, token, seedCount]);
-
-  const invalidTokens = useMemo(() => {
-    const matches = [...seedFormula.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
-    return matches.filter(
-      (tok) =>
-        tok !== 'eID' &&
-        tok !== 'sID' &&
-        tok !== 'rID' &&
-        tok !== 'i' &&
-        tok !== 'hash' &&
-        !/^0+i$/.test(tok),
-    );
-  }, [seedFormula]);
-
-  const requiredTokensMissing = useMemo(() => {
-    const needed = ['eID', 'i'];
-    if (isTournament) needed.push('rID');
-
-    const present = new Set([...seedFormula.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]));
-    return needed.filter((tok) => !present.has(tok));
-  }, [seedFormula, isTournament]);
-
-  useEffect(() => {
-    if (!isTournament) return;
-    setSeedFormula((prev) => {
-      if (prev.includes('{rID}')) return prev;
-      if (prev.includes('{i}')) return prev.replace('{i}', '{rID}-{i}');
-      return `${prev}-{rID}`;
-    });
-  }, [isTournament]);
-
-  const seedPreview = useMemo(() => {
-    const activeStageAbbr = getStageAbbrForSeeds(stages[0], eventAbbr, parsedMaxTeams);
-    const rId = getRoundIdForStage(stages[0], 0);
-    const seeds = buildSeedsFromFormula(
-      seedFormula,
-      eventAbbr,
-      activeStageAbbr,
-      rId,
-      seedCount,
-      seedHashToken,
-    );
-
-    const first = seeds.slice(0, 3);
-    const last = seeds.slice(-3);
-    return seeds.length > 6 ? [...first, '...', ...last] : seeds;
-  }, [seedFormula, eventAbbr, stages, seedCount, seedHashToken, parsedMaxTeams]);
-
-  const seedsHaveInvalidChars = useMemo(() => {
-    const activeStageAbbr = getStageAbbrForSeeds(stages[0], eventAbbr, parsedMaxTeams);
-    const rId = getRoundIdForStage(stages[0], 0);
-    const seeds = buildSeedsFromFormula(
-      seedFormula,
-      eventAbbr,
-      activeStageAbbr,
-      rId,
-      Math.min(seedCount, 10),
-      seedHashToken,
-    );
-
-    return seeds.some((s) => !/^[A-Za-z0-9-]+$/.test(s));
-  }, [seedFormula, eventAbbr, stages, seedCount, seedHashToken, parsedMaxTeams]);
-
-  const duplicateSeedsError = useMemo(() => {
-    const allSeeds: string[] = [];
-
-    stages.forEach((stage, idx) => {
-      const stageAbbr = getStageAbbrForSeeds(stage, eventAbbr, parsedMaxTeams);
-      const rId = getRoundIdForStage(stage, idx);
-      const seeds = buildSeedsFromFormula(
-        seedFormula,
-        eventAbbr,
-        stageAbbr,
-        rId,
-        stage.gameCount,
-        seedHashToken,
-      );
-      allSeeds.push(...seeds);
-    });
-
-    const seen = new Set<string>();
-    for (const seed of allSeeds) {
-      if (seen.has(seed)) {
-        return 'Seed pattern creates duplicate values. Include round and game tokens.';
-      }
-      seen.add(seed);
-    }
-
-    return null;
-  }, [stages, seedFormula, eventAbbr, parsedMaxTeams, seedHashToken]);
-
-  const tournamentLimitError = useMemo(() => {
-    if (!isTournament) return null;
-
-    if (
-      !maxTeams.trim() ||
-      parsedMaxTeams == null ||
-      Number.isNaN(parsedMaxTeams) ||
-      parsedMaxTeams <= 0
-    ) {
-      return 'Select a valid max teams value for tournaments.';
-    }
-
-    if (seedingPlayEnabled && !seedingFormat) {
-      return 'Choose a seeding format.';
-    }
-
-    return null;
-  }, [isTournament, maxTeams, parsedMaxTeams, seedingPlayEnabled, seedingFormat]);
-
-  const badgeSelectData = useMemo(() => {
-    const activeSelections = new Set(
-      [challengeBadgeSetId, leagueSeasonBadgeSetId, leagueSessionBadgeSetId]
-        .filter(Boolean)
-        .map((value) => Number(value)),
-    );
-
-    return badgeSets
-      .filter((set) => {
-        const attachedElsewhere = (set.attachments ?? []).some(
-          (attachment) => attachment.event_slug !== editSlug,
-        );
-        if (!attachedElsewhere) return true;
-        return activeSelections.has(set.id);
-      })
-      .map((set) => ({ value: String(set.id), label: set.name }));
-  }, [badgeSets, challengeBadgeSetId, leagueSeasonBadgeSetId, leagueSessionBadgeSetId, editSlug]);
-
-  const challengeBadgePreview = useMemo(
-    () => badgeSets.find((set) => String(set.id) === challengeBadgeSetId)?.preview_svg ?? null,
-    [badgeSets, challengeBadgeSetId],
-  );
-  const leagueSeasonBadgePreview = useMemo(
-    () => badgeSets.find((set) => String(set.id) === leagueSeasonBadgeSetId)?.preview_svg ?? null,
-    [badgeSets, leagueSeasonBadgeSetId],
-  );
-  const leagueSessionBadgePreview = useMemo(
-    () => badgeSets.find((set) => String(set.id) === leagueSessionBadgeSetId)?.preview_svg ?? null,
-    [badgeSets, leagueSessionBadgeSetId],
-  );
-
-  const openBadgePreview = useCallback((title: string, svg: string | null) => {
-    if (!svg) return;
-    setBadgePreviewModal({ title, svg });
-  }, []);
-
-  const eventValid =
-    Boolean(name) &&
-    Boolean(slug) &&
-    Boolean(longDescription) &&
-    Boolean(eventAbbr) &&
-    !abbrHasSpace &&
-    !tournamentLimitError;
-
-  const stageValid =
-    isSessionLadder || isChallenge
-      ? true
-      : stages.length > 0 &&
-        stages.every((stage) => {
-          const hasSpace = /\s/.test(stage.abbr);
-          return (
-            Boolean(stage.label) &&
-            Boolean(stage.abbr) &&
-            !hasSpace &&
-            stage.gameCount > 0 &&
-            (stage.timeBound ? datesValid(stage.startsAt, stage.endsAt) : true)
-          );
-        });
-
-  const templatesValid = isSessionLadder
-    ? true
-    : Boolean(variant) &&
-      seedCount >= 1 &&
-      Boolean(seedFormula.trim()) &&
-      !formulaHasSpace &&
-      !formulaHasInvalidChars &&
-      invalidTokens.length === 0 &&
-      requiredTokensMissing.length === 0 &&
-      !seedsHaveInvalidChars &&
-      !duplicateSeedsError;
-
-  const registrationValid = isTournament ? Boolean(registrationOpens && registrationCutoff) : true;
-  const badgesValid = true;
-
-  const stepValid = (key: StepKey) => {
-    if (key === 'type') return Boolean(eventType);
-    if (key === 'event') return eventValid;
-    if (key === 'badges') return badgesValid;
-    if (key === 'registration') return registrationValid;
-    if (key === 'stage') return stageValid;
-    return templatesValid;
-  };
-
-  const stepOrder: StepKey[] = visibleSteps.map((step) => step.key);
-  const currentIndex = stepOrder.indexOf(currentStep);
-  const activeStepIndex = Math.max(0, currentIndex === -1 ? 0 : currentIndex);
-
-  useEffect(() => {
-    if (stepOrder.length === 0) return;
-    if (!stepOrder.includes(currentStep)) {
-      setCurrentStep(stepOrder[0]);
-    }
-  }, [stepOrder, currentStep]);
-
-  const onNext = async () => {
-    if (!stepValid(currentStep)) return;
-
-    // Autosave event to DB on each step advance past the type selection.
-    if (!isEdit && currentStep !== 'type') {
-      setStepSaving(true);
-      try {
-        await autosaveEventDraft();
-        saveWizardState();
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(extractApiErrorMessage(err));
-        } else {
-          setError(err instanceof Error ? err.message : 'Failed to save draft');
-        }
-        return;
-      } finally {
-        setStepSaving(false);
-      }
-    }
-
-    const next = stepOrder[currentIndex + 1];
-    if (next) setCurrentStep(next);
-  };
-
-  const onPrev = () => {
-    const prev = stepOrder[currentIndex - 1];
-    if (prev) setCurrentStep(prev);
-  };
-
-  const resetForm = () => {
-    setName('');
-    setEventType('Challenge');
-    setEventStatus('DORMANT');
-    setEventAbbr('');
-    setSlug('');
-    setSlugEdited(false);
-    setShortDescription('');
-    setLongDescription(longDescriptionTemplateFor('Challenge'));
-    setStartsAt('');
-    setEndsAt('');
-    setStages([initialStage()]);
-    setVariant('No Variant');
-    setSeedCount(100);
-    setSeedFormula('{eID}-{i}');
-    setSeedingPlayEnabled(false);
-    setSeedingFormat('');
-    setMaxTeams('');
-    setPublished(false);
-    setChallengeBadgeSetId(null);
-    setLeagueSeasonBadgeSetId(null);
-    setLeagueSessionBadgeSetId(null);
-    setAllowLateRegistration(true);
-    setRegistrationOpens('');
-    setRegistrationCutoff('');
-    setEnforceExactTeamSize(false);
-    setCurrentStep('type');
-    previousEventTypeRef.current = 'Challenge';
-    setDraftEventSlug(null);
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(CREATE_EVENT_DRAFT_SLUG_KEY);
-      window.localStorage.removeItem(CREATE_EVENT_DRAFT_WIZARD_STATE_KEY);
-    }
-  };
-
-  const updateStage = (index: number, patch: Partial<StageForm>) => {
-    setStages((prev) => prev.map((stage, idx) => (idx === index ? { ...stage, ...patch } : stage)));
-  };
+  function validate(): FieldErrors {
+    const errors: FieldErrors = {};
+    if (!form.name.trim()) errors.name = 'Name is required.';
+    if (!form.slug.trim()) errors.slug = 'Slug is required.';
+    else if (!/^[a-z0-9-]+$/.test(form.slug))
+      errors.slug = 'Slug may only contain lowercase letters, numbers, and hyphens.';
+    if (!form.longDescription.trim()) errors.longDescription = 'Long description is required.';
+    if (form.allowedTeamSizes.size === 0)
+      errors.allowedTeamSizes = 'Select at least one team size.';
+    return errors;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setApiError(null);
 
-    if (!user || !token) return;
-    if (!eventValid || !badgesValid || !stageValid || !templatesValid || !registrationValid) return;
+    const errors = validate();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
 
-    setSaving(true);
-    setMessage(null);
-    setError(null);
+    if (!token) return;
 
-    const eventFormat = isSessionLadder
-      ? 'session_ladder'
-      : isTournament
-        ? 'tournament'
-        : 'challenge';
-    const payloadEventStatus = isEdit ? eventStatus : 'DORMANT';
-    const payloadStartsAt = isSessionLadder ? null : startsAt ? `${startsAt}T12:00:00Z` : null;
-    const payloadEndsAt = isSessionLadder ? null : endsAt ? `${endsAt}T23:59:59Z` : null;
-    const payloadMaxTeams = isTournament ? parsedMaxTeams : null;
-    const payloadMaxRounds = null;
-    const payloadAllowLate = isTournament ? false : allowLateRegistration;
+    const body = {
+      name: form.name.trim(),
+      ...(isEdit ? {} : { slug: form.slug.trim() }),
+      short_description: form.shortDescription.trim() || null,
+      long_description: form.longDescription.trim(),
+      allowed_team_sizes: Array.from(form.allowedTeamSizes).sort((a, b) => a - b),
+      combined_leaderboard: form.combinedLeaderboard,
+      registration_mode: form.registrationMode,
+      allow_late_registration: form.allowLateRegistration,
+      registration_opens_at: dateToIso(form.registrationOpensAt),
+      registration_cutoff: dateToIso(form.registrationCutoff),
+      ...(form.defaultVariantId
+        ? {
+            variant_rule_json: {
+              type: 'specific',
+              variantId: parseInt(form.defaultVariantId, 10),
+            },
+          }
+        : {}),
+      ...(form.seedFormula.trim() ? { seed_rule_json: { formula: form.seedFormula.trim() } } : {}),
+    };
 
-    const registrationOpensAt = registrationOpens ? `${registrationOpens}T00:00:00Z` : null;
-
+    setSubmitting(true);
     try {
-      let targetSlug = slug;
-      if (isEdit && editSlug) {
-        await putJsonAuth(`/events/${encodeURIComponent(editSlug)}`, token, {
-          name,
-          new_slug: slug,
-          short_description: shortDescription || null,
-          long_description: longDescription,
-          published,
-          event_format: eventFormat,
-          event_status: payloadEventStatus,
-          round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
-          max_teams: payloadMaxTeams,
-          max_rounds: payloadMaxRounds,
-          allow_late_registration: payloadAllowLate,
-          registration_opens_at: registrationOpensAt,
-          registration_cutoff: registrationCutoff || null,
-          starts_at: payloadStartsAt,
-          ends_at: payloadEndsAt,
-        });
-        targetSlug = slug;
-      } else if (draftEventSlug) {
-        // Draft was autosaved to DB — do a final PUT to apply remaining fields.
-        await putJsonAuth(`/events/${encodeURIComponent(draftEventSlug)}`, token, {
-          name,
-          new_slug: slug !== draftEventSlug ? slug : undefined,
-          short_description: shortDescription || null,
-          long_description: longDescription,
-          published,
-          event_format: eventFormat,
-          event_status: payloadEventStatus,
-          round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
-          max_teams: payloadMaxTeams,
-          max_rounds: payloadMaxRounds,
-          allow_late_registration: payloadAllowLate,
-          registration_opens_at: registrationOpensAt,
-          registration_cutoff: registrationCutoff || null,
-          starts_at: payloadStartsAt,
-          ends_at: payloadEndsAt,
-        });
-        targetSlug = slug;
+      const targetSlug = isEdit ? editSlug! : form.slug.trim();
+      if (isEdit) {
+        await putJsonAuth(`/events/${encodeURIComponent(targetSlug)}`, token, body);
       } else {
-        const created = await postJsonAuth<{ slug?: string }>('/events', token, {
-          name,
-          slug,
-          short_description: shortDescription || null,
-          long_description: longDescription,
-          published,
-          event_format: eventFormat,
-          event_status: payloadEventStatus,
-          round_robin_enabled: seedingPlayEnabled && seedingFormat === 'round_robin',
-          max_teams: payloadMaxTeams,
-          max_rounds: payloadMaxRounds,
-          allow_late_registration: payloadAllowLate,
-          registration_opens_at: registrationOpensAt,
-          registration_cutoff: registrationCutoff || null,
-          starts_at: payloadStartsAt,
-          ends_at: payloadEndsAt,
-        });
-        targetSlug = created?.slug || slug;
+        await postJsonAuth('/events', token, body);
       }
-
-      if (hasBadgesStep) {
-        const links: Array<{
-          badge_set_id: number;
-          purpose: 'season_overall' | 'session_winner' | 'challenge_overall';
-          sort_order: number;
-        }> = [];
-
-        if (isSessionLadder) {
-          if (leagueSeasonBadgeSetId) {
-            const parsed = Number(leagueSeasonBadgeSetId);
-            if (Number.isInteger(parsed) && parsed > 0) {
-              links.push({ badge_set_id: parsed, purpose: 'season_overall', sort_order: 0 });
-            }
-          }
-          if (leagueSessionBadgeSetId) {
-            const parsed = Number(leagueSessionBadgeSetId);
-            if (Number.isInteger(parsed) && parsed > 0) {
-              links.push({ badge_set_id: parsed, purpose: 'session_winner', sort_order: 1 });
-            }
-          }
-        }
-
-        if (isChallenge && challengeBadgeSetId) {
-          const parsed = Number(challengeBadgeSetId);
-          if (Number.isInteger(parsed) && parsed > 0) {
-            links.push({ badge_set_id: parsed, purpose: 'challenge_overall', sort_order: 0 });
-          }
-        }
-
-        await replaceEventBadgeLinksAuth(token, targetSlug, links);
-
-        if (isChallenge) {
-          await updateChallengeBadgeConfigAuth(token, targetSlug, {
-            podium_enabled: true,
-            completion_enabled: true,
-            completion_requires_deadline: false,
-          });
-        }
-      }
-
-      if (!isEdit && isChallenge) {
-        const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
-          `/events/${encodeURIComponent(targetSlug)}/stages`,
-          token,
-          {
-            stage_index: 1,
-            label: name,
-            stage_type: 'SINGLE',
-            starts_at: startsAt ? `${startsAt}T00:00:00Z` : null,
-            ends_at: endsAt ? `${endsAt}T23:59:59Z` : null,
-            config_json: {
-              event_abbreviation: eventAbbr || null,
-              stage_abbreviation: null,
-              enforce_exact_team_size: false,
-              bracket_type: null,
-              include_round_robin: false,
-              bracket_max_teams: null,
-              bracket_max_rounds: null,
-              seeding_play_enabled: false,
-              seeding_format: '',
-            },
-          },
-        );
-
-        const seeds = buildSeedsFromFormula(
-          seedFormula,
-          eventAbbr,
-          '',
-          'C',
-          seedCount,
-          seedHashToken,
-        );
-        for (let i = 0; i < seeds.length; i += 1) {
-          await postJsonAuth(`/events/${encodeURIComponent(targetSlug)}/game-templates`, token, {
-            event_stage_id: stagePayload.event_stage_id,
-            template_index: i + 1,
-            variant,
-            seed_payload: seeds[i],
-            metadata_json: {},
-          });
-        }
-      }
-
-      if (isEdit && isChallenge) {
-        const seeds = buildSeedsFromFormula(
-          seedFormula,
-          eventAbbr,
-          '',
-          'C',
-          seedCount,
-          seedHashToken,
-        );
-        await putJsonAuth(`/events/${encodeURIComponent(targetSlug)}/game-templates`, token, {
-          templates: seeds.map((seed, i) => ({
-            template_index: i + 1,
-            variant,
-            seed_payload: seed,
-            metadata_json: {},
-          })),
-        });
-      }
-
-      if (!isEdit && isTournament) {
-        for (let idx = 0; idx < stages.length; idx += 1) {
-          const stage = stages[idx];
-          const stagePayload = await postJsonAuth<{ event_stage_id: number }>(
-            `/events/${encodeURIComponent(targetSlug)}/stages`,
-            token,
-            {
-              stage_index: idx + 1,
-              label: stage.label || name,
-              stage_type: stage.stageType,
-              starts_at: stage.timeBound && stage.startsAt ? `${stage.startsAt}T00:00:00Z` : null,
-              ends_at: stage.timeBound && stage.endsAt ? `${stage.endsAt}T23:59:59Z` : null,
-              config_json: {
-                event_abbreviation: eventAbbr || null,
-                stage_abbreviation: stage.abbr || null,
-                enforce_exact_team_size: enforceExactTeamSize,
-                bracket_type: stage.stageType === 'BRACKET' ? 'SINGLE_ELIM' : null,
-                include_round_robin: stage.stageType === 'ROUND_ROBIN',
-                bracket_max_teams: payloadMaxTeams,
-                bracket_max_rounds: payloadMaxRounds,
-                seeding_play_enabled: seedingPlayEnabled,
-                seeding_format: seedingFormat,
-                bracket_round_pattern:
-                  stage.stageType === 'BRACKET'
-                    ? {
-                        name_pattern: stage.roundPattern?.namePattern ?? 'Round {i}',
-                        abbr_pattern: stage.roundPattern?.abbrPattern ?? 'R{i}',
-                        play_days: stage.roundPattern?.playDays ?? 7,
-                        gap_days: stage.roundPattern?.gapDays ?? 0,
-                        games_per_round: stage.roundPattern?.gamesPerRound ?? '3,3,5,5,7,7',
-                      }
-                    : undefined,
-              },
-            },
-          );
-
-          const stageSeeds = buildSeedsFromFormula(
-            seedFormula,
-            eventAbbr,
-            stage.abbr,
-            getRoundIdForStage(stage, idx),
-            stage.gameCount,
-            seedHashToken,
-          );
-
-          for (let i = 0; i < stageSeeds.length; i += 1) {
-            await postJsonAuth(`/events/${encodeURIComponent(targetSlug)}/game-templates`, token, {
-              event_stage_id: stagePayload.event_stage_id,
-              template_index: i + 1,
-              variant,
-              seed_payload: stageSeeds[i],
-              metadata_json: {},
-            });
-          }
-        }
-      }
-
-      setMessage(
-        isEdit
-          ? `Updated event "${name}".`
-          : isSessionLadder
-            ? `Created event "${name}".`
-            : `Created event "${name}" with ${seedCount} templates.`,
-      );
-
-      if (!isEdit) {
-        resetForm();
-      }
+      navigate(`/admin/events/${targetSlug}`);
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(extractApiErrorMessage(err));
+        const msg = (err.body as { error?: string })?.error ?? 'Save failed.';
+        if (msg.toLowerCase().includes('slug') || msg.toLowerCase().includes('unique')) {
+          setFieldErrors({ slug: 'This slug is already taken.' });
+        } else {
+          setApiError(msg);
+        }
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to save event');
+        setApiError('An unexpected error occurred.');
       }
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   }
 
-  if (isUnauthorized) {
-    return <Navigate to="/" replace />;
+  if (loadError) {
+    return (
+      <Alert color="red" variant="light">
+        {loadError}
+      </Alert>
+    );
   }
 
   return (
-    <Box component="main" px="md" py="lg" w="100%" mx="auto">
-      <Stack gap="md">
-        <Title order={1}>{isEdit ? 'Edit Event' : 'Create Event'}</Title>
+    <Stack gap="md">
+      <PageHeader
+        title={isEdit ? 'Edit Event' : 'Create Event'}
+        subtitle={isEdit ? `Editing ${editSlug}` : 'Set up a new event.'}
+        level={3}
+      />
 
-        {message && (
-          <Alert color="green" variant="light" title="Saved">
-            {message}
-          </Alert>
-        )}
+      {apiError ? (
+        <Alert color="red" variant="light">
+          {apiError}
+        </Alert>
+      ) : null}
 
-        {error && (
-          <Alert color="red" variant="light" title="Error">
-            {error}
-          </Alert>
-        )}
-
-        {isEdit && loadingExisting ? (
-          <Text size="sm" c="dimmed">
-            Loading event details...
-          </Text>
-        ) : (
+      <form onSubmit={(e) => void handleSubmit(e)}>
+        <FormContainer gap="lg">
+          {/* Basic info */}
           <SectionCard>
-            <Box component="form" onSubmit={handleSubmit}>
-              <Stack gap="md">
-                <Stepper
-                  active={activeStepIndex}
-                  onStepClick={(idx) => {
-                    const step = visibleSteps[idx];
-                    if (step) setCurrentStep(step.key);
-                  }}
-                  allowNextStepsSelect
-                  size="sm"
-                >
-                  {visibleSteps.map((step) => (
-                    <Stepper.Step key={step.key} label={step.label} />
-                  ))}
-                </Stepper>
+            <FormContainer>
+              <TextInput
+                label="Name"
+                placeholder="Event name"
+                value={form.name}
+                onChange={(e) => handleNameChange(e.currentTarget.value)}
+                error={fieldErrors.name}
+                required
+              />
 
-                {currentStep === 'type' && (
-                  <SectionCard>
-                    <Stack gap="sm">
-                      <Group justify="space-between">
-                        <Title order={4}>Choose Event Type</Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
+              <TextInput
+                label="Slug"
+                placeholder="event-slug"
+                value={form.slug}
+                onChange={(e) => handleSlugChange(e.currentTarget.value)}
+                error={fieldErrors.slug}
+                disabled={isEdit}
+                description={isEdit ? 'Slug cannot be changed after creation.' : undefined}
+                required
+              />
 
-                      <Radio.Group
-                        label="Event Type"
-                        value={eventType}
-                        onChange={(value) => {
-                          const next = value as 'Challenge' | 'Tournament' | 'League';
-                          setEventType(next);
-                          if (next === 'Challenge' || next === 'League') {
-                            setSeedingPlayEnabled(false);
-                            setSeedingFormat('');
-                            setMaxTeams('');
-                          }
-                          if (next === 'League' && !isEdit) {
-                            setEventStatus('DORMANT');
-                          }
-                        }}
-                      >
-                        <Group mt="xs">
-                          <Radio value="Challenge" label="Challenge" />
-                          <Radio value="Tournament" label="Tournament" />
-                          <Radio value="League" label="League" />
-                        </Group>
-                      </Radio.Group>
-                    </Stack>
-                  </SectionCard>
-                )}
+              <TextInput
+                label="Short Description"
+                placeholder="One-line summary (optional)"
+                value={form.shortDescription}
+                onChange={(e) => setField('shortDescription', e.currentTarget.value)}
+              />
 
-                {currentStep === 'event' && (
-                  <SectionCard>
-                    <Stack gap="sm">
-                      <Group justify="space-between">
-                        <Title order={4}>Event Basics</Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
-
-                      <TextInput
-                        label="Name"
-                        value={name}
-                        onChange={(e) => setName(e.currentTarget.value)}
-                        required
-                      />
-
-                      <TextInput
-                        label="Slug"
-                        value={slug}
-                        onChange={(e) => {
-                          setSlug(e.currentTarget.value);
-                          setSlugEdited(true);
-                        }}
-                        required
-                      />
-
-                      <TextInput
-                        label="Short Description"
-                        value={shortDescription}
-                        onChange={(e) => setShortDescription(e.currentTarget.value)}
-                        placeholder="Brief summary"
-                      />
-
-                      <TextInput
-                        label="Abbreviation"
-                        value={eventAbbr}
-                        onChange={(e) => setEventAbbr(e.currentTarget.value)}
-                        placeholder="e.g. NVC25"
-                        error={abbrHasSpace ? 'Abbreviation cannot contain spaces.' : undefined}
-                        required
-                      />
-
-                      {isTournament && (
-                        <Grid>
-                          <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <Switch
-                              label="Include seeding play"
-                              checked={seedingPlayEnabled}
-                              onChange={(e) => {
-                                setSeedingPlayEnabled(e.currentTarget.checked);
-                                if (!e.currentTarget.checked) setSeedingFormat('');
-                              }}
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <Select
-                              label="Seeding format"
-                              data={[
-                                { value: 'round_robin', label: 'Round robin (single pool)' },
-                                { value: 'groups', label: 'Group stage (multi-pool)' },
-                              ]}
-                              value={seedingFormat}
-                              onChange={(value) =>
-                                setSeedingFormat((value as 'round_robin' | 'groups' | null) ?? '')
-                              }
-                              disabled={!seedingPlayEnabled}
-                              required={seedingPlayEnabled}
-                              placeholder="Choose format"
-                            />
-                          </Grid.Col>
-                          <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <Select
-                              label="Max teams"
-                              data={['2', '4', '8', '16', '32', '64']}
-                              value={maxTeams}
-                              onChange={(value) => setMaxTeams(value ?? '')}
-                              required
-                              placeholder="Select"
-                              rightSection={
-                                <Tooltip label="Power of two up to 64. Required for tournaments.">
-                                  <Text size="xs" c="dimmed" style={{ cursor: 'help' }}>
-                                    info
-                                  </Text>
-                                </Tooltip>
-                              }
-                            />
-                          </Grid.Col>
-                        </Grid>
-                      )}
-
-                      {!isSessionLadder && (
-                        <Group grow>
-                          <TextInput
-                            type="date"
-                            label="Event starts"
-                            value={startsAt}
-                            onChange={(e) => setStartsAt(e.currentTarget.value)}
-                          />
-                          <TextInput
-                            type="date"
-                            label="Event ends"
-                            value={endsAt}
-                            onChange={(e) => setEndsAt(e.currentTarget.value)}
-                          />
-                        </Group>
-                      )}
-
-                      <Textarea
-                        label="Long Description (Markdown)"
-                        minRows={10}
-                        maxRows={24}
-                        autosize
-                        value={longDescription}
-                        onChange={(e) => {
-                          setLongDescription(e.currentTarget.value);
-                          setShowPreview(false);
-                        }}
-                        required
-                      />
-
-                      <Group>
-                        <Button type="button" variant="light" onClick={() => setShowPreview(true)}>
-                          Preview markdown
-                        </Button>
-                      </Group>
-
-                      {tournamentLimitError && (
-                        <Alert color="red" variant="light">
-                          {tournamentLimitError}
-                        </Alert>
-                      )}
-                    </Stack>
-                  </SectionCard>
-                )}
-
-                {currentStep === 'badges' && hasBadgesStep && (
-                  <SectionCard>
-                    <Stack gap="sm">
-                      <Group justify="space-between">
-                        <Title order={4}>
-                          {isSessionLadder ? 'League Badges' : 'Challenge Badges'}
-                        </Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
-
-                      <Text size="sm" c="dimmed">
-                        {isSessionLadder
-                          ? 'Attach badge sets for League season and session awards.'
-                          : 'Attach a badge set for Challenge awards.'}
-                      </Text>
-
-                      <Group>
-                        <Button
-                          type="button"
-                          variant="light"
-                          onClick={() => {
-                            const activeSlug = isEdit ? editSlug : draftEventSlug;
-                            const returnTo =
-                              isEdit && editSlug
-                                ? `/admin/events/${editSlug}/edit`
-                                : '/admin/events/create';
-                            // Persist badge selections and wizard state to DB / localStorage
-                            // before navigating so they are restored when returning.
-                            if (activeSlug && token && hasBadgesStep) {
-                              const links: Array<{
-                                badge_set_id: number;
-                                purpose: 'season_overall' | 'session_winner' | 'challenge_overall';
-                                sort_order: number;
-                              }> = [];
-                              if (isSessionLadder) {
-                                if (leagueSeasonBadgeSetId) {
-                                  const parsed = Number(leagueSeasonBadgeSetId);
-                                  if (Number.isInteger(parsed) && parsed > 0)
-                                    links.push({
-                                      badge_set_id: parsed,
-                                      purpose: 'season_overall',
-                                      sort_order: 0,
-                                    });
-                                }
-                                if (leagueSessionBadgeSetId) {
-                                  const parsed = Number(leagueSessionBadgeSetId);
-                                  if (Number.isInteger(parsed) && parsed > 0)
-                                    links.push({
-                                      badge_set_id: parsed,
-                                      purpose: 'session_winner',
-                                      sort_order: 1,
-                                    });
-                                }
-                              }
-                              if (isChallenge && challengeBadgeSetId) {
-                                const parsed = Number(challengeBadgeSetId);
-                                if (Number.isInteger(parsed) && parsed > 0)
-                                  links.push({
-                                    badge_set_id: parsed,
-                                    purpose: 'challenge_overall',
-                                    sort_order: 0,
-                                  });
-                              }
-                              void replaceEventBadgeLinksAuth(token, activeSlug, links).catch(
-                                () => undefined,
-                              );
-                            }
-                            saveWizardState();
-                            navigate(`/admin/badges/new?returnTo=${encodeURIComponent(returnTo)}`);
-                          }}
-                        >
-                          Open Badge Designer
-                        </Button>
-                      </Group>
-
-                      {isChallenge && (
-                        <>
-                          <Grid align="end">
-                            <Grid.Col span={{ base: 12, sm: 11 }}>
-                              <Select
-                                label="Challenge Awards Badge Set"
-                                placeholder={badgeSetsLoading ? 'Loading badge sets...' : 'None'}
-                                data={badgeSelectData}
-                                value={challengeBadgeSetId}
-                                onChange={(value) => setChallengeBadgeSetId(value)}
-                                clearable
-                                disabled={badgeSetsLoading}
-                              />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, sm: 1 }}>
-                              <Tooltip
-                                label={
-                                  challengeBadgePreview
-                                    ? 'Preview selected badge set'
-                                    : 'Select a badge set to preview'
-                                }
-                                withArrow
-                              >
-                                <Box style={{ display: 'flex', justifyContent: 'center' }}>
-                                  <ActionIcon
-                                    type="button"
-                                    variant="subtle"
-                                    size="lg"
-                                    onClick={() =>
-                                      openBadgePreview(
-                                        'Challenge Badge Preview',
-                                        challengeBadgePreview,
-                                      )
-                                    }
-                                    disabled={!challengeBadgePreview}
-                                    aria-label="Preview challenge badge"
-                                  >
-                                    <MaterialIcon name="visibility" />
-                                  </ActionIcon>
-                                </Box>
-                              </Tooltip>
-                            </Grid.Col>
-                          </Grid>
-
-                          <Text size="sm" c="dimmed">
-                            Challenge awards are fixed: Gold/Silver/Bronze are based on in-window
-                            standings, and Participant is awarded for completion at any time.
-                          </Text>
-                        </>
-                      )}
-
-                      {isSessionLadder && (
-                        <>
-                          <Grid align="end">
-                            <Grid.Col span={{ base: 12, sm: 11 }}>
-                              <Select
-                                label="Season Awards Badge Set"
-                                placeholder={badgeSetsLoading ? 'Loading badge sets...' : 'None'}
-                                data={badgeSelectData}
-                                value={leagueSeasonBadgeSetId}
-                                onChange={(value) => setLeagueSeasonBadgeSetId(value)}
-                                clearable
-                                disabled={badgeSetsLoading}
-                              />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, sm: 1 }}>
-                              <Tooltip
-                                label={
-                                  leagueSeasonBadgePreview
-                                    ? 'Preview selected badge set'
-                                    : 'Select a badge set to preview'
-                                }
-                                withArrow
-                              >
-                                <Box style={{ display: 'flex', justifyContent: 'center' }}>
-                                  <ActionIcon
-                                    type="button"
-                                    variant="subtle"
-                                    size="lg"
-                                    onClick={() =>
-                                      openBadgePreview(
-                                        'Season Badge Preview',
-                                        leagueSeasonBadgePreview,
-                                      )
-                                    }
-                                    disabled={!leagueSeasonBadgePreview}
-                                    aria-label="Preview season badge"
-                                  >
-                                    <MaterialIcon name="visibility" />
-                                  </ActionIcon>
-                                </Box>
-                              </Tooltip>
-                            </Grid.Col>
-                          </Grid>
-
-                          <Grid align="end">
-                            <Grid.Col span={{ base: 12, sm: 11 }}>
-                              <Select
-                                label="Session Winner Badge Set"
-                                placeholder={badgeSetsLoading ? 'Loading badge sets...' : 'None'}
-                                data={badgeSelectData}
-                                value={leagueSessionBadgeSetId}
-                                onChange={(value) => setLeagueSessionBadgeSetId(value)}
-                                clearable
-                                disabled={badgeSetsLoading}
-                              />
-                            </Grid.Col>
-                            <Grid.Col span={{ base: 12, sm: 1 }}>
-                              <Tooltip
-                                label={
-                                  leagueSessionBadgePreview
-                                    ? 'Preview selected badge set'
-                                    : 'Select a badge set to preview'
-                                }
-                                withArrow
-                              >
-                                <Box style={{ display: 'flex', justifyContent: 'center' }}>
-                                  <ActionIcon
-                                    type="button"
-                                    variant="subtle"
-                                    size="lg"
-                                    onClick={() =>
-                                      openBadgePreview(
-                                        'Session Badge Preview',
-                                        leagueSessionBadgePreview,
-                                      )
-                                    }
-                                    disabled={!leagueSessionBadgePreview}
-                                    aria-label="Preview session badge"
-                                  >
-                                    <MaterialIcon name="visibility" />
-                                  </ActionIcon>
-                                </Box>
-                              </Tooltip>
-                            </Grid.Col>
-                          </Grid>
-                        </>
-                      )}
-                    </Stack>
-                  </SectionCard>
-                )}
-
-                {currentStep === 'registration' && (
-                  <SectionCard>
-                    <Stack gap="sm">
-                      <Group justify="space-between">
-                        <Title order={4}>Registration</Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
-
-                      {isTournament && (
-                        <Alert color="blue" variant="light">
-                          Tournaments enforce exact team size, disable late registration, and
-                          require registration dates.
-                        </Alert>
-                      )}
-
-                      <Grid>
-                        <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <Checkbox
-                            label="Allow late registration"
-                            checked={allowLateRegistration}
-                            onChange={(e) => setAllowLateRegistration(e.currentTarget.checked)}
-                            disabled={isTournament}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
-                            type="date"
-                            label="Registration opens"
-                            value={registrationOpens}
-                            onChange={(e) => setRegistrationOpens(e.currentTarget.value)}
-                            required={isTournament}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
-                            type="date"
-                            label="Registration closes"
-                            value={registrationCutoff}
-                            onChange={(e) => setRegistrationCutoff(e.currentTarget.value)}
-                            required={isTournament}
-                          />
-                        </Grid.Col>
-                      </Grid>
-
-                      <Checkbox
-                        label="Enforce exact team size"
-                        checked={enforceExactTeamSize}
-                        onChange={(e) => setEnforceExactTeamSize(e.currentTarget.checked)}
-                        disabled={isTournament}
-                      />
-                    </Stack>
-                  </SectionCard>
-                )}
-
-                {currentStep === 'stage' && (
-                  <SectionCard>
-                    <Stack gap="md">
-                      <Group justify="space-between">
-                        <Title order={4}>Stage</Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
-
-                      {stages.map((stage, idx) => (
-                        <StageBlock
-                          key={idx}
-                          stage={stage}
-                          index={idx}
-                          parsedMaxTeams={parsedMaxTeams}
-                          seedingFormat={seedingFormat}
-                          onPatch={updateStage}
-                        />
-                      ))}
-                    </Stack>
-                  </SectionCard>
-                )}
-
-                {currentStep === 'templates' && (
-                  <SectionCard>
-                    <Stack gap="sm">
-                      <Group justify="space-between">
-                        <Title order={4}>Templates</Title>
-                        <Badge variant="light">{`Step ${activeStepIndex + 1} of ${stepOrder.length}`}</Badge>
-                      </Group>
-
-                      {isSessionLadder ? (
-                        <Alert color="blue" variant="light">
-                          League seeds are managed at the session/round level after event creation.
-                        </Alert>
-                      ) : (
-                        <>
-                          <VariantCombobox
-                            value={variant}
-                            onChange={setVariant}
-                            variants={hanabVariants}
-                            loading={hanabVariantsLoading}
-                          />
-
-                          <NumberInput
-                            label="Number of games"
-                            min={1}
-                            value={seedCount}
-                            onChange={(value) => setSeedCount(Number(value) || 1)}
-                            required
-                          />
-
-                          <TextInput
-                            label="Seed formula"
-                            value={seedFormula}
-                            onChange={(e) => setSeedFormula(e.currentTarget.value)}
-                            placeholder="{eID}-{rID}-{i}"
-                            required
-                            error={
-                              formulaHasSpace
-                                ? 'Formula cannot contain spaces.'
-                                : formulaHasInvalidChars
-                                  ? 'Use only letters, numbers, braces, hyphen, underscore, colon, and dot.'
-                                  : undefined
-                            }
-                          />
-                          <Button
-                            type="button"
-                            variant="subtle"
-                            size="compact-xs"
-                            onClick={() => setShowFormulaHelp(true)}
-                          >
-                            Formula reference
-                          </Button>
-
-                          {invalidTokens.length > 0 && (
-                            <Alert color="red" variant="light">
-                              Invalid token(s): {invalidTokens.join(', ')}.
-                            </Alert>
-                          )}
-
-                          {requiredTokensMissing.length > 0 && (
-                            <Alert color="red" variant="light">
-                              Missing required token(s): {requiredTokensMissing.join(', ')}.
-                            </Alert>
-                          )}
-
-                          {duplicateSeedsError && (
-                            <Alert color="red" variant="light">
-                              {duplicateSeedsError}
-                            </Alert>
-                          )}
-
-                          {seedsHaveInvalidChars && invalidTokens.length === 0 && (
-                            <Alert color="yellow" variant="light">
-                              Resolved seeds must use letters, numbers, and hyphens only.
-                            </Alert>
-                          )}
-
-                          <Text size="sm">Preview: {seedPreview.join(', ')}</Text>
-                        </>
-                      )}
-                    </Stack>
-                  </SectionCard>
-                )}
-
-                <Group justify="space-between" mt="sm">
-                  <Checkbox
-                    label="Publish event"
-                    checked={published}
-                    onChange={(e) => setPublished(e.currentTarget.checked)}
-                    disabled={saving}
-                  />
-                  <Group>
-                    <Button
-                      type="button"
-                      variant="default"
-                      onClick={onPrev}
-                      disabled={currentIndex <= 0 || saving}
-                    >
-                      Previous
-                    </Button>
-
-                    {currentIndex < stepOrder.length - 1 && (
-                      <Button
-                        type="button"
-                        onClick={() => void onNext()}
-                        disabled={!stepValid(currentStep) || saving || stepSaving}
-                      >
-                        {stepSaving ? 'Saving...' : 'Next'}
-                      </Button>
-                    )}
-
-                    <Button
-                      type="submit"
-                      disabled={
-                        !eventValid ||
-                        !badgesValid ||
-                        !registrationValid ||
-                        !stageValid ||
-                        !templatesValid ||
-                        saving
-                      }
-                    >
-                      {saving
-                        ? isEdit
-                          ? 'Saving...'
-                          : 'Creating...'
-                        : isEdit
-                          ? 'Save Event'
-                          : 'Create Event'}
-                    </Button>
-                  </Group>
-                </Group>
-              </Stack>
-            </Box>
+              <Textarea
+                label="Long Description"
+                placeholder="Full event description (markdown supported)"
+                value={form.longDescription}
+                onChange={(e) => setField('longDescription', e.currentTarget.value)}
+                error={fieldErrors.longDescription}
+                minRows={4}
+                required
+              />
+            </FormContainer>
           </SectionCard>
-        )}
-      </Stack>
 
-      <Modal
-        opened={showPreview}
-        onClose={() => setShowPreview(false)}
-        title="Markdown Preview"
-        size="lg"
-      >
-        <MarkdownRenderer markdown={longDescription} />
-      </Modal>
+          {/* Team configuration */}
+          <SectionCard>
+            <FormContainer>
+              <InputContainer
+                label="Allowed Team Sizes"
+                error={fieldErrors.allowedTeamSizes}
+                helperText="Select at least one team size this event supports."
+              >
+                <Group gap="sm">
+                  {TEAM_SIZES.map((size) => (
+                    <Checkbox
+                      key={size}
+                      label={`${size}p`}
+                      checked={form.allowedTeamSizes.has(size)}
+                      onChange={() => toggleTeamSize(size)}
+                    />
+                  ))}
+                </Group>
+              </InputContainer>
 
-      <Modal
-        opened={showFormulaHelp}
-        onClose={() => setShowFormulaHelp(false)}
-        title="Seed Formula"
-      >
-        <Stack gap="xs">
-          <Text size="sm">Use tokens to build template seed values.</Text>
-          <Text size="sm">{`{eID}`} = event abbreviation (required)</Text>
-          <Text size="sm">{`{rID}`} = round identifier (required for tournaments)</Text>
-          <Text size="sm">{`{i}`} = game index (required)</Text>
-          <Text size="sm">
-            {`{0i}`}, {`{00i}`} = zero-padded game index
-          </Text>
-          <Text size="sm">{`{hash}`} = random 3-5 digit token</Text>
-          <Text size="sm">
-            Example: <Code>{`{eID}-{sID}-{00i}`}</Code> {'->'} NVT-RR-001
-          </Text>
-        </Stack>
-      </Modal>
+              <Switch
+                label="Combined Leaderboard"
+                description="Show all team sizes in a single leaderboard."
+                checked={form.combinedLeaderboard}
+                onChange={(e) => setField('combinedLeaderboard', e.currentTarget.checked)}
+              />
+            </FormContainer>
+          </SectionCard>
 
-      <Modal
-        opened={Boolean(badgePreviewModal)}
-        onClose={() => setBadgePreviewModal(null)}
-        title={badgePreviewModal?.title ?? 'Badge Preview'}
-        centered
-        size="md"
-      >
-        {badgePreviewModal ? (
-          <Box
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 260,
-            }}
-          >
-            <Image
-              src={`data:image/svg+xml;utf8,${encodeURIComponent(badgePreviewModal.svg)}`}
-              alt={badgePreviewModal.title}
-              style={{ width: '100%', maxWidth: 360, height: 'auto', display: 'block' }}
-            />
-          </Box>
-        ) : null}
-      </Modal>
-    </Box>
+          {/* Registration */}
+          <SectionCard>
+            <FormContainer>
+              <InputContainer label="Registration Mode">
+                <Group gap="md">
+                  {(['ACTIVE', 'PASSIVE'] as const).map((mode) => (
+                    <Checkbox
+                      key={mode}
+                      type="radio"
+                      label={
+                        mode === 'ACTIVE' ? 'Active (sign-up required)' : 'Passive (open to all)'
+                      }
+                      checked={form.registrationMode === mode}
+                      onChange={() => setField('registrationMode', mode)}
+                    />
+                  ))}
+                </Group>
+              </InputContainer>
+
+              <Switch
+                label="Allow Late Registration"
+                description="Permit sign-ups after the registration cutoff."
+                checked={form.allowLateRegistration}
+                onChange={(e) => setField('allowLateRegistration', e.currentTarget.checked)}
+              />
+
+              <Group grow>
+                <DatePicker
+                  label="Registration Opens At"
+                  value={form.registrationOpensAt}
+                  onChange={(v) => setField('registrationOpensAt', v)}
+                />
+                <DatePicker
+                  label="Registration Cutoff"
+                  value={form.registrationCutoff}
+                  onChange={(v) => setField('registrationCutoff', v)}
+                />
+              </Group>
+            </FormContainer>
+          </SectionCard>
+
+          {/* Defaults (optional) */}
+          <SectionCard>
+            <FormContainer>
+              <Text fw={600} size="sm">
+                Propagation Defaults (optional)
+              </Text>
+              <Text size="sm" c="dimmed">
+                These values propagate to new game slots unless overridden at the stage or game
+                level.
+              </Text>
+
+              <TextInput
+                label="Default Variant ID"
+                placeholder="e.g. 6"
+                value={form.defaultVariantId}
+                onChange={(e) =>
+                  setField('defaultVariantId', e.currentTarget.value.replace(/\D/g, ''))
+                }
+              />
+
+              <TextInput
+                label="Seed Formula"
+                placeholder="e.g. e{eID}s{sID}g{gID}"
+                value={form.seedFormula}
+                onChange={(e) => setField('seedFormula', e.currentTarget.value)}
+                description="Available tokens: {eID}, {sID}, {gID}, {tSize}"
+              />
+            </FormContainer>
+          </SectionCard>
+
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              type="button"
+              onClick={() => navigate(isEdit ? `/admin/events/${editSlug}` : '/admin/events')}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting}>
+              {isEdit ? 'Save Changes' : 'Create Event'}
+            </Button>
+          </Group>
+        </FormContainer>
+      </form>
+    </Stack>
   );
 }

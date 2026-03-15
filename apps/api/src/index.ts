@@ -9,7 +9,6 @@ import {
   startNotificationDbListener,
 } from './modules/notifications/notifications.ws';
 import { ensureAdminAccessSchema } from './modules/admin-access/admin-access.service';
-import { ensureChallengeBadgeConfigSchema } from './modules/events/event.service';
 
 runMigrations()
   .then(() => {
@@ -20,11 +19,7 @@ runMigrations()
     initNotificationsWebSocketServer(server);
 
     startVariantSyncScheduler();
-    return Promise.all([
-      ensureNotificationsSchema(),
-      ensureAdminAccessSchema(),
-      ensureChallengeBadgeConfigSchema(),
-    ]);
+    return Promise.all([ensureNotificationsSchema(), ensureAdminAccessSchema()]);
   })
   .then(() => startNotificationDbListener())
   .catch((err: unknown) => {

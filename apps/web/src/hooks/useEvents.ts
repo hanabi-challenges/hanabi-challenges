@@ -9,16 +9,23 @@ export type EventSummary = {
   short_description: string | null;
   long_description: string;
   published: boolean;
-  event_format?: 'challenge' | 'tournament' | 'session_ladder';
-  event_status?: 'DORMANT' | 'LIVE' | 'COMPLETE';
-  round_robin_enabled?: boolean;
-  max_teams?: number | null;
-  max_rounds?: number | null;
+  status:
+    | 'ANNOUNCED'
+    | 'UPCOMING'
+    | 'REGISTRATION_OPEN'
+    | 'IN_PROGRESS'
+    | 'LIVE'
+    | 'COMPLETE'
+    | 'DORMANT';
+  registration_mode: 'ACTIVE' | 'PASSIVE';
+  allowed_team_sizes: number[];
+  combined_leaderboard: boolean;
   allow_late_registration: boolean;
   registration_opens_at: string | null;
   registration_cutoff: string | null;
   starts_at: string | null;
   ends_at: string | null;
+  stage_count: number;
 };
 
 type State = {

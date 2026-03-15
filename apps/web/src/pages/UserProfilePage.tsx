@@ -22,9 +22,11 @@ import {
 } from '../features/admin-access/adminAccessApi';
 import { buildSimulatedBadgeDataUri } from '../features/users/badgeSimulation';
 import {
+  fetchUserAwards,
   fetchUserBadges,
   fetchUserEvents,
   fetchUserProfile,
+  type UserAwardRecord,
   type UserBadgeRecord,
   type UserEventRecord,
   type UserProfileRecord,
@@ -47,6 +49,7 @@ export function UserProfilePage() {
   const [profile, setProfile] = useState<UserProfileRecord | null>(null);
   const [events, setEvents] = useState<UserEventRecord[]>([]);
   const [badges, setBadges] = useState<UserBadgeRecord[]>([]);
+  const [awards, setAwards] = useState<UserAwardRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<UserBadgeRecord | null>(null);
@@ -90,15 +93,17 @@ export function UserProfilePage() {
       setError(null);
 
       try {
-        const [profileValue, eventsValue, badgesValue] = await Promise.all([
+        const [profileValue, eventsValue, badgesValue, awardsValue] = await Promise.all([
           fetchUserProfile(username),
           fetchUserEvents(username),
           fetchUserBadges(username),
+          fetchUserAwards(username).catch(() => [] as UserAwardRecord[]),
         ]);
         if (cancelled) return;
         setProfile(profileValue);
         setEvents(eventsValue);
         setBadges(badgesValue);
+        setAwards(awardsValue);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
@@ -230,6 +235,7 @@ export function UserProfilePage() {
           previewEvents={previewEvents}
           badges={badges}
           previewBadges={previewBadges}
+          awards={awards}
           onSelectBadge={setSelectedBadge}
         />
       ) : null}

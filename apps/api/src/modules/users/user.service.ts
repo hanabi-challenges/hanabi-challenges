@@ -34,6 +34,50 @@ export async function getUserIdByDisplayName(displayName: string): Promise<numbe
   return result.rows[0].id as number;
 }
 
+export interface UserAward {
+  id: number;
+  award_id: number;
+  event_id: number;
+  event_name: string;
+  event_slug: string;
+  stage_id: number | null;
+  stage_label: string | null;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  criteria_type: string;
+  granted_at: string;
+}
+
+export async function listUserAwards(userId: number): Promise<UserAward[]> {
+  const result = await pool.query(
+    `
+    SELECT
+      eag.id,
+      eag.award_id,
+      ea.event_id,
+      ev.name AS event_name,
+      ev.slug AS event_slug,
+      ea.stage_id,
+      es.label AS stage_label,
+      ea.name,
+      ea.description,
+      ea.icon,
+      ea.criteria_type,
+      eag.granted_at
+    FROM event_award_grants eag
+    JOIN event_awards ea ON eag.award_id = ea.id
+    JOIN events ev ON ea.event_id = ev.id
+    LEFT JOIN event_stages es ON ea.stage_id = es.id
+    WHERE eag.user_id = $1
+    ORDER BY eag.granted_at DESC, eag.id DESC;
+    `,
+    [userId],
+  );
+
+  return result.rows as UserAward[];
+}
+
 export async function listUserBadges(userId: number): Promise<UserBadge[]> {
   const result = await pool.query(
     `

@@ -3,7 +3,6 @@ import {
   CoreAlert as Alert,
   CoreBadge as Badge,
   CoreButton as Button,
-  CoreCheckbox as Checkbox,
   CoreGroup as Group,
   CoreSelect,
   CoreStack as Stack,
@@ -20,6 +19,11 @@ import { useAuth } from '../../context/AuthContext';
 import { ApiError, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import type { StageSummary } from '../../hooks/useStages';
 import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
+import {
+  ScoringChainEditor,
+  DEFAULT_SCORING_CHAIN,
+  type ScoringChainEntry,
+} from '../../features/admin/components';
 
 type Mechanism = 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
 type TeamPolicy = 'SELF_FORMED' | 'QUEUED';
@@ -28,13 +32,6 @@ type AttemptPolicy = 'SINGLE' | 'REQUIRED_ALL' | 'BEST_OF_N' | 'UNLIMITED_BEST';
 type TimePolicy = 'WINDOW' | 'ROLLING' | 'SCHEDULED';
 type StageScoringMethod = 'sum' | 'best_attempt' | 'win_loss' | 'elo';
 type BracketType = 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION' | 'ROUND_ROBIN';
-
-const TIEBREAKERS: { value: string; label: string }[] = [
-  { value: 'bdr_desc', label: 'BDR (desc)' },
-  { value: 'bdr_asc', label: 'BDR (asc)' },
-  { value: 'turns_remaining_desc', label: 'Turns remaining (desc)' },
-  { value: 'turns_remaining_asc', label: 'Turns remaining (asc)' },
-];
 
 function defaultStageScoringMethod(mechanism: Mechanism): StageScoringMethod {
   switch (mechanism) {
@@ -70,7 +67,7 @@ type FormState = {
   time_policy: TimePolicy;
   bracket_type: BracketType | '';
   match_format_n: string;
-  tiebreakers: Set<string>;
+  scoring_chain: ScoringChainEntry[];
   stage_scoring_method: StageScoringMethod;
   elo_k_factor: string;
   elo_participation_bonus: string;
@@ -114,7 +111,7 @@ export function AdminStageEditorPage() {
     time_policy: 'WINDOW',
     bracket_type: '',
     match_format_n: '1',
-    tiebreakers: new Set(),
+    scoring_chain: DEFAULT_SCORING_CHAIN,
     stage_scoring_method: 'sum',
     elo_k_factor: '32',
     elo_participation_bonus: '0',
@@ -142,7 +139,7 @@ export function AdminStageEditorPage() {
         if (cancelled) return;
 
         const gameScoringConfig = data.game_scoring_config_json as {
-          tiebreakers?: string[];
+          chain?: ScoringChainEntry[];
         } | null;
         const stageScoringConfig = data.stage_scoring_config_json as {
           method?: string;
@@ -168,7 +165,7 @@ export function AdminStageEditorPage() {
           time_policy: data.time_policy,
           bracket_type: (configJson?.bracket_type ?? '') as BracketType | '',
           match_format_n: String(parseMatchFormatN(configJson?.match_format)),
-          tiebreakers: new Set(gameScoringConfig?.tiebreakers ?? []),
+          scoring_chain: gameScoringConfig?.chain ?? DEFAULT_SCORING_CHAIN,
           stage_scoring_method: (stageScoringConfig?.method ??
             defaultStageScoringMethod(data.mechanism)) as StageScoringMethod,
           elo_k_factor: stageScoringConfig?.k_factor?.toString() ?? '32',
@@ -204,15 +201,6 @@ export function AdminStageEditorPage() {
     setFieldErrors((prev) => ({ ...prev, mechanism: undefined }));
   }
 
-  function toggleTiebreaker(value: string) {
-    setForm((prev) => {
-      const next = new Set(prev.tiebreakers);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return { ...prev, tiebreakers: next };
-    });
-  }
-
   function validate(): FieldErrors {
     const errors: FieldErrors = {};
     if (!form.label.trim()) errors.label = 'Label is required.';
@@ -234,9 +222,7 @@ export function AdminStageEditorPage() {
 
     if (!token || !slug) return;
 
-    const tiebreakerArr = TIEBREAKERS.map((t) => t.value).filter((v) => form.tiebreakers.has(v));
-    const game_scoring_config_json =
-      tiebreakerArr.length > 0 ? { primary: 'score', tiebreakers: tiebreakerArr } : {};
+    const game_scoring_config_json = { chain: form.scoring_chain };
 
     const stage_scoring_config_json: Record<string, unknown> = {
       method: form.stage_scoring_method,
@@ -464,19 +450,13 @@ export function AdminStageEditorPage() {
               </Text>
 
               <InputContainer
-                label="Game Score Tiebreakers"
-                helperText="Applied in order when game scores are equal. Leave blank for score-only ranking."
+                label="Game Ranking Chain"
+                helperText="Criteria applied in order to rank teams within each game. Drag to reorder. Observable fields are captured automatically from the replay; User Input fields must be submitted manually."
               >
-                <Group gap="sm">
-                  {TIEBREAKERS.map((tb) => (
-                    <Checkbox
-                      key={tb.value}
-                      label={tb.label}
-                      checked={form.tiebreakers.has(tb.value)}
-                      onChange={() => toggleTiebreaker(tb.value)}
-                    />
-                  ))}
-                </Group>
+                <ScoringChainEditor
+                  value={form.scoring_chain}
+                  onChange={(v) => setField('scoring_chain', v)}
+                />
               </InputContainer>
 
               <CoreSelect

@@ -310,6 +310,7 @@ CREATE TABLE event_game_results (
   zero_reason          TEXT CHECK (zero_reason IN ('Strike Out', 'Time Out', 'VTK')),
   bottom_deck_risk     INTEGER,
   hanabi_live_game_id  BIGINT,
+  started_at           TIMESTAMPTZ,
   played_at            TIMESTAMPTZ DEFAULT NOW(),
   created_at           TIMESTAMPTZ DEFAULT NOW(),
   corrected_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,

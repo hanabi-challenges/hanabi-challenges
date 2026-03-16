@@ -5,6 +5,11 @@ import { getEventAdminRole } from '../events/event-admins.service';
 import { getStage } from './stages.service';
 import { getGameSlot } from './games.service';
 import { submitResult, listResultsForGame } from '../results/results.service';
+import {
+  runReplayValidation,
+  type ReplayValidationError,
+} from '../replay/replay-validation.service';
+import { pool } from '../../config/db';
 
 // Mounted at /api/events/:slug/stages/:stageId/games/:gameId (mergeParams: true)
 // Routes:
@@ -25,6 +30,9 @@ async function resolveContext(
   gameId: number;
   stageGameTeamSize: number | null;
   stageGameMaxScore: number | null;
+  stageGameVariantId: number | null;
+  stageGameSeedPayload: string | null;
+  enforceExactTeamMatch: boolean;
   isAdmin: boolean;
   eventMeta: {
     registration_mode: string;
@@ -74,12 +82,20 @@ async function resolveContext(
   const role = isSuperadmin ? 'SUPERADMIN' : await getEventAdminRole(event.id, userId);
   const isAdmin = role !== null;
 
+  const enforceExactTeamMatch =
+    typeof stage.config_json?.enforce_exact_team_size === 'boolean'
+      ? stage.config_json.enforce_exact_team_size
+      : false;
+
   return {
     eventId: event.id,
     stageId,
     gameId,
     stageGameTeamSize: game.team_size ?? null,
     stageGameMaxScore: game.max_score ?? null,
+    stageGameVariantId: game.variant_id ?? null,
+    stageGameSeedPayload: game.seed_payload ?? null,
+    enforceExactTeamMatch,
     isAdmin,
     eventMeta: {
       registration_mode: event.registration_mode,
@@ -106,6 +122,46 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
     return res.status(400).json({ error: 'score must be >= 0' });
   }
 
+  const teamId = Number(body.team_id);
+  let score: number = body.score;
+  let startedAt: string | null = null;
+  let playedAt: string | null = body.played_at ?? null;
+  const hanabiLiveGameId: number | null = body.hanabi_live_game_id
+    ? Number(body.hanabi_live_game_id)
+    : null;
+
+  if (hanabiLiveGameId !== null) {
+    // Fetch confirmed team member display names for player pool validation
+    const membersResult = await pool.query<{ display_name: string }>(
+      `SELECT u.display_name
+       FROM event_team_members etm
+       JOIN users u ON u.id = etm.user_id
+       WHERE etm.event_team_id = $1 AND etm.confirmed = TRUE`,
+      [teamId],
+    );
+    const teamPlayerPool = membersResult.rows.map((r) => r.display_name);
+
+    const validation = await runReplayValidation({
+      gameId: hanabiLiveGameId,
+      teamPlayerPool,
+      enforceExactTeamMatch: ctx.enforceExactTeamMatch,
+      variantId: ctx.stageGameVariantId,
+      seedPayload: ctx.stageGameSeedPayload,
+    });
+
+    if (!validation.ok) {
+      const err = validation as ReplayValidationError;
+      return res.status(err.status).json({ error: err.message });
+    }
+
+    // Override with authoritative values from hanab.live
+    if (validation.derived.score !== null) {
+      score = validation.derived.score;
+    }
+    startedAt = validation.derived.startedAt;
+    playedAt = validation.derived.playedAt;
+  }
+
   const result = await submitResult(
     {
       eventId: ctx.eventId,
@@ -117,12 +173,13 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
       eventMeta: ctx.eventMeta,
     },
     {
-      teamId: Number(body.team_id),
-      score: body.score,
+      teamId,
+      score,
       zeroReason: body.zero_reason ?? null,
       bottomDeckRisk: body.bottom_deck_risk ?? null,
-      hanabiLiveGameId: body.hanabi_live_game_id ?? null,
-      playedAt: body.played_at ?? null,
+      hanabiLiveGameId,
+      startedAt,
+      playedAt,
       attemptId: body.attempt_id ?? null,
     },
   );

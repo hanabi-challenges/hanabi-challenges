@@ -20,6 +20,7 @@ export type ResultRow = {
   zero_reason: string | null;
   bottom_deck_risk: number | null;
   hanabi_live_game_id: number | null;
+  started_at: Date | null;
   played_at: Date;
   created_at: Date;
   corrected_by: number | null;
@@ -125,6 +126,7 @@ export type SubmitResultInput = {
   zeroReason?: string | null;
   bottomDeckRisk?: number | null;
   hanabiLiveGameId?: number | null;
+  startedAt?: string | null;
   playedAt?: string | null;
   attemptId?: number | null;
 };
@@ -245,8 +247,9 @@ export async function submitResult(
   try {
     const insertResult = await pool.query<{ id: number }>(
       `INSERT INTO event_game_results
-         (event_team_id, stage_game_id, attempt_id, score, zero_reason, bottom_deck_risk, hanabi_live_game_id, played_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()))
+         (event_team_id, stage_game_id, attempt_id, score, zero_reason, bottom_deck_risk,
+          hanabi_live_game_id, started_at, played_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, COALESCE($9::timestamptz, NOW()))
        RETURNING id`,
       [
         input.teamId,
@@ -256,6 +259,7 @@ export async function submitResult(
         input.zeroReason ?? null,
         input.bottomDeckRisk ?? null,
         input.hanabiLiveGameId ?? null,
+        input.startedAt ?? null,
         input.playedAt ?? null,
       ],
     );
@@ -321,6 +325,7 @@ export type UpdateResultInput = {
   zeroReason?: string | null;
   bottomDeckRisk?: number | null;
   hanabiLiveGameId?: number | null;
+  startedAt?: string | null;
   playedAt?: string | null;
   correctedBy: number;
 };
@@ -362,15 +367,17 @@ export async function updateResult(
        zero_reason         = $2,
        bottom_deck_risk    = $3,
        hanabi_live_game_id = $4,
-       played_at           = COALESCE($5::timestamptz, NOW()),
-       corrected_by        = $6,
+       started_at          = $5::timestamptz,
+       played_at           = COALESCE($6::timestamptz, NOW()),
+       corrected_by        = $7,
        corrected_at        = NOW()
-     WHERE id = $7`,
+     WHERE id = $8`,
     [
       newScore,
       newZeroReason ?? null,
       input.bottomDeckRisk !== undefined ? input.bottomDeckRisk : existing.bottom_deck_risk,
       input.hanabiLiveGameId !== undefined ? input.hanabiLiveGameId : existing.hanabi_live_game_id,
+      input.startedAt !== undefined ? input.startedAt : existing.started_at,
       newPlayedAt,
       input.correctedBy,
       resultId,

@@ -15,7 +15,7 @@ import { Link } from '../../mantine';
 import { useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { useAuth } from '../../context/AuthContext';
-import { ApiError, deleteJsonAuth, putJsonAuth } from '../../lib/api';
+import { ApiError, deleteJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import { MaterialIcon } from '../../design-system';
 import { AdminEntityCard } from '../../features/admin/components';
 
@@ -80,6 +80,29 @@ export function AdminEventsIndexPage() {
         setStatusError((err.body as { error?: string })?.error ?? 'Failed to update publish state');
       } else {
         setStatusError('Failed to update publish state');
+      }
+    } finally {
+      setBusyBySlug((prev) => ({ ...prev, [slug]: false }));
+    }
+  }
+
+  async function cloneEvent(slug: string) {
+    if (!token) return;
+    setStatusError(null);
+    setBusyBySlug((prev) => ({ ...prev, [slug]: true }));
+    try {
+      const clone = await postJsonAuth<{ slug: string }>(
+        `/events/${encodeURIComponent(slug)}/clone`,
+        token,
+        {},
+      );
+      refetch();
+      navigate(`/admin/events/${clone.slug}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setStatusError((err.body as { error?: string })?.error ?? 'Failed to clone event');
+      } else {
+        setStatusError('Failed to clone event');
       }
     } finally {
       setBusyBySlug((prev) => ({ ...prev, [slug]: false }));
@@ -174,6 +197,18 @@ export function AdminEventsIndexPage() {
                         disabled={busy}
                       >
                         <MaterialIcon name={event.published ? 'visibility_off' : 'visibility'} />
+                      </ActionIcon>
+                    </Tooltip>
+
+                    <Tooltip label="Clone">
+                      <ActionIcon
+                        variant="subtle"
+                        color="blue"
+                        aria-label="Clone event"
+                        onClick={() => void cloneEvent(event.slug)}
+                        disabled={busy}
+                      >
+                        <MaterialIcon name="content_copy" />
                       </ActionIcon>
                     </Tooltip>
 

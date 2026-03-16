@@ -13,6 +13,7 @@ import {
   updateStage,
   reorderStage,
   deleteStage,
+  cloneStage,
 } from './stages.service';
 import type { CreateStageBody, UpdateStageBody } from './stages.types';
 import gamesRouter from './games.routes';
@@ -234,6 +235,21 @@ router.patch(
     res.json(stage);
   },
 );
+
+// POST /api/events/:slug/stages/:stageId/clone — clone stage (admin)
+router.post('/:stageId/clone', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveEventAndAdminCheck(req, res);
+  if (!ctx) return;
+
+  const stageId = Number(req.params.stageId);
+  if (!Number.isInteger(stageId) || stageId <= 0) {
+    return res.status(400).json({ error: 'Invalid stageId' });
+  }
+
+  const stage = await cloneStage(ctx.eventId, stageId);
+  if (!stage) return res.status(404).json({ error: 'Stage not found' });
+  res.status(201).json(stage);
+});
 
 // DELETE /api/events/:slug/stages/:stageId — delete stage (admin; blocked if results exist)
 router.delete('/:stageId', authRequired, async (req: AuthenticatedRequest, res: Response) => {

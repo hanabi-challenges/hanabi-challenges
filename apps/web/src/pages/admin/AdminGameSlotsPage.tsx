@@ -13,14 +13,8 @@ import {
 } from '../../design-system';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import {
-  ApiError,
-  deleteJsonAuth,
-  getJson,
-  getJsonAuth,
-  postJsonAuth,
-  putJsonAuth,
-} from '../../lib/api';
+import { ApiError, deleteJsonAuth, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
+import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
 
 type GameSlot = {
   id: number;
@@ -30,12 +24,6 @@ type GameSlot = {
   variant_id: number | null;
   seed_payload: string | null;
   max_score: number | null;
-};
-
-type HanabiVariant = {
-  code: number;
-  name: string;
-  label: string;
 };
 
 type EditState = {
@@ -54,7 +42,7 @@ export function AdminGameSlotsPage() {
   const { token } = useAuth();
 
   const [slots, setSlots] = useState<GameSlot[]>([]);
-  const [variants, setVariants] = useState<HanabiVariant[]>([]);
+  const { variants } = useVariants();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -90,16 +78,12 @@ export function AdminGameSlotsPage() {
       setLoading(true);
       setLoadError(null);
       try {
-        const [slotsData, variantsData] = await Promise.all([
-          getJsonAuth<GameSlot[]>(
-            `/events/${encodeURIComponent(slug!)}/stages/${stageId}/games`,
-            token as string,
-          ),
-          getJson<{ variants: HanabiVariant[] }>('/variants'),
-        ]);
+        const slotsData = await getJsonAuth<GameSlot[]>(
+          `/events/${encodeURIComponent(slug!)}/stages/${stageId}/games`,
+          token as string,
+        );
         if (!cancelled) {
           setSlots(slotsData);
-          setVariants(variantsData.variants);
           setLoading(false);
         }
       } catch {
@@ -116,15 +100,12 @@ export function AdminGameSlotsPage() {
     };
   }, [slug, stageId, token, version]);
 
-  const variantOptions = [
-    { value: '', label: 'None' },
-    ...variants.map((v) => ({ value: String(v.code), label: `${v.code} — ${v.name}` })),
-  ];
+  const variantOptions = variantSelectOptions(variants);
 
   function variantLabel(variantId: number | null): string {
     if (variantId === null) return '—';
     const v = variants.find((x) => x.code === variantId);
-    return v ? `${v.code} — ${v.name}` : String(variantId);
+    return v ? v.name : String(variantId);
   }
 
   function startEdit(slot: GameSlot) {
@@ -166,6 +147,24 @@ export function AdminGameSlotsPage() {
       );
     } finally {
       setEditBusy(false);
+    }
+  }
+
+  async function handleClone(slotId: number) {
+    if (!token || !slug || !stageId) return;
+    try {
+      await postJsonAuth(
+        `/events/${encodeURIComponent(slug)}/stages/${stageId}/games/${slotId}/clone`,
+        token,
+        {},
+      );
+      setVersion((v) => v + 1);
+    } catch (err) {
+      setEditError(
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? 'Failed to clone slot.')
+          : 'Failed to clone slot.',
+      );
     }
   }
 
@@ -316,7 +315,7 @@ export function AdminGameSlotsPage() {
               <Text size="xs" fw={600} style={{ width: 90 }}>
                 Max score
               </Text>
-              <Text size="xs" fw={600} style={{ width: 130 }}>
+              <Text size="xs" fw={600} style={{ width: 190 }}>
                 Actions
               </Text>
             </Group>
@@ -367,7 +366,7 @@ export function AdminGameSlotsPage() {
                           size="xs"
                         />
                       </div>
-                      <Group gap={4} style={{ width: 130 }}>
+                      <Group gap={4} style={{ width: 190 }}>
                         <Button size="xs" loading={editBusy} onClick={() => void saveEdit(slot.id)}>
                           Save
                         </Button>
@@ -399,7 +398,7 @@ export function AdminGameSlotsPage() {
                       >
                         {slot.max_score ?? '—'}
                       </Text>
-                      <Group gap={4} style={{ width: 130 }}>
+                      <Group gap={4} style={{ width: 190 }}>
                         <Button
                           size="xs"
                           variant="default"
@@ -407,6 +406,14 @@ export function AdminGameSlotsPage() {
                           onClick={() => startEdit(slot)}
                         >
                           Edit
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="default"
+                          disabled={editingId !== null}
+                          onClick={() => void handleClone(slot.id)}
+                        >
+                          Clone
                         </Button>
                         <Button
                           size="xs"

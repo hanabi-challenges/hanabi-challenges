@@ -19,6 +19,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import type { StageSummary } from '../../hooks/useStages';
+import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
 
 type Mechanism = 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
 type TeamPolicy = 'SELF_FORMED' | 'QUEUED';
@@ -68,6 +69,7 @@ type FormState = {
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
   bracket_type: BracketType | '';
+  match_format_n: string;
   tiebreakers: Set<string>;
   stage_scoring_method: StageScoringMethod;
   elo_k_factor: string;
@@ -79,6 +81,13 @@ type FormState = {
 };
 
 type FieldErrors = Partial<Record<keyof FormState, string>>;
+
+// "best_of_3" → 3, undefined/null → 1
+function parseMatchFormatN(matchFormat: string | undefined | null): number {
+  if (!matchFormat) return 1;
+  const m = matchFormat.match(/^best_of_(\d+)$/);
+  return m ? parseInt(m[1], 10) : 1;
+}
 
 function isoToDate(iso: string | Date | null): string {
   if (!iso) return '';
@@ -104,6 +113,7 @@ export function AdminStageEditorPage() {
     attempt_policy: 'SINGLE',
     time_policy: 'WINDOW',
     bracket_type: '',
+    match_format_n: '1',
     tiebreakers: new Set(),
     stage_scoring_method: 'sum',
     elo_k_factor: '32',
@@ -113,6 +123,7 @@ export function AdminStageEditorPage() {
     starts_at: '',
     ends_at: '',
   });
+  const { variants } = useVariants();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -138,7 +149,10 @@ export function AdminStageEditorPage() {
           k_factor?: number;
           participation_bonus?: number;
         } | null;
-        const configJson = data.config_json as { bracket_type?: string } | null;
+        const configJson = data.config_json as {
+          bracket_type?: string;
+          match_format?: string;
+        } | null;
         const variantRule = data.variant_rule_json as {
           type?: string;
           variantId?: number;
@@ -153,6 +167,7 @@ export function AdminStageEditorPage() {
           attempt_policy: data.attempt_policy,
           time_policy: data.time_policy,
           bracket_type: (configJson?.bracket_type ?? '') as BracketType | '',
+          match_format_n: String(parseMatchFormatN(configJson?.match_format)),
           tiebreakers: new Set(gameScoringConfig?.tiebreakers ?? []),
           stage_scoring_method: (stageScoringConfig?.method ??
             defaultStageScoringMethod(data.mechanism)) as StageScoringMethod,
@@ -235,6 +250,8 @@ export function AdminStageEditorPage() {
     const config_json: Record<string, unknown> = {};
     if (form.mechanism === 'MATCH_PLAY' && form.bracket_type) {
       config_json.bracket_type = form.bracket_type;
+      const n = parseInt(form.match_format_n, 10);
+      config_json.match_format = `best_of_${Number.isFinite(n) && n >= 1 ? n : 1}`;
     }
 
     const body: Record<string, unknown> = {
@@ -383,19 +400,32 @@ export function AdminStageEditorPage() {
               ) : null}
 
               {showBracketConfig ? (
-                <CoreSelect
-                  label="Bracket Type"
-                  value={form.bracket_type}
-                  onChange={(v) => setField('bracket_type', (v ?? '') as BracketType | '')}
-                  error={fieldErrors.bracket_type}
-                  data={[
-                    { value: 'SINGLE_ELIMINATION', label: 'Single Elimination' },
-                    { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination' },
-                    { value: 'ROUND_ROBIN', label: 'Round Robin' },
-                  ]}
-                  placeholder="Select bracket type"
-                  required
-                />
+                <>
+                  <CoreSelect
+                    label="Bracket Type"
+                    value={form.bracket_type}
+                    onChange={(v) => setField('bracket_type', (v ?? '') as BracketType | '')}
+                    error={fieldErrors.bracket_type}
+                    data={[
+                      { value: 'SINGLE_ELIMINATION', label: 'Single Elimination' },
+                      { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination' },
+                      { value: 'ROUND_ROBIN', label: 'Round Robin' },
+                    ]}
+                    placeholder="Select bracket type"
+                    required
+                  />
+                  <TextInput
+                    label="Best of N"
+                    description="Number of games per match (must be odd). e.g. 1, 3, 5."
+                    placeholder="1"
+                    value={form.match_format_n}
+                    onChange={(e) =>
+                      setField('match_format_n', e.currentTarget.value.replace(/\D/g, ''))
+                    }
+                    error={fieldErrors.match_format_n}
+                    style={{ maxWidth: 120 }}
+                  />
+                </>
               ) : null}
 
               {isEdit ? (
@@ -493,13 +523,12 @@ export function AdminStageEditorPage() {
                 These values propagate to new game slots unless overridden at the game level.
               </Text>
 
-              <TextInput
-                label="Default Variant ID"
-                placeholder="e.g. 6"
+              <CoreSelect
+                label="Default Variant"
+                placeholder="Search variants…"
                 value={form.defaultVariantId}
-                onChange={(e) =>
-                  setField('defaultVariantId', e.currentTarget.value.replace(/\D/g, ''))
-                }
+                onChange={(v) => setField('defaultVariantId', v ?? '')}
+                data={variantSelectOptions(variants)}
               />
 
               <TextInput

@@ -94,6 +94,28 @@ export async function createGameSlotsBatch(
   return { created, duplicates };
 }
 
+export async function cloneGameSlot(
+  stageId: number,
+  gameId: number,
+): Promise<GameSlot | 'not_found' | 'duplicate'> {
+  const source = await getGameSlot(stageId, gameId);
+  if (!source) return 'not_found';
+
+  const maxResult = await pool.query<{ max: number | null }>(
+    `SELECT MAX(game_index) AS max FROM event_stage_games WHERE stage_id = $1 AND (team_size = $2 OR (team_size IS NULL AND $2 IS NULL))`,
+    [stageId, source.team_size],
+  );
+  const nextIndex = (maxResult.rows[0].max ?? -1) + 1;
+
+  return createGameSlot(stageId, {
+    game_index: nextIndex,
+    team_size: source.team_size,
+    variant_id: source.variant_id,
+    seed_payload: source.seed_payload,
+    max_score: source.max_score,
+  });
+}
+
 export async function updateGameSlot(
   stageId: number,
   gameId: number,

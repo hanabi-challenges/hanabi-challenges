@@ -13,6 +13,7 @@ import {
   updateEvent,
   togglePublished,
   deleteEvent,
+  cloneEvent,
 } from './events.service';
 import type { CreateEventBody, UpdateEventBody } from './events.types';
 import eventAdminsRouter from './event-admins.routes';
@@ -115,6 +116,23 @@ router.patch(
     const event = await togglePublished(slug);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     res.json(event);
+  },
+);
+
+// POST /api/events/:slug/clone — clone event as a draft (admin)
+router.post(
+  '/:slug/clone',
+  authRequired,
+  requireAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const slug = String(req.params.slug);
+    const result = await cloneEvent(slug, req.user!.userId);
+    if (result === 'not_found') return res.status(404).json({ error: 'Event not found' });
+    if (result === 'slug_taken')
+      return res
+        .status(409)
+        .json({ error: `Slug "${slug}-copy" is already taken. Rename the original first.` });
+    res.status(201).json(result);
   },
 );
 

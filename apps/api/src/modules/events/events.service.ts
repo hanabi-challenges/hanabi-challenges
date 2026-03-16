@@ -180,3 +180,59 @@ export async function deleteEvent(slug: string): Promise<boolean> {
   const result = await pool.query(`DELETE FROM events WHERE slug = $1`, [slug]);
   return (result.rowCount ?? 0) > 0;
 }
+
+export async function cloneEvent(
+  slug: string,
+  createdBy: number,
+): Promise<EventResponse | 'not_found' | 'slug_taken'> {
+  const source = await getEventBySlug(slug, true);
+  if (!source) return 'not_found';
+
+  const newSlug = `${source.slug}-copy`;
+  const newName = `${source.name} (Copy)`;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<EventRow>(
+      `INSERT INTO events (
+         slug, name, short_description, long_description,
+         published, registration_mode, allowed_team_sizes, combined_leaderboard,
+         variant_rule_json, seed_rule_json, aggregate_config_json,
+         registration_opens_at, registration_cutoff, allow_late_registration
+       ) VALUES ($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING *`,
+      [
+        newSlug,
+        newName,
+        source.short_description ?? null,
+        source.long_description,
+        source.registration_mode,
+        source.allowed_team_sizes,
+        source.combined_leaderboard,
+        source.variant_rule_json ?? null,
+        source.seed_rule_json ?? null,
+        source.aggregate_config_json ?? null,
+        source.registration_opens_at ?? null,
+        source.registration_cutoff ?? null,
+        source.allow_late_registration,
+      ],
+    );
+    const event = result.rows[0];
+    await client.query(
+      `INSERT INTO event_admins (event_id, user_id, role, granted_by) VALUES ($1, $2, 'OWNER', NULL)`,
+      [event.id, createdBy],
+    );
+    await client.query('COMMIT');
+    const row = event as EventWithStagesRow;
+    row.stages = [];
+    return formatEvent(row);
+  } catch (err: unknown) {
+    await client.query('ROLLBACK');
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('unique') || msg.includes('duplicate')) return 'slug_taken';
+    throw err;
+  } finally {
+    client.release();
+  }
+}

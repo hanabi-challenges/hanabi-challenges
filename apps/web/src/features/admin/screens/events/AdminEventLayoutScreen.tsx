@@ -1,6 +1,4 @@
 import {
-  Breadcrumbs,
-  CoreBox as Box,
   CoreDivider as Divider,
   CoreStack as Stack,
   CoreText as Text,
@@ -38,12 +36,9 @@ export function AdminEventLayoutScreen() {
 
   return (
     <Stack gap="md">
-      <Box>
-        <Breadcrumbs items={[{ label: 'Events', href: '/admin/events' }, { label: slug ?? '' }]} />
-        <Text fw={700} size="lg" mt={4}>
-          {slug}
-        </Text>
-      </Box>
+      <Text fw={700} size="lg">
+        {slug}
+      </Text>
       <Tabs items={tabItems} />
       <Divider />
       <Outlet />

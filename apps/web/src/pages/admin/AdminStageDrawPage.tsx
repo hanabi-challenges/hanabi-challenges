@@ -264,7 +264,6 @@ export function AdminStageDrawPage() {
   }
 
   const drawConfirmed = confirmedTeams.length > 0;
-  const soloOptIns = optIns.filter((o) => o.partner_user_id === null || !o.partner_confirmed);
   const pairedOptIns = optIns.filter((o) => o.partner_confirmed);
 
   return (
@@ -293,11 +292,6 @@ export function AdminStageDrawPage() {
                 {pairedOptIns.length / 2 !== 1 ? 's' : ''}
               </Badge>
             ) : null}
-            {soloOptIns.length > 0 ? (
-              <Badge color="blue" variant="light" size="sm">
-                {soloOptIns.length} solo
-              </Badge>
-            ) : null}
           </Group>
 
           {optIns.length === 0 ? (
@@ -317,11 +311,7 @@ export function AdminStageDrawPage() {
                     Partner: {o.partner_display_name}
                     {o.partner_confirmed ? ' ✓' : ' (pending)'}
                   </Badge>
-                ) : (
-                  <Badge variant="outline" color="gray" size="xs">
-                    Solo queue
-                  </Badge>
-                )}
+                ) : null}
               </Group>
             ))
           )}

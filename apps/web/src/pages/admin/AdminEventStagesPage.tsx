@@ -120,6 +120,24 @@ export function AdminEventStagesPage() {
     }
   }
 
+  async function handleCloneStage(stageId: number) {
+    if (!token || !slug) return;
+    setStageBusy(stageId);
+    setActionError(null);
+    try {
+      await postJsonAuth(`/events/${encodeURIComponent(slug)}/stages/${stageId}/clone`, token, {});
+      refetchStages();
+    } catch (err) {
+      setActionError(
+        err instanceof ApiError
+          ? ((err.body as { error?: string })?.error ?? 'Failed to clone stage.')
+          : 'Failed to clone stage.',
+      );
+    } finally {
+      setStageBusy(null);
+    }
+  }
+
   async function handleDeleteStage(stageId: number) {
     if (!token || !slug) return;
     if (!confirm('Delete this stage? This cannot be undone.')) return;
@@ -325,6 +343,14 @@ export function AdminEventStagesPage() {
                   onClick={() => navigate(`/admin/events/${slug}/stages/${stage.id}/games`)}
                 >
                   Slots
+                </Button>
+                <Button
+                  variant="default"
+                  size="xs"
+                  disabled={stageBusy === stage.id}
+                  onClick={() => void handleCloneStage(stage.id)}
+                >
+                  Clone
                 </Button>
                 <Button
                   variant="default"

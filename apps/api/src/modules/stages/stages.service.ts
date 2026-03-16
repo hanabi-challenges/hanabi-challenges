@@ -215,6 +215,27 @@ export async function deleteStage(
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function cloneStage(eventId: number, stageId: number): Promise<StageResponse | null> {
+  const source = await getStage(eventId, stageId);
+  if (!source) return null;
+
+  return createStage(eventId, {
+    label: `${source.label} (Copy)`,
+    mechanism: source.mechanism,
+    team_policy: source.team_policy,
+    team_scope: source.team_scope,
+    attempt_policy: source.attempt_policy,
+    time_policy: source.time_policy,
+    game_scoring_config_json: source.game_scoring_config_json,
+    stage_scoring_config_json: source.stage_scoring_config_json,
+    variant_rule_json: source.variant_rule_json,
+    seed_rule_json: source.seed_rule_json,
+    config_json: source.config_json,
+    starts_at: null,
+    ends_at: null,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Propagation (T-010)
 // ---------------------------------------------------------------------------

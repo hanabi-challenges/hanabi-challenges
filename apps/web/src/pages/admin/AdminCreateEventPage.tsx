@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   CoreAlert as Alert,
   CoreButton as Button,
-  CoreCheckbox as Checkbox,
   CoreGroup as Group,
+  CoreSelect,
   CoreStack as Stack,
   CoreSwitch as Switch,
   CoreText as Text,
@@ -13,12 +13,14 @@ import {
   FormContainer,
   InputContainer,
   PageHeader,
+  RadioGroup,
   SectionCard,
 } from '../../design-system';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import type { EventSummary } from '../../hooks/useEvents';
+import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
 
 const TEAM_SIZES = [2, 3, 4, 5, 6] as const;
 
@@ -77,6 +79,7 @@ export function AdminCreateEventPage() {
     defaultVariantId: '',
     seedFormula: '',
   });
+  const { variants } = useVariants();
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -320,21 +323,15 @@ export function AdminCreateEventPage() {
           {/* Registration */}
           <SectionCard>
             <FormContainer>
-              <InputContainer label="Registration Mode">
-                <Group gap="md">
-                  {(['ACTIVE', 'PASSIVE'] as const).map((mode) => (
-                    <Checkbox
-                      key={mode}
-                      type="radio"
-                      label={
-                        mode === 'ACTIVE' ? 'Active (sign-up required)' : 'Passive (open to all)'
-                      }
-                      checked={form.registrationMode === mode}
-                      onChange={() => setField('registrationMode', mode)}
-                    />
-                  ))}
-                </Group>
-              </InputContainer>
+              <RadioGroup
+                label="Registration Mode"
+                value={form.registrationMode}
+                onChange={(v) => setField('registrationMode', v as 'ACTIVE' | 'PASSIVE')}
+                options={[
+                  { value: 'ACTIVE', label: 'Active (sign-up required)' },
+                  { value: 'PASSIVE', label: 'Passive (open to all)' },
+                ]}
+              />
 
               <Switch
                 label="Allow Late Registration"
@@ -369,13 +366,12 @@ export function AdminCreateEventPage() {
                 level.
               </Text>
 
-              <TextInput
-                label="Default Variant ID"
-                placeholder="e.g. 6"
+              <CoreSelect
+                label="Default Variant"
+                placeholder="Search variants…"
                 value={form.defaultVariantId}
-                onChange={(e) =>
-                  setField('defaultVariantId', e.currentTarget.value.replace(/\D/g, ''))
-                }
+                onChange={(v) => setField('defaultVariantId', v ?? '')}
+                data={variantSelectOptions(variants)}
               />
 
               <TextInput

@@ -14,6 +14,7 @@ import {
   createGameSlotsBatch,
   updateGameSlot,
   deleteGameSlot,
+  cloneGameSlot,
   propagateGames,
   type CreateGameSlotBody,
   type UpdateGameSlotBody,
@@ -177,6 +178,22 @@ router.put('/:gameId', authRequired, async (req: AuthenticatedRequest, res: Resp
   const updated = await updateGameSlot(ctx.stageId, gameId, body);
   if (!updated) return res.status(404).json({ error: 'Game slot not found' });
   res.json(updated);
+});
+
+// POST /api/events/:slug/stages/:stageId/games/:gameId/clone
+router.post('/:gameId/clone', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveStageAndAdminCheck(req, res, true);
+  if (!ctx) return;
+
+  const gameId = Number(req.params.gameId);
+  if (!Number.isInteger(gameId) || gameId <= 0) {
+    return res.status(400).json({ error: 'Invalid gameId' });
+  }
+
+  const result = await cloneGameSlot(ctx.stageId, gameId);
+  if (result === 'not_found') return res.status(404).json({ error: 'Game slot not found' });
+  if (result === 'duplicate') return res.status(409).json({ error: 'Duplicate game slot' });
+  res.status(201).json(result);
 });
 
 // DELETE /api/events/:slug/stages/:stageId/games/:gameId

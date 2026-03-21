@@ -130,9 +130,10 @@ export async function getSeededLeaderboard(stageId: number): Promise<SeededLeade
     game_scoring_config_json: GameScoringConfig;
     stage_scoring_config_json: StageScoringConfig;
     combined_leaderboard: boolean;
+    group_id: number | null;
   }>(
     `SELECT es.mechanism, es.game_scoring_config_json, es.stage_scoring_config_json,
-            e.combined_leaderboard
+            e.combined_leaderboard, es.group_id
      FROM event_stages es
      JOIN events e ON e.id = es.event_id
      WHERE es.id = $1`,
@@ -146,6 +147,10 @@ export async function getSeededLeaderboard(stageId: number): Promise<SeededLeade
   const method = stageConfig.method ?? 'sum';
   const tiebreakers: Tiebreaker[] = gameConfig.tiebreakers ?? [];
   const combined = stage.combined_leaderboard;
+  // ELO scope: use group_id when the stage belongs to a group, stage_id otherwise
+  const eloScopeCol = stage.group_id !== null ? 'group_id' : 'stage_id';
+  const eloScopeVal = stage.group_id ?? stageId;
+  const eloScopeFilter = stage.group_id !== null ? 'stage_id IS NULL' : 'group_id IS NULL';
 
   // Fetch all game results for this stage's games
   const resultsResult = await pool.query<{
@@ -216,8 +221,9 @@ export async function getSeededLeaderboard(stageId: number): Promise<SeededLeade
     );
     if (allMemberIds.length > 0) {
       const eloRes = await pool.query<{ user_id: number; rating: string }>(
-        `SELECT user_id, rating FROM event_player_ratings WHERE stage_id = $1 AND user_id = ANY($2)`,
-        [stageId, allMemberIds],
+        `SELECT user_id, rating FROM event_player_ratings
+         WHERE ${eloScopeCol} = $1 AND ${eloScopeFilter} AND user_id = ANY($2)`,
+        [eloScopeVal, allMemberIds],
       );
       const eloByUser = new Map<number, number>();
       for (const r of eloRes.rows) eloByUser.set(r.user_id, Number(r.rating));
@@ -800,6 +806,183 @@ export async function getMatchPlayStandings(stageId: number): Promise<MatchPlayS
 }
 
 // ---------------------------------------------------------------------------
+// Group leaderboard (ADR 0005)
+// ---------------------------------------------------------------------------
+
+type GroupScoringConfig = {
+  method?: 'sum' | 'best_of_n';
+  n?: number;
+  absent_score_policy?: 'null_as_zero' | 'exclude';
+};
+
+export type GroupStageScore = {
+  stage_id: number;
+  stage_label: string;
+  score: number | null;
+};
+
+export type GroupLeaderboardEntry = {
+  rank: number;
+  team: {
+    id: number;
+    display_name: string;
+    members: LeaderboardMember[];
+  };
+  group_score: number;
+  stage_scores: GroupStageScore[];
+};
+
+export type GroupLeaderboard = {
+  group_id: number;
+  label: string;
+  entries: GroupLeaderboardEntry[];
+};
+
+export async function getGroupLeaderboard(groupId: number): Promise<GroupLeaderboard | null> {
+  const groupResult = await pool.query<{
+    id: number;
+    label: string;
+    scoring_config_json: GroupScoringConfig;
+  }>(`SELECT id, label, scoring_config_json FROM event_stage_groups WHERE id = $1`, [groupId]);
+  if (groupResult.rowCount === 0) return null;
+
+  const group = groupResult.rows[0];
+  const config: GroupScoringConfig = group.scoring_config_json ?? {};
+  const method = config.method ?? 'sum';
+  const n = config.n ?? 0;
+  const absentPolicy = config.absent_score_policy ?? 'null_as_zero';
+
+  const stagesResult = await pool.query<{ id: number; label: string; mechanism: string }>(
+    `SELECT id, label, mechanism FROM event_stages WHERE group_id = $1 ORDER BY stage_index`,
+    [groupId],
+  );
+  if (stagesResult.rows.length === 0) {
+    return { group_id: groupId, label: group.label, entries: [] };
+  }
+
+  // Collect per-team stage scores across all member stages
+  type TeamAccum = {
+    display_name: string;
+    members: LeaderboardMember[];
+    stage_scores: Map<number, number>;
+  };
+  const teamData = new Map<number, TeamAccum>();
+
+  for (const stage of stagesResult.rows) {
+    type Entry = {
+      team_id: number;
+      display_name: string;
+      members: LeaderboardMember[];
+      score: number;
+    };
+    const entries: Entry[] = [];
+
+    if (stage.mechanism === 'SEEDED_LEADERBOARD') {
+      const lb = await getSeededLeaderboard(stage.id);
+      if (lb) {
+        for (const e of lb.entries) {
+          entries.push({
+            team_id: e.team.id,
+            display_name: e.team.display_name,
+            members: e.team.members,
+            score: e.stage_score,
+          });
+        }
+      }
+    } else if (stage.mechanism === 'GAUNTLET') {
+      const lb = await getGauntletLeaderboard(stage.id);
+      if (lb) {
+        for (const e of lb.entries) {
+          if (e.dnf || e.stage_score === null) continue;
+          entries.push({
+            team_id: e.team.id,
+            display_name: e.team.display_name,
+            members: e.team.members,
+            score: e.stage_score,
+          });
+        }
+      }
+    }
+
+    for (const e of entries) {
+      if (!teamData.has(e.team_id)) {
+        teamData.set(e.team_id, {
+          display_name: e.display_name,
+          members: e.members,
+          stage_scores: new Map(),
+        });
+      }
+      teamData.get(e.team_id)!.stage_scores.set(stage.id, e.score);
+    }
+  }
+
+  if (teamData.size === 0) {
+    return { group_id: groupId, label: group.label, entries: [] };
+  }
+
+  type Ranked = {
+    team_id: number;
+    display_name: string;
+    members: LeaderboardMember[];
+    group_score: number;
+    stage_scores: GroupStageScore[];
+  };
+  const ranked: Ranked[] = [];
+
+  for (const [teamId, data] of teamData) {
+    const stageScoresList: GroupStageScore[] = [];
+    const numericScores: number[] = [];
+
+    for (const stage of stagesResult.rows) {
+      const score = data.stage_scores.get(stage.id) ?? null;
+      stageScoresList.push({ stage_id: stage.id, stage_label: stage.label, score });
+      if (score !== null) {
+        numericScores.push(score);
+      } else if (absentPolicy === 'null_as_zero') {
+        numericScores.push(0);
+      }
+      // absent_policy === 'exclude': absent stages are simply omitted
+    }
+
+    let groupScore = 0;
+    if (method === 'sum') {
+      groupScore = numericScores.reduce((acc, s) => acc + s, 0);
+    } else if (method === 'best_of_n') {
+      const sorted = [...numericScores].sort((a, b) => b - a);
+      const take = n > 0 ? n : sorted.length;
+      groupScore = sorted.slice(0, take).reduce((acc, s) => acc + s, 0);
+    }
+
+    ranked.push({
+      team_id: teamId,
+      display_name: data.display_name,
+      members: data.members,
+      group_score: groupScore,
+      stage_scores: stageScoresList,
+    });
+  }
+
+  ranked.sort((a, b) => b.group_score - a.group_score);
+
+  const entries: GroupLeaderboardEntry[] = [];
+  let rank = 1;
+  for (let i = 0; i < ranked.length; i++) {
+    if (i > 0 && ranked[i].group_score !== ranked[i - 1].group_score) {
+      rank = i + 1;
+    }
+    const r = ranked[i];
+    entries.push({
+      rank,
+      team: { id: r.team_id, display_name: r.display_name, members: r.members },
+      group_score: r.group_score,
+      stage_scores: r.stage_scores,
+    });
+  }
+
+  return { group_id: groupId, label: group.label, entries };
+}
+
+// ---------------------------------------------------------------------------
 // Aggregate event leaderboard types
 // ---------------------------------------------------------------------------
 
@@ -817,23 +1000,29 @@ export type PlayerStageScore = {
 
 export type AggregateLeaderboardEntry = {
   rank: number;
-  user: { id: number; display_name: string };
+  team: { id: number; display_name: string; members: { user_id: number; display_name: string }[] };
   total_score: number;
   stage_scores: PlayerStageScore[];
+};
+
+export type AggregateTrack = {
+  team_size: number | null; // null = combined (all sizes together)
+  entries: AggregateLeaderboardEntry[];
 };
 
 // ---------------------------------------------------------------------------
 // Pure aggregate computation (exported for unit tests)
 // ---------------------------------------------------------------------------
 
-export type PlayerContribution = {
-  user_id: number;
-  display_name: string;
+export type TeamContribution = {
+  team_id: number;
+  team_display_name: string;
+  members: { user_id: number; display_name: string }[];
   contributions: { stage_id: number; stage_label: string; score: number; rank: number | null }[];
 };
 
 export function computeAggregateRankings(
-  players: PlayerContribution[],
+  teams: TeamContribution[],
   config: AggregateConfig,
 ): AggregateLeaderboardEntry[] {
   const method = config.method ?? 'sum';
@@ -841,14 +1030,15 @@ export function computeAggregateRankings(
   const pointsMap = config.points_map ?? [];
 
   const withTotals: Array<{
-    user_id: number;
-    display_name: string;
+    team_id: number;
+    team_display_name: string;
+    members: { user_id: number; display_name: string }[];
     total_score: number;
     stage_scores: PlayerStageScore[];
   }> = [];
 
-  for (const player of players) {
-    const stageScores: PlayerStageScore[] = player.contributions.map((c) => ({
+  for (const team of teams) {
+    const stageScores: PlayerStageScore[] = team.contributions.map((c) => ({
       stage_id: c.stage_id,
       stage_label: c.stage_label,
       score: c.score,
@@ -862,7 +1052,7 @@ export function computeAggregateRankings(
       const sorted = [...stageScores].sort((a, b) => b.score - a.score);
       total = sorted.slice(0, n).reduce((acc, s) => acc + s.score, 0);
     } else if (method === 'rank_points') {
-      for (const c of player.contributions) {
+      for (const c of team.contributions) {
         if (c.rank !== null && c.rank >= 1) {
           total += pointsMap[c.rank - 1] ?? 0;
         }
@@ -870,32 +1060,33 @@ export function computeAggregateRankings(
     }
 
     withTotals.push({
-      user_id: player.user_id,
-      display_name: player.display_name,
+      team_id: team.team_id,
+      team_display_name: team.team_display_name,
+      members: team.members,
       total_score: total,
       stage_scores: stageScores,
     });
   }
 
-  // Exclude players with total_score === 0 if they have no contributions
-  const participants = withTotals.filter((p) => p.stage_scores.length > 0);
+  // Exclude teams with no contributions
+  const participants = withTotals.filter((t) => t.stage_scores.length > 0);
 
   // Sort by total_score descending
   const sorted = [...participants].sort((a, b) => b.total_score - a.total_score);
 
-  // Assign ranks (tied players get same rank)
+  // Assign ranks (tied teams get same rank)
   const entries: AggregateLeaderboardEntry[] = [];
   let rank = 1;
   for (let i = 0; i < sorted.length; i++) {
     if (i > 0 && sorted[i].total_score !== sorted[i - 1].total_score) {
       rank = i + 1;
     }
-    const p = sorted[i];
+    const t = sorted[i];
     entries.push({
       rank,
-      user: { id: p.user_id, display_name: p.display_name },
-      total_score: p.total_score,
-      stage_scores: p.stage_scores,
+      team: { id: t.team_id, display_name: t.team_display_name, members: t.members },
+      total_score: t.total_score,
+      stage_scores: t.stage_scores,
     });
   }
 
@@ -906,14 +1097,13 @@ export function computeAggregateRankings(
 // DB-backed aggregate service
 // ---------------------------------------------------------------------------
 
-export async function getEventAggregate(
-  eventId: number,
-): Promise<AggregateLeaderboardEntry[] | null> {
+export async function getEventAggregate(eventId: number): Promise<AggregateTrack[] | null> {
   // Get event + aggregate config
   const eventResult = await pool.query<{
     id: number;
     aggregate_config_json: AggregateConfig | null;
-  }>(`SELECT id, aggregate_config_json FROM events WHERE id = $1`, [eventId]);
+    combined_leaderboard: boolean;
+  }>(`SELECT id, aggregate_config_json, combined_leaderboard FROM events WHERE id = $1`, [eventId]);
   if (eventResult.rowCount === 0) return null;
 
   const aggregateConfig: AggregateConfig = eventResult.rows[0].aggregate_config_json ?? {
@@ -931,33 +1121,46 @@ export async function getEventAggregate(
 
   if (stagesResult.rows.length === 0) return [];
 
-  // Build per-player contribution map: userId → {display_name, contributions[]}
-  const playerMap = new Map<
-    number,
-    {
-      display_name: string;
-      contributions: {
-        stage_id: number;
-        stage_label: string;
-        score: number;
-        rank: number | null;
-      }[];
-    }
-  >();
+  const combinedLeaderboard = eventResult.rows[0].combined_leaderboard;
 
-  function addContribution(
-    userId: number,
-    displayName: string,
+  // sizeMap: team_size (or null for MATCH_PLAY/combined) → teamMap keyed by team_id
+  type ContributionEntry = {
+    stage_id: number;
+    stage_label: string;
+    score: number;
+    rank: number | null;
+  };
+  type TeamData = {
+    display_name: string;
+    members: { user_id: number; display_name: string }[];
+    contributions: ContributionEntry[];
+  };
+  const sizeMap = new Map<number | null, Map<number, TeamData>>();
+
+  function getOrCreateTeamMap(size: number | null): Map<number, TeamData> {
+    if (!sizeMap.has(size)) sizeMap.set(size, new Map());
+    return sizeMap.get(size)!;
+  }
+
+  function addTeamContribution(
+    teamId: number,
+    teamDisplayName: string,
+    members: { user_id: number; display_name: string }[],
     stageId: number,
     stageLabel: string,
     score: number,
     rank: number | null,
+    teamSize: number | null,
   ) {
-    if (!playerMap.has(userId)) {
-      playerMap.set(userId, { display_name: displayName, contributions: [] });
+    // For combined events, collapse all sizes into a single null track.
+    // For per-size events, keep separate tracks per team_size.
+    const key = combinedLeaderboard ? null : teamSize;
+    const teamMap = getOrCreateTeamMap(key);
+    if (!teamMap.has(teamId)) {
+      teamMap.set(teamId, { display_name: teamDisplayName, members, contributions: [] });
     }
-    playerMap
-      .get(userId)!
+    teamMap
+      .get(teamId)!
       .contributions.push({ stage_id: stageId, stage_label: stageLabel, score, rank });
   }
 
@@ -965,59 +1168,121 @@ export async function getEventAggregate(
     if (stage.mechanism === 'SEEDED_LEADERBOARD') {
       const lb = await getSeededLeaderboard(stage.id);
       if (!lb) continue;
+
+      // Fetch effective_max_score per game_index — uses the same variant hierarchy
+      // as games.service (explicit override → game variant → stage variant → event variant).
+      const maxScoreResult = await pool.query<{
+        game_index: number;
+        effective_max_score: number | null;
+      }>(
+        `SELECT esg.game_index,
+                COALESCE(
+                  esg.max_score,
+                  CASE
+                    WHEN esg.variant_id IS NOT NULL
+                      THEN hv_g.num_suits * CASE WHEN hv_g.is_sudoku THEN hv_g.num_suits ELSE 5 END
+                    WHEN es.variant_rule_json->>'type' = 'none'     THEN 25
+                    WHEN es.variant_rule_json->>'type' = 'specific'
+                      THEN hv_s.num_suits * CASE WHEN hv_s.is_sudoku THEN hv_s.num_suits ELSE 5 END
+                    WHEN e.variant_rule_json->>'type' = 'none'      THEN 25
+                    WHEN e.variant_rule_json->>'type' = 'specific'
+                      THEN hv_e.num_suits * CASE WHEN hv_e.is_sudoku THEN hv_e.num_suits ELSE 5 END
+                    ELSE 25
+                  END
+                ) AS effective_max_score
+         FROM event_stage_games esg
+         JOIN event_stages es ON es.id = esg.stage_id
+         JOIN events e ON e.id = es.event_id
+         LEFT JOIN hanabi_variants hv_g ON hv_g.code = esg.variant_id
+         LEFT JOIN hanabi_variants hv_s ON hv_s.code = (
+           CASE WHEN es.variant_rule_json->>'type' = 'none'     THEN 0
+                WHEN es.variant_rule_json->>'type' = 'specific' THEN (es.variant_rule_json->>'variantId')::int
+                ELSE NULL END
+         )
+         LEFT JOIN hanabi_variants hv_e ON hv_e.code = (
+           CASE WHEN e.variant_rule_json->>'type' = 'none'      THEN 0
+                WHEN e.variant_rule_json->>'type' = 'specific'  THEN (e.variant_rule_json->>'variantId')::int
+                ELSE NULL END
+         )
+         WHERE esg.stage_id = $1`,
+        [stage.id],
+      );
+      const maxScoreByIndex = new Map<number, number | null>();
+      for (const row of maxScoreResult.rows) {
+        maxScoreByIndex.set(row.game_index, row.effective_max_score);
+      }
+
       for (const entry of lb.entries) {
-        for (const member of entry.team.members) {
-          addContribution(
-            member.user_id,
-            member.display_name,
-            stage.id,
-            stage.label,
-            entry.stage_score,
-            entry.rank,
-          );
-        }
+        // score = count of games where the team hit the per-game max_score
+        const countMax = entry.game_scores.filter((gs) => {
+          const maxScore = maxScoreByIndex.get(gs.game_index);
+          return maxScore != null && gs.score === maxScore;
+        }).length;
+        addTeamContribution(
+          entry.team.id,
+          entry.team.display_name,
+          entry.team.members,
+          stage.id,
+          stage.label,
+          countMax,
+          entry.rank,
+          entry.team_size,
+        );
       }
     } else if (stage.mechanism === 'GAUNTLET') {
       const lb = await getGauntletLeaderboard(stage.id);
       if (!lb) continue;
       for (const entry of lb.entries) {
         if (entry.dnf) continue; // DNF teams score 0 for sum, not counted for best_n_of_m
-        for (const member of entry.team.members) {
-          addContribution(
-            member.user_id,
-            member.display_name,
-            stage.id,
-            stage.label,
-            entry.stage_score ?? 0,
-            entry.rank,
-          );
-        }
+        addTeamContribution(
+          entry.team.id,
+          entry.team.display_name,
+          entry.team.members,
+          stage.id,
+          stage.label,
+          entry.stage_score ?? 0,
+          entry.rank,
+          entry.team_size,
+        );
       }
     } else if (stage.mechanism === 'MATCH_PLAY') {
       const standings = await getMatchPlayStandings(stage.id);
       if (!standings) continue;
       for (const entry of standings.entries) {
         if (entry.status === 'active') continue; // bracket not resolved yet
-        for (const member of entry.team.members) {
-          const score = entry.placement ?? 0;
-          addContribution(
-            member.user_id,
-            member.display_name,
-            stage.id,
-            stage.label,
-            score,
-            entry.placement,
-          );
-        }
+        // MATCH_PLAY has no per-size tracks; always collapses to null
+        addTeamContribution(
+          entry.team.id,
+          entry.team.display_name,
+          entry.team.members,
+          stage.id,
+          stage.label,
+          entry.placement ?? 0,
+          entry.placement,
+          null,
+        );
       }
     }
   }
 
-  const players: PlayerContribution[] = Array.from(playerMap.entries()).map(([userId, data]) => ({
-    user_id: userId,
-    display_name: data.display_name,
-    contributions: data.contributions,
-  }));
+  // Build sorted tracks: null (combined) first, then ascending team_size
+  const sortedSizes = [...sizeMap.keys()].sort((a, b) => {
+    if (a === null) return -1;
+    if (b === null) return 1;
+    return a - b;
+  });
 
-  return computeAggregateRankings(players, aggregateConfig);
+  return sortedSizes.map((size) => {
+    const teamMap = sizeMap.get(size)!;
+    const teams: TeamContribution[] = Array.from(teamMap.entries()).map(([teamId, data]) => ({
+      team_id: teamId,
+      team_display_name: data.display_name,
+      members: data.members,
+      contributions: data.contributions,
+    }));
+    return {
+      team_size: size,
+      entries: computeAggregateRankings(teams, aggregateConfig),
+    };
+  });
 }

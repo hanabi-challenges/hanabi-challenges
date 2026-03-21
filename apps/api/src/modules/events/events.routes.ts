@@ -16,26 +16,48 @@ import {
   cloneEvent,
 } from './events.service';
 import type { CreateEventBody, UpdateEventBody } from './events.types';
+import { pool } from '../../config/db';
 import eventAdminsRouter from './event-admins.routes';
 import stagesRouter from '../stages/stages.routes';
-import stageRelationshipsRouter from '../stages/stage-relationships.routes';
+import stageTransitionsRouter from '../stages/stage-transitions.routes';
+import stageGroupsRouter from '../stages/stage-groups.routes';
 import resultAdminRouter from '../results/result-admin.routes';
 import eventLeaderboardRouter from '../leaderboards/leaderboards.routes';
 import awardsRouter from '../awards/awards.routes';
+import ingestionRouter from '../ingestion/ingestion.routes';
+import eventTeamResultsRouter from './event-team-results.routes';
 
 const router = Router();
 
 // Sub-routers
 router.use('/:slug/admins', eventAdminsRouter);
 router.use('/:slug/stages', stagesRouter);
-router.use('/:slug/stage-relationships', stageRelationshipsRouter);
+router.use('/:slug/transitions', stageTransitionsRouter);
+router.use('/:slug/stage-groups', stageGroupsRouter);
 router.use('/:slug/results', resultAdminRouter);
 router.use('/:slug/awards', awardsRouter);
+router.use('/:slug/pull-replays', ingestionRouter);
+router.use('/:slug/teams', eventTeamResultsRouter);
 router.use('/:slug', eventLeaderboardRouter);
 
-// GET /api/events — list published events (public)
-router.get('/', authOptional, async (_req: AuthenticatedRequest, res: Response) => {
-  const events = await listEvents();
+// POST /api/events/:slug/forfeit — player forfeits eligibility to view spoilers
+router.post('/:slug/forfeit', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const slug = String(req.params.slug);
+  const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+  const event = await getEventBySlug(slug, isAdmin);
+  if (!event) return res.status(404).json({ error: 'Event not found' });
+
+  await pool.query(
+    `INSERT INTO event_forfeitures (event_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [event.id, req.user!.userId],
+  );
+  res.json({ ok: true });
+});
+
+// GET /api/events — list events; admins see drafts too
+router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) => {
+  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const events = await listEvents(isAdmin);
   res.json(events);
 });
 
@@ -86,7 +108,7 @@ router.post('/', authRequired, requireAdmin, async (req: AuthenticatedRequest, r
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('unique') || msg.includes('duplicate')) {
-      return res.status(409).json({ error: 'An event with that slug or name already exists' });
+      return res.status(409).json({ error: 'slug_taken' });
     }
     throw err;
   }

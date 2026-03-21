@@ -12,9 +12,11 @@ import {
   createStage,
   updateStage,
   reorderStage,
+  bulkReorderStages,
   deleteStage,
   cloneStage,
 } from './stages.service';
+import { assignStageToGroup } from './stage-groups.service';
 import type { CreateStageBody, UpdateStageBody } from './stages.types';
 import gamesRouter from './games.routes';
 import stageTeamsRouter from './stage-teams.routes';
@@ -28,13 +30,31 @@ import bracketEntriesRouter from './bracket-entries.routes';
 import bracketRouter from './bracket.routes';
 
 const VALID_MECHANISMS = ['SEEDED_LEADERBOARD', 'GAUNTLET', 'MATCH_PLAY'] as const;
-const VALID_TEAM_POLICIES = ['SELF_FORMED', 'QUEUED'] as const;
+const VALID_PARTICIPATION_TYPES = ['INDIVIDUAL', 'TEAM'] as const;
 const VALID_TEAM_SCOPES = ['EVENT', 'STAGE'] as const;
 const VALID_ATTEMPT_POLICIES = ['SINGLE', 'REQUIRED_ALL', 'BEST_OF_N', 'UNLIMITED_BEST'] as const;
 const VALID_TIME_POLICIES = ['WINDOW', 'ROLLING', 'SCHEDULED'] as const;
 
 // Mounted at /api/events/:slug/stages via events.routes.ts (mergeParams: true)
 const router = Router({ mergeParams: true });
+
+// PATCH /api/events/:slug/stages/reorder-bulk — set all stage_index values at once (admin)
+// Must be before /:stageId sub-router mounts so 'reorder-bulk' isn't treated as a stageId.
+router.patch('/reorder-bulk', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveEventAndAdminCheck(req, res);
+  if (!ctx) return;
+
+  const { stage_ids } = req.body as { stage_ids?: unknown };
+  if (
+    !Array.isArray(stage_ids) ||
+    stage_ids.some((id) => !Number.isInteger(id) || (id as number) <= 0)
+  ) {
+    return res.status(400).json({ error: 'stage_ids must be an array of positive integers' });
+  }
+
+  await bulkReorderStages(ctx.eventId, stage_ids as number[]);
+  res.status(204).send();
+});
 
 // Sub-routers
 router.use('/:stageId/games', gamesRouter);
@@ -135,10 +155,14 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
       .status(400)
       .json({ error: `mechanism must be one of: ${VALID_MECHANISMS.join(', ')}` });
   }
-  if (!VALID_TEAM_POLICIES.includes(body.team_policy as (typeof VALID_TEAM_POLICIES)[number])) {
-    return res
-      .status(400)
-      .json({ error: `team_policy must be one of: ${VALID_TEAM_POLICIES.join(', ')}` });
+  if (
+    !VALID_PARTICIPATION_TYPES.includes(
+      body.participation_type as (typeof VALID_PARTICIPATION_TYPES)[number],
+    )
+  ) {
+    return res.status(400).json({
+      error: `participation_type must be one of: ${VALID_PARTICIPATION_TYPES.join(', ')}`,
+    });
   }
   if (!VALID_TEAM_SCOPES.includes(body.team_scope as (typeof VALID_TEAM_SCOPES)[number])) {
     return res
@@ -175,12 +199,14 @@ router.put('/:stageId', authRequired, async (req: AuthenticatedRequest, res: Res
   const body = req.body as UpdateStageBody;
 
   if (
-    body.team_policy !== undefined &&
-    !VALID_TEAM_POLICIES.includes(body.team_policy as (typeof VALID_TEAM_POLICIES)[number])
+    body.participation_type !== undefined &&
+    !VALID_PARTICIPATION_TYPES.includes(
+      body.participation_type as (typeof VALID_PARTICIPATION_TYPES)[number],
+    )
   ) {
-    return res
-      .status(400)
-      .json({ error: `team_policy must be one of: ${VALID_TEAM_POLICIES.join(', ')}` });
+    return res.status(400).json({
+      error: `participation_type must be one of: ${VALID_PARTICIPATION_TYPES.join(', ')}`,
+    });
   }
   if (
     body.team_scope !== undefined &&
@@ -249,6 +275,29 @@ router.post('/:stageId/clone', authRequired, async (req: AuthenticatedRequest, r
   const stage = await cloneStage(ctx.eventId, stageId);
   if (!stage) return res.status(404).json({ error: 'Stage not found' });
   res.status(201).json(stage);
+});
+
+// PATCH /api/events/:slug/stages/:stageId/group — assign stage to a group (or ungroup)
+router.patch('/:stageId/group', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveEventAndAdminCheck(req, res);
+  if (!ctx) return;
+
+  const stageId = Number(req.params.stageId);
+  if (!Number.isInteger(stageId) || stageId <= 0) {
+    return res.status(400).json({ error: 'Invalid stageId' });
+  }
+
+  // group_id: number assigns; null ungroups
+  const rawGroupId = req.body?.group_id;
+  const groupId = rawGroupId === null || rawGroupId === undefined ? null : Number(rawGroupId);
+
+  if (groupId !== null && (!Number.isInteger(groupId) || groupId <= 0)) {
+    return res.status(400).json({ error: 'group_id must be a positive integer or null' });
+  }
+
+  const stage = await assignStageToGroup(ctx.eventId, stageId, groupId);
+  if (!stage) return res.status(404).json({ error: 'Stage or group not found' });
+  res.json(stage);
 });
 
 // DELETE /api/events/:slug/stages/:stageId — delete stage (admin; blocked if results exist)

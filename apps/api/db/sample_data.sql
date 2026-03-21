@@ -16,8 +16,9 @@ TRUNCATE TABLE
   event_stage_opt_ins,
   event_registrations,
   event_stage_games,
-  event_stage_relationships,
+  event_stage_transitions,
   event_player_ratings,
+  event_stage_groups,
   event_stages,
   event_badge_set_links,
   event_challenge_badge_config,
@@ -106,16 +107,16 @@ VALUES (2, 1, 'OWNER');  -- alice
 -- STAGES
 ------------------------------------------------------------
 
--- Event 1: single challenge stage
+-- Event 1: single challenge stage (INDIVIDUAL: players opt in and are paired)
 INSERT INTO event_stages (
   event_id, label, stage_index,
-  mechanism, team_policy, team_scope, attempt_policy, time_policy,
+  mechanism, participation_type, team_scope, attempt_policy, time_policy,
   game_scoring_config_json, stage_scoring_config_json,
   starts_at, ends_at
 )
 VALUES (
   1, 'Challenge', 1,
-  'SEEDED_LEADERBOARD', 'SELF_FORMED', 'EVENT', 'REQUIRED_ALL', 'WINDOW',
+  'SEEDED_LEADERBOARD', 'INDIVIDUAL', 'EVENT', 'REQUIRED_ALL', 'WINDOW',
   '{"primary": "score", "tiebreakers": ["bdr_desc"]}'::jsonb,
   '{"method": "sum"}'::jsonb,
   '2026-01-15T00:00:00Z',
@@ -125,13 +126,13 @@ VALUES (
 -- Event 2 stage 1: challenge week
 INSERT INTO event_stages (
   event_id, label, stage_index,
-  mechanism, team_policy, team_scope, attempt_policy, time_policy,
+  mechanism, participation_type, team_scope, attempt_policy, time_policy,
   game_scoring_config_json, stage_scoring_config_json,
   starts_at, ends_at
 )
 VALUES (
   2, 'Week 1', 1,
-  'SEEDED_LEADERBOARD', 'SELF_FORMED', 'STAGE', 'REQUIRED_ALL', 'WINDOW',
+  'SEEDED_LEADERBOARD', 'TEAM', 'STAGE', 'REQUIRED_ALL', 'WINDOW',
   '{"primary": "score", "tiebreakers": ["bdr_desc"]}'::jsonb,
   '{"method": "sum"}'::jsonb,
   '2026-02-08T00:00:00Z',
@@ -141,14 +142,14 @@ VALUES (
 -- Event 2 stage 2: playoffs (bracket)
 INSERT INTO event_stages (
   event_id, label, stage_index,
-  mechanism, team_policy, team_scope, attempt_policy, time_policy,
+  mechanism, participation_type, team_scope, attempt_policy, time_policy,
   stage_scoring_config_json,
   config_json,
   starts_at, ends_at
 )
 VALUES (
   2, 'Playoffs', 2,
-  'MATCH_PLAY', 'SELF_FORMED', 'EVENT', 'SINGLE', 'WINDOW',
+  'MATCH_PLAY', 'TEAM', 'EVENT', 'SINGLE', 'WINDOW',
   '{"method": "win_loss"}'::jsonb,
   '{"bracket_type": "SINGLE_ELIMINATION", "match_format": "best_of_1"}'::jsonb,
   '2026-03-01T00:00:00Z',
@@ -157,31 +158,40 @@ VALUES (
 
 -- stage ids: 1=NV Challenge (event 1)  2=B&B Week 1 (event 2)  3=B&B Playoffs (event 2)
 
--- Stage relationship: Week 1 → Playoffs, top 2 qualify
-INSERT INTO event_stage_relationships (
-  source_stage_id, target_stage_id,
+-- Stage group: "Qualifying" for event 2 (aggregates weekly stages into one leaderboard)
+INSERT INTO event_stage_groups (event_id, label, group_index, scoring_config_json)
+VALUES (2, 'Qualifying', 0, '{"method": "sum", "absent_score_policy": "null_as_zero"}'::jsonb);
+
+-- group ids: 1=Qualifying (event 2)
+
+-- Assign Week 1 to the Qualifying group
+UPDATE event_stages SET group_id = 1 WHERE id = 2;
+
+-- Transition: after Qualifying group → Playoffs, top 2 ranked
+INSERT INTO event_stage_transitions (
+  event_id, after_group_id,
   filter_type, filter_value, seeding_method
 )
-VALUES (2, 3, 'TOP_N', 2, 'RANKED');
+VALUES (2, 1, 'TOP_N', 2, 'RANKED');
 
 ------------------------------------------------------------
 -- GAME SLOTS
 ------------------------------------------------------------
 
--- Event 1 stage (5 seeds, No Variant, single team-size track → team_size NULL)
-INSERT INTO event_stage_games (stage_id, game_index, team_size, variant_id, seed_payload, max_score)
+-- Event 1 stage (5 seeds, No Variant)
+INSERT INTO event_stage_games (stage_id, game_index, variant_id, seed_payload, max_score)
 VALUES
-  (1, 1, NULL, 0, 'NVC25-1-1', 25),
-  (1, 2, NULL, 0, 'NVC25-1-2', 25),
-  (1, 3, NULL, 0, 'NVC25-1-3', 25),
-  (1, 4, NULL, 0, 'NVC25-1-4', 25),
-  (1, 5, NULL, 0, 'NVC25-1-5', 25);
+  (1, 1, 0, 'NVC25-1-1', 25),
+  (1, 2, 0, 'NVC25-1-2', 25),
+  (1, 3, 0, 'NVC25-1-3', 25),
+  (1, 4, 0, 'NVC25-1-4', 25),
+  (1, 5, 0, 'NVC25-1-5', 25);
 
 -- Event 2 Week 1 (2 seeds shown; enough to exercise results)
-INSERT INTO event_stage_games (stage_id, game_index, team_size, variant_id, seed_payload, max_score)
+INSERT INTO event_stage_games (stage_id, game_index, variant_id, seed_payload, max_score)
 VALUES
-  (2, 1, NULL, 0, 'BB26-W1-1', 25),
-  (2, 2, NULL, 0, 'BB26-W1-2', 25);
+  (2, 1, 0, 'BB26-W1-1', 25),
+  (2, 2, 0, 'BB26-W1-2', 25);
 
 -- stage_game ids:
 -- 1..5  -> Event 1 Challenge games (index 1..5)

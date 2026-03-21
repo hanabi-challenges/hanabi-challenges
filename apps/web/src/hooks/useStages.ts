@@ -7,19 +7,22 @@ export type StageSummary = {
   event_id: number;
   label: string;
   stage_index: number;
+  group_id: number | null;
   mechanism: 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
-  team_policy: 'SELF_FORMED' | 'QUEUED';
+  participation_type: 'INDIVIDUAL' | 'TEAM';
   team_scope: 'EVENT' | 'STAGE';
   attempt_policy: 'SINGLE' | 'REQUIRED_ALL' | 'BEST_OF_N' | 'UNLIMITED_BEST';
   time_policy: 'WINDOW' | 'ROLLING' | 'SCHEDULED';
   status: string;
   starts_at: string | null;
   ends_at: string | null;
+  visible: boolean;
   config_json: Record<string, unknown>;
   game_scoring_config_json: Record<string, unknown>;
   stage_scoring_config_json: Record<string, unknown>;
   variant_rule_json: Record<string, unknown> | null;
   seed_rule_json: Record<string, unknown> | null;
+  auto_pull_json: { enabled: boolean; interval_minutes: number } | null;
   game_slot_count: number;
   team_count: number;
 };
@@ -40,7 +43,8 @@ export function useStages(eventSlug: string | undefined) {
     let cancelled = false;
 
     async function fetchStages() {
-      setState((prev) => ({ ...prev, loading: true, error: null }));
+      // Only show the loading skeleton on the initial empty load
+      setState((prev) => ({ ...prev, loading: prev.stages.length === 0, error: null }));
       try {
         const data = await getJsonAuth<StageSummary[]>(
           `/events/${encodeURIComponent(eventSlug!)}/stages`,
@@ -64,5 +68,18 @@ export function useStages(eventSlug: string | undefined) {
   }, [eventSlug, token, version]);
 
   const refetch = () => setVersion((v) => v + 1);
-  return { ...state, refetch };
+
+  const patchStage = (id: number, patch: Partial<StageSummary>) =>
+    setState((prev) => ({
+      ...prev,
+      stages: prev.stages.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }));
+
+  const removeStage = (id: number) =>
+    setState((prev) => ({ ...prev, stages: prev.stages.filter((s) => s.id !== id) }));
+
+  const appendStage = (stage: StageSummary) =>
+    setState((prev) => ({ ...prev, stages: [...prev.stages, stage] }));
+
+  return { ...state, refetch, patchStage, removeStage, appendStage };
 }

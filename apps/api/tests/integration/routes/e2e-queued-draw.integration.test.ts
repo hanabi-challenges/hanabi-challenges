@@ -47,7 +47,7 @@ async function createQueuedStage(token: string) {
     .send({
       label: 'Queued Stage',
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'QUEUED',
+      participation_type: 'INDIVIDUAL',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

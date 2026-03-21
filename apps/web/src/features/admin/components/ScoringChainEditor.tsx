@@ -33,6 +33,7 @@ import {
 
 export type ObservableType =
   | 'score'
+  | 'max_score'
   | 'turns'
   | 'start_time'
   | 'end_time'
@@ -71,7 +72,10 @@ export const DEFAULT_SCORING_CHAIN: ScoringChainEntry[] = [
 // Metadata
 // ---------------------------------------------------------------------------
 
-const OBSERVABLE_TYPES: ObservableType[] = [
+// max_score is a boolean (score == max_score → 1, else → 0). It is mutually
+// exclusive with all other chain entries and always sorts descending.
+const BOOLEAN_OBSERVABLE_TYPES: ObservableType[] = ['max_score'];
+const NUMERIC_OBSERVABLE_TYPES: ObservableType[] = [
   'score',
   'turns',
   'start_time',
@@ -80,7 +84,11 @@ const OBSERVABLE_TYPES: ObservableType[] = [
   'end_condition',
 ];
 
-const OBSERVABLE_META: Record<ObservableType, { label: string; defaultDir: 'asc' | 'desc' }> = {
+const OBSERVABLE_META: Record<
+  ObservableType,
+  { label: string; defaultDir: 'asc' | 'desc'; boolean?: true }
+> = {
+  max_score: { label: 'Max Score', defaultDir: 'desc', boolean: true },
   score: { label: 'Score', defaultDir: 'desc' },
   turns: { label: 'Turns', defaultDir: 'asc' },
   start_time: { label: 'Start Time', defaultDir: 'asc' },
@@ -149,6 +157,8 @@ function SortableRow({
   };
 
   const isCustom = entry.kind === 'user_input' && entry.type === 'custom';
+  const isBoolean =
+    entry.kind === 'observable' && OBSERVABLE_META[entry.type as ObservableType]?.boolean === true;
   const badgeColor = entry.kind === 'observable' ? 'blue' : 'orange';
   const badgeLabel = entry.kind === 'observable' ? 'Obs' : 'Input';
 
@@ -204,23 +214,29 @@ function SortableRow({
           )}
         </div>
 
-        {/* Direction toggle */}
-        <Group gap={2} wrap="nowrap">
-          <Button
-            size="xs"
-            variant={entry.direction === 'asc' ? 'filled' : 'default'}
-            onClick={() => onSetDirection('asc')}
-          >
-            ↑ Asc
-          </Button>
-          <Button
-            size="xs"
-            variant={entry.direction === 'desc' ? 'filled' : 'default'}
-            onClick={() => onSetDirection('desc')}
-          >
-            ↓ Desc
-          </Button>
-        </Group>
+        {/* Direction toggle — hidden for boolean observables (always desc) */}
+        {!isBoolean ? (
+          <Group gap={2} wrap="nowrap">
+            <Button
+              size="xs"
+              variant={entry.direction === 'asc' ? 'filled' : 'default'}
+              onClick={() => onSetDirection('asc')}
+            >
+              ↑ Asc
+            </Button>
+            <Button
+              size="xs"
+              variant={entry.direction === 'desc' ? 'filled' : 'default'}
+              onClick={() => onSetDirection('desc')}
+            >
+              ↓ Desc
+            </Button>
+          </Group>
+        ) : (
+          <Text size="xs" c="dimmed" style={{ paddingRight: 4 }}>
+            achieved &gt; not
+          </Text>
+        )}
 
         {/* Remove */}
         <ActionIcon size="sm" variant="subtle" color="gray" onClick={onRemove} aria-label="Remove">
@@ -358,10 +374,42 @@ export function ScoringChainEditor({ value, onChange }: Props) {
       .map((e) => (e as UserInputItem).type),
   );
 
+  // max_score is mutually exclusive with all other chain entries
+  const hasMaxScore = inChainObservable.has('max_score');
+  const hasAnyOther = chain.length > 0 && !hasMaxScore;
+
   return (
     <Stack gap="sm">
       {/* Palette */}
       <Stack gap={6}>
+        {/* Boolean / inferrable measures */}
+        <Group gap="xs" align="flex-start" wrap="nowrap">
+          <Text
+            size="xs"
+            c="dimmed"
+            fw={600}
+            style={{ minWidth: 72, paddingTop: 4, flexShrink: 0 }}
+          >
+            Boolean
+          </Text>
+          <Group gap={4} wrap="wrap">
+            {BOOLEAN_OBSERVABLE_TYPES.map((type) => (
+              <Button
+                key={type}
+                size="xs"
+                variant="light"
+                color="teal"
+                disabled={inChainObservable.has(type) || hasAnyOther}
+                title={hasAnyOther ? 'Max Score cannot be combined with other measures' : undefined}
+                onClick={() => addObservable(type)}
+              >
+                {OBSERVABLE_META[type].label}
+              </Button>
+            ))}
+          </Group>
+        </Group>
+
+        {/* Numeric observable measures */}
         <Group gap="xs" align="flex-start" wrap="nowrap">
           <Text
             size="xs"
@@ -372,13 +420,14 @@ export function ScoringChainEditor({ value, onChange }: Props) {
             Observable
           </Text>
           <Group gap={4} wrap="wrap">
-            {OBSERVABLE_TYPES.map((type) => (
+            {NUMERIC_OBSERVABLE_TYPES.map((type) => (
               <Button
                 key={type}
                 size="xs"
                 variant="light"
                 color="blue"
-                disabled={inChainObservable.has(type)}
+                disabled={inChainObservable.has(type) || hasMaxScore}
+                title={hasMaxScore ? 'Cannot combine with Max Score' : undefined}
                 onClick={() => addObservable(type)}
               >
                 {OBSERVABLE_META[type].label}
@@ -403,13 +452,21 @@ export function ScoringChainEditor({ value, onChange }: Props) {
                 size="xs"
                 variant="light"
                 color="orange"
-                disabled={inChainStandardInput.has(type)}
+                disabled={inChainStandardInput.has(type) || hasMaxScore}
+                title={hasMaxScore ? 'Cannot combine with Max Score' : undefined}
                 onClick={() => addStandardInput(type)}
               >
                 {USER_INPUT_META[type].label}
               </Button>
             ))}
-            <Button size="xs" variant="light" color="orange" onClick={addCustom}>
+            <Button
+              size="xs"
+              variant="light"
+              color="orange"
+              disabled={hasMaxScore}
+              title={hasMaxScore ? 'Cannot combine with Max Score' : undefined}
+              onClick={addCustom}
+            >
               + Custom
             </Button>
           </Group>

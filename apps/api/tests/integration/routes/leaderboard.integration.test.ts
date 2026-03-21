@@ -35,7 +35,7 @@ async function createSeededStage(
     .send({
       label: 'Seeded Stage',
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',
@@ -205,7 +205,7 @@ async function createGauntletStage(token: string, slug = 'test-event') {
     .send({
       label: 'Gauntlet Stage',
       mechanism: 'GAUNTLET',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'BEST_OF_N',
       time_policy: 'WINDOW',
@@ -355,7 +355,7 @@ async function createMatchPlayStage(token: string, slug = 'test-event') {
     .send({
       label: 'Match Stage',
       mechanism: 'MATCH_PLAY',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

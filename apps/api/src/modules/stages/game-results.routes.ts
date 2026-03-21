@@ -91,8 +91,8 @@ async function resolveContext(
     eventId: event.id,
     stageId,
     gameId,
-    stageGameTeamSize: game.team_size ?? null,
-    stageGameMaxScore: game.max_score ?? null,
+    stageGameTeamSize: null,
+    stageGameMaxScore: game.effective_max_score,
     stageGameVariantId: game.variant_id ?? null,
     stageGameSeedPayload: game.seed_payload ?? null,
     enforceExactTeamMatch,
@@ -126,6 +126,9 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
   let score: number = body.score;
   let startedAt: string | null = null;
   let playedAt: string | null = body.played_at ?? null;
+  let bottomDeckRisk: number | null = body.bottom_deck_risk ?? null;
+  let strikes: number | null = null;
+  let cluesRemaining: number | null = null;
   const hanabiLiveGameId: number | null = body.hanabi_live_game_id
     ? Number(body.hanabi_live_game_id)
     : null;
@@ -154,12 +157,19 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
       return res.status(err.status).json({ error: err.message });
     }
 
-    // Override with authoritative values from hanab.live
+    // Override with authoritative values from hanab.live + engine.
+    // Force score = 0 for any non-normal end condition (strikeout, timeout, forfeit, etc.).
     if (validation.derived.score !== null) {
       score = validation.derived.score;
     }
+    if (validation.derived.endCondition !== null && validation.derived.endCondition !== 1) {
+      score = 0;
+    }
     startedAt = validation.derived.startedAt;
     playedAt = validation.derived.playedAt;
+    bottomDeckRisk = validation.derived.bottomDeckRisk;
+    strikes = validation.derived.strikes;
+    cluesRemaining = validation.derived.cluesRemaining;
   }
 
   const result = await submitResult(
@@ -176,7 +186,9 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
       teamId,
       score,
       zeroReason: body.zero_reason ?? null,
-      bottomDeckRisk: body.bottom_deck_risk ?? null,
+      bottomDeckRisk,
+      strikes,
+      cluesRemaining,
       hanabiLiveGameId,
       startedAt,
       playedAt,

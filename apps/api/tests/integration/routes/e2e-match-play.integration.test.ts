@@ -48,7 +48,7 @@ async function createMatchPlayStage(token: string) {
     .send({
       label: 'Bracket',
       mechanism: 'MATCH_PLAY',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

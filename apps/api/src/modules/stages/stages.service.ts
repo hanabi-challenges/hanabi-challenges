@@ -1,5 +1,4 @@
 import { pool } from '../../config/db';
-import { resolveSeedPayload, resolveVariantId, VariantRule } from '../../utils/seed.utils';
 import { inferStageStatus } from '../../utils/status.utils';
 import type { StageRow, StageResponse, CreateStageBody, UpdateStageBody } from './stages.types';
 
@@ -60,18 +59,18 @@ export async function createStage(eventId: number, body: CreateStageBody): Promi
 
   const result = await pool.query<StageRow>(
     `INSERT INTO event_stages (
-       event_id, label, stage_index, mechanism, team_policy, team_scope,
+       event_id, label, stage_index, mechanism, participation_type, team_scope,
        attempt_policy, time_policy, game_scoring_config_json,
        stage_scoring_config_json, variant_rule_json, seed_rule_json,
-       config_json, starts_at, ends_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       config_json, auto_pull_json, starts_at, ends_at, visible
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
      RETURNING *`,
     [
       eventId,
       body.label,
       stageIndex,
       body.mechanism,
-      body.team_policy,
+      body.participation_type,
       body.team_scope,
       body.attempt_policy,
       body.time_policy,
@@ -80,8 +79,10 @@ export async function createStage(eventId: number, body: CreateStageBody): Promi
       body.variant_rule_json ?? null,
       body.seed_rule_json ?? null,
       body.config_json ?? {},
+      body.auto_pull_json ?? null,
       body.starts_at ?? null,
       body.ends_at ?? null,
+      body.visible ?? false,
     ],
   );
   const newStage = await getStage(eventId, result.rows[0].id);
@@ -90,7 +91,7 @@ export async function createStage(eventId: number, body: CreateStageBody): Promi
 
 const UPDATABLE_FIELDS = [
   'label',
-  'team_policy',
+  'participation_type',
   'team_scope',
   'attempt_policy',
   'time_policy',
@@ -99,8 +100,10 @@ const UPDATABLE_FIELDS = [
   'variant_rule_json',
   'seed_rule_json',
   'config_json',
+  'auto_pull_json',
   'starts_at',
   'ends_at',
+  'visible',
 ] as const;
 
 export async function updateStage(
@@ -151,6 +154,7 @@ export async function reorderStage(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SET CONSTRAINTS event_stages_event_id_stage_index_key DEFERRED');
 
     // Park the target stage at a temporary negative index to free up its slot
     await client.query(`UPDATE event_stages SET stage_index = $1 WHERE id = $2`, [
@@ -215,14 +219,37 @@ export async function deleteStage(
   return (result.rowCount ?? 0) > 0;
 }
 
+// Bulk reorder: sets stage_index = position for each ID in the given order.
+// Uses a deferred constraint to avoid conflicts mid-transaction.
+export async function bulkReorderStages(eventId: number, orderedStageIds: number[]): Promise<void> {
+  if (orderedStageIds.length === 0) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET CONSTRAINTS event_stages_event_id_stage_index_key DEFERRED');
+    for (let i = 0; i < orderedStageIds.length; i++) {
+      await client.query(
+        `UPDATE event_stages SET stage_index = $1 WHERE id = $2 AND event_id = $3`,
+        [i, orderedStageIds[i], eventId],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function cloneStage(eventId: number, stageId: number): Promise<StageResponse | null> {
   const source = await getStage(eventId, stageId);
   if (!source) return null;
 
-  return createStage(eventId, {
+  const newStage = await createStage(eventId, {
     label: `${source.label} (Copy)`,
     mechanism: source.mechanism,
-    team_policy: source.team_policy,
+    participation_type: source.participation_type,
     team_scope: source.team_scope,
     attempt_policy: source.attempt_policy,
     time_policy: source.time_policy,
@@ -234,94 +261,25 @@ export async function cloneStage(eventId: number, stageId: number): Promise<Stag
     starts_at: null,
     ends_at: null,
   });
-}
 
-// ---------------------------------------------------------------------------
-// Propagation (T-010)
-// ---------------------------------------------------------------------------
-
-export type PropagateOptions = {
-  overrideExisting?: boolean;
-};
-
-type StageWithRules = {
-  id: number;
-  event_id: number;
-  variant_rule_json: VariantRule | null;
-  seed_rule_json: { formula?: string } | null;
-};
-
-type EventRuleRow = {
-  variant_rule_json: VariantRule | null;
-  seed_rule_json: { formula?: string } | null;
-};
-
-type GameSlotRow = {
-  id: number;
-  game_index: number;
-  team_size: number | null;
-  variant_id: number | null;
-  seed_payload: string | null;
-};
-
-export async function propagateToGameSlots(
-  stageId: number,
-  options: PropagateOptions = {},
-): Promise<void> {
-  const { overrideExisting = false } = options;
-
-  const stageResult = await pool.query<StageWithRules>(
-    `SELECT id, event_id, variant_rule_json, seed_rule_json
-     FROM event_stages WHERE id = $1`,
-    [stageId],
-  );
-  if (stageResult.rowCount === 0) return;
-  const stage = stageResult.rows[0];
-
-  const eventResult = await pool.query<EventRuleRow>(
-    `SELECT variant_rule_json, seed_rule_json FROM events WHERE id = $1`,
-    [stage.event_id],
-  );
-  const event = eventResult.rows[0] ?? { variant_rule_json: null, seed_rule_json: null };
-
-  const slotsResult = await pool.query<GameSlotRow>(
-    `SELECT id, game_index, team_size, variant_id, seed_payload
-     FROM event_stage_games WHERE stage_id = $1`,
+  const gamesResult = await pool.query<{
+    game_index: number;
+    variant_id: number | null;
+    seed_payload: string | null;
+    max_score: number | null;
+  }>(
+    `SELECT game_index, variant_id, seed_payload, max_score
+     FROM event_stage_games WHERE stage_id = $1 ORDER BY game_index`,
     [stageId],
   );
 
-  for (const slot of slotsResult.rows) {
-    const newVariantId = resolveVariantId(null, stage.variant_rule_json, event.variant_rule_json);
-    const formula = stage.seed_rule_json?.formula ?? event.seed_rule_json?.formula ?? null;
-    const newSeed = formula
-      ? resolveSeedPayload(formula, {
-          eventId: stage.event_id,
-          stageId: stage.id,
-          gameIndex: slot.game_index,
-          teamSize: slot.team_size,
-        })
-      : null;
-
-    const updateVariant = newVariantId !== null && (overrideExisting || slot.variant_id === null);
-    const updateSeed = newSeed !== null && (overrideExisting || slot.seed_payload === null);
-
-    if (!updateVariant && !updateSeed) continue;
-
-    if (updateVariant && updateSeed) {
-      await pool.query(
-        `UPDATE event_stage_games SET variant_id = $1, seed_payload = $2 WHERE id = $3`,
-        [newVariantId, newSeed, slot.id],
-      );
-    } else if (updateVariant) {
-      await pool.query(`UPDATE event_stage_games SET variant_id = $1 WHERE id = $2`, [
-        newVariantId,
-        slot.id,
-      ]);
-    } else {
-      await pool.query(`UPDATE event_stage_games SET seed_payload = $1 WHERE id = $2`, [
-        newSeed,
-        slot.id,
-      ]);
-    }
+  for (const game of gamesResult.rows) {
+    await pool.query(
+      `INSERT INTO event_stage_games (stage_id, game_index, variant_id, seed_payload, max_score)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newStage.id, game.game_index, game.variant_id, game.seed_payload, game.max_score],
+    );
   }
+
+  return getStage(eventId, newStage.id);
 }

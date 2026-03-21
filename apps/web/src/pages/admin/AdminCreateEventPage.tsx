@@ -1,8 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  CoreActionIcon,
   CoreAlert as Alert,
   CoreButton as Button,
+  CoreCheckbox as Checkbox,
   CoreGroup as Group,
+  CoreModal,
+  CoreNumberInput as NumberInput,
   CoreSelect,
   CoreStack as Stack,
   CoreSwitch as Switch,
@@ -12,6 +16,7 @@ import {
   DatePicker,
   FormContainer,
   InputContainer,
+  MaterialIcon,
   PageHeader,
   RadioGroup,
   SectionCard,
@@ -24,6 +29,45 @@ import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
 
 const TEAM_SIZES = [2, 3, 4, 5, 6] as const;
 
+const DEFAULT_LONG_DESCRIPTION = `\
+## About
+
+_A brief paragraph describing the event — what it is, who it's for, and what makes it special._
+
+## Format
+
+_Describe how the event works:_
+
+- **Team sizes:** _e.g. solo, 2-player, 3-player_
+- **Stages:** _e.g. one round of 10 seeds, or qualifier → finals_
+- **Scoring:** _e.g. cumulative score across all seeds; higher is better_
+- **Variant:** _e.g. No Variant, or specify the deck_
+- **Seeds:** _e.g. seeds are shared across all team sizes and released at the start of each round_
+
+## Rules
+
+- All games must be played on [hanab.live](https://hanab.live) using the specified seed.
+- Results are pulled automatically once a game is completed. Contact an organizer if a result is missing.
+- _Add any event-specific rules here — e.g. time limits, spectator policy, replays required._
+
+## Schedule
+
+| Milestone | Date |
+|---|---|
+| Registration opens | _TBD_ |
+| Registration closes | _TBD_ |
+| Event starts | _TBD_ |
+| Event ends | _TBD_ |
+
+## Registration
+
+_Explain how to register — e.g. click Register above, or reach out to an organizer. Note any eligibility requirements._
+
+## Organizers
+
+_List the organizers and a contact method (Discord handle, etc.)._
+`;
+
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -32,9 +76,15 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-function dateToIso(date: string): string | null {
+// Date-only pickers return "YYYY-MM-DD". Spec: date-only strings are parsed as UTC midnight.
+function dateToIsoStart(date: string): string | null {
   if (!date) return null;
-  return new Date(date).toISOString();
+  return `${date}T00:00:00.000Z`;
+}
+
+function dateToIsoEnd(date: string): string | null {
+  if (!date) return null;
+  return `${date}T23:59:59.000Z`;
 }
 
 function isoToDate(iso: string | null): string {
@@ -53,6 +103,10 @@ type FormState = {
   allowLateRegistration: boolean;
   registrationOpensAt: string;
   registrationCutoff: string;
+  teamScope: 'EVENT' | 'STAGE';
+  multiRegistration: 'ONE' | 'ONE_PER_SIZE' | 'UNRESTRICTED';
+  autoPullEnabled: boolean;
+  autoPullIntervalMinutes: string;
   defaultVariantId: string;
   seedFormula: string;
 };
@@ -69,13 +123,17 @@ export function AdminCreateEventPage() {
     name: '',
     slug: '',
     shortDescription: '',
-    longDescription: '',
-    allowedTeamSizes: new Set([2]),
+    longDescription: DEFAULT_LONG_DESCRIPTION,
+    allowedTeamSizes: new Set([2, 3, 4, 5, 6]),
     combinedLeaderboard: false,
     registrationMode: 'ACTIVE',
     allowLateRegistration: true,
     registrationOpensAt: '',
     registrationCutoff: '',
+    teamScope: 'EVENT',
+    multiRegistration: 'ONE_PER_SIZE',
+    autoPullEnabled: false,
+    autoPullIntervalMinutes: '60',
     defaultVariantId: '',
     seedFormula: '',
   });
@@ -85,6 +143,7 @@ export function AdminCreateEventPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [seedHelpOpen, setSeedHelpOpen] = useState(false);
 
   // Load existing event for edit mode
   useEffect(() => {
@@ -109,8 +168,15 @@ export function AdminCreateEventPage() {
           allowLateRegistration: data.allow_late_registration,
           registrationOpensAt: isoToDate(data.registration_opens_at),
           registrationCutoff: isoToDate(data.registration_cutoff),
-          defaultVariantId: '',
-          seedFormula: '',
+          teamScope: data.team_scope ?? 'EVENT',
+          multiRegistration: data.multi_registration ?? 'ONE_PER_SIZE',
+          autoPullEnabled: data.auto_pull_json?.enabled ?? false,
+          autoPullIntervalMinutes: String(data.auto_pull_json?.interval_minutes ?? 60),
+          defaultVariantId:
+            data.variant_rule_json?.type === 'specific'
+              ? String(data.variant_rule_json.variantId)
+              : '',
+          seedFormula: data.seed_rule_json?.formula ?? '',
         });
         setSlugManuallyEdited(true); // don't overwrite slug when editing name
       } catch {
@@ -187,8 +253,16 @@ export function AdminCreateEventPage() {
       combined_leaderboard: form.combinedLeaderboard,
       registration_mode: form.registrationMode,
       allow_late_registration: form.allowLateRegistration,
-      registration_opens_at: dateToIso(form.registrationOpensAt),
-      registration_cutoff: dateToIso(form.registrationCutoff),
+      registration_opens_at: dateToIsoStart(form.registrationOpensAt),
+      registration_cutoff: dateToIsoEnd(form.registrationCutoff),
+      team_scope: form.teamScope,
+      multi_registration: form.multiRegistration,
+      auto_pull_json: form.autoPullEnabled
+        ? {
+            enabled: true,
+            interval_minutes: Math.max(1, parseInt(form.autoPullIntervalMinutes, 10) || 60),
+          }
+        : null,
       ...(form.defaultVariantId
         ? {
             variant_rule_json: {
@@ -212,7 +286,7 @@ export function AdminCreateEventPage() {
     } catch (err) {
       if (err instanceof ApiError) {
         const msg = (err.body as { error?: string })?.error ?? 'Save failed.';
-        if (msg.toLowerCase().includes('slug') || msg.toLowerCase().includes('unique')) {
+        if (msg === 'slug_taken' || msg.toLowerCase().includes('slug')) {
           setFieldErrors({ slug: 'This slug is already taken.' });
         } else {
           setApiError(msg);
@@ -324,6 +398,22 @@ export function AdminCreateEventPage() {
           <SectionCard>
             <FormContainer>
               <RadioGroup
+                label="Multiple Registrations"
+                value={form.multiRegistration}
+                onChange={(v) =>
+                  setField('multiRegistration', v as 'ONE' | 'ONE_PER_SIZE' | 'UNRESTRICTED')
+                }
+                options={[
+                  { value: 'ONE', label: 'Only one (single registration per participant)' },
+                  {
+                    value: 'ONE_PER_SIZE',
+                    label: 'One per team size (separate registration for each team size)',
+                  },
+                  { value: 'UNRESTRICTED', label: 'Unrestricted (no registration limit)' },
+                ]}
+              />
+
+              <RadioGroup
                 label="Registration Mode"
                 value={form.registrationMode}
                 onChange={(v) => setField('registrationMode', v as 'ACTIVE' | 'PASSIVE')}
@@ -352,6 +442,24 @@ export function AdminCreateEventPage() {
                   onChange={(v) => setField('registrationCutoff', v)}
                 />
               </Group>
+
+              <Switch
+                label="Automatically Pull Replays"
+                description="Periodically ingest hanab.live replay results for this event's game slots."
+                checked={form.autoPullEnabled}
+                onChange={(e) => setField('autoPullEnabled', e.currentTarget.checked)}
+              />
+
+              {form.autoPullEnabled ? (
+                <NumberInput
+                  label="Pull Interval (minutes)"
+                  description="How often to check for new replays."
+                  value={form.autoPullIntervalMinutes}
+                  onChange={(v) => setField('autoPullIntervalMinutes', String(v))}
+                  min={1}
+                  step={15}
+                />
+              ) : null}
             </FormContainer>
           </SectionCard>
 
@@ -366,6 +474,16 @@ export function AdminCreateEventPage() {
                 level.
               </Text>
 
+              <RadioGroup
+                label="Team Scope"
+                value={form.teamScope}
+                onChange={(v) => setField('teamScope', v as 'EVENT' | 'STAGE')}
+                options={[
+                  { value: 'EVENT', label: 'Event-wide (same team across all stages)' },
+                  { value: 'STAGE', label: 'Stage-scoped (scope set at stage level)' },
+                ]}
+              />
+
               <CoreSelect
                 label="Default Variant"
                 placeholder="Search variants…"
@@ -374,13 +492,24 @@ export function AdminCreateEventPage() {
                 data={variantSelectOptions(variants)}
               />
 
-              <TextInput
-                label="Seed Formula"
-                placeholder="e.g. e{eID}s{sID}g{gID}"
-                value={form.seedFormula}
-                onChange={(e) => setField('seedFormula', e.currentTarget.value)}
-                description="Available tokens: {eID}, {sID}, {gID}, {tSize}"
-              />
+              <Group gap="xs" align="flex-end">
+                <TextInput
+                  label="Seed Formula"
+                  placeholder="e.g. e{eID}s{sID}g{gID}"
+                  value={form.seedFormula}
+                  onChange={(e) => setField('seedFormula', e.currentTarget.value)}
+                  style={{ flex: 1 }}
+                />
+                <CoreActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  title="Seed formula help"
+                  onClick={() => setSeedHelpOpen(true)}
+                >
+                  <MaterialIcon name="help_outline" size={16} />
+                </CoreActionIcon>
+              </Group>
             </FormContainer>
           </SectionCard>
 
@@ -398,6 +527,76 @@ export function AdminCreateEventPage() {
           </Group>
         </FormContainer>
       </form>
+
+      <CoreModal
+        opened={seedHelpOpen}
+        onClose={() => setSeedHelpOpen(false)}
+        title="Seed Formula Tokens"
+        size="md"
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            A seed formula is a template string that generates a unique seed for each game. Tokens
+            are replaced with their numeric values at play time:
+          </Text>
+          <Stack gap="xs">
+            {[
+              { token: '{eID}', desc: 'Event ID' },
+              { token: '{sID}', desc: 'Stage ID' },
+              { token: '{gID}', desc: 'Game number (1-based position within stage)' },
+              { token: '{mID}', desc: 'Match ID (Match Play only; empty when absent)' },
+              { token: '{aID}', desc: 'Attempt ID (empty when absent)' },
+              { token: '{tID}', desc: 'Team ID (empty when absent)' },
+            ].map(({ token, desc }) => (
+              <Group key={token} gap="sm" wrap={false}>
+                <Text size="sm" ff="monospace" style={{ minWidth: 60 }}>
+                  {token}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {desc}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+          <Text size="sm" fw={600}>
+            Include a letter prefix before each token so seeds are self-labelling and unambiguous.
+          </Text>
+          <Text size="sm" c="dimmed">
+            Example:{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'e{eID}s{sID}g{gID}'}
+            </Text>{' '}
+            produces{' '}
+            <Text component="span" ff="monospace" size="sm">
+              e1s3g1
+            </Text>
+            ,{' '}
+            <Text component="span" ff="monospace" size="sm">
+              e1s3g2
+            </Text>
+            , etc. Without prefixes,{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{eID}{sID}{gID}'}
+            </Text>{' '}
+            would produce{' '}
+            <Text component="span" ff="monospace" size="sm">
+              130
+            </Text>{' '}
+            — ambiguous between event 1, stage 3, game 1 and event 13, stage 1, game *.
+          </Text>
+          <Text size="sm" fw={600}>
+            For seeds to be unique, include at least{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{sID}'}
+            </Text>{' '}
+            and{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{gID}'}
+            </Text>
+            .
+          </Text>
+        </Stack>
+      </CoreModal>
     </Stack>
   );
 }

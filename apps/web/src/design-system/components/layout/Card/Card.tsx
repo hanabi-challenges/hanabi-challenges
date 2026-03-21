@@ -79,11 +79,13 @@ type CommonProps = {
   className?: string;
   maxWidth?: CSSProperties['maxWidth'];
   separated?: boolean;
+  ref?: ((node: HTMLElement | null) => void) | null;
 
   // visual
   variant?: CardVariant;
   tone?: CardTone;
   padding?: CardPadding;
+  style?: CSSProperties;
 
   // behavior
   interactive?: boolean;
@@ -178,6 +180,7 @@ export function Card(props: CardProps): ReactElement {
       separated: _sep,
       href,
       onClick,
+      style: styleOverride,
       'aria-label': ariaLabel,
       ...rest
     } = props as AnchorCardProps;
@@ -197,7 +200,7 @@ export function Card(props: CardProps): ReactElement {
       <Paper
         component="a"
         className={className}
-        style={cardStyle}
+        style={styleOverride ? { ...cardStyle, ...styleOverride } : cardStyle}
         href={href}
         onClick={onClick as MouseEventHandler<HTMLAnchorElement> | undefined}
         onMouseEnter={isInteractive ? () => setHovered(true) : undefined}
@@ -224,6 +227,7 @@ export function Card(props: CardProps): ReactElement {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     separated: _sep2,
     onClick,
+    style: styleOverride,
     'aria-label': ariaLabel,
     ...rest
   } = props as DivCardProps;
@@ -242,7 +246,7 @@ export function Card(props: CardProps): ReactElement {
   return (
     <Box
       className={className}
-      style={cardStyle}
+      style={styleOverride ? { ...cardStyle, ...styleOverride } : cardStyle}
       onClick={onClick as MouseEventHandler<HTMLDivElement> | undefined}
       onMouseEnter={isInteractive ? () => setHovered(true) : undefined}
       onMouseLeave={isInteractive ? () => setHovered(false) : undefined}

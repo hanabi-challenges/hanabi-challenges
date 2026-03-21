@@ -15,10 +15,10 @@ router.get('/leaderboard', authOptional, async (req: AuthenticatedRequest, res: 
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 
-  const entries = await getEventAggregate(event.id);
-  if (entries === null) return res.status(404).json({ error: 'Event not found' });
+  const tracks = await getEventAggregate(event.id);
+  if (tracks === null) return res.status(404).json({ error: 'Event not found' });
 
-  res.json({ entries });
+  res.json({ tracks });
 });
 
 export default router;

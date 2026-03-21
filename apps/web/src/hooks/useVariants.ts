@@ -5,6 +5,8 @@ export type HanabiVariant = {
   code: number;
   name: string;
   label: string;
+  num_suits: number;
+  is_sudoku: boolean;
 };
 
 type State = {

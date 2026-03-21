@@ -3,6 +3,7 @@ import {
   extractReplayHistoryGames,
   normalizeReplayEndCondition,
 } from './replay-parse';
+import { extractGameKPIs, type ExportAction, type ExportDeckCard } from './game-engine.service';
 
 const TIMEOUT_MS = 10_000;
 
@@ -74,6 +75,9 @@ export type ReplayValidationSuccess = {
     endCondition: number | null;
     startedAt: string | null;
     playedAt: string | null;
+    strikes: number | null;
+    cluesRemaining: number | null;
+    bottomDeckRisk: number | null;
   };
 };
 
@@ -240,6 +244,55 @@ export async function runReplayValidation(
     const playedAt =
       game.datetimeFinished ?? game.datetimeFinishedUtc ?? game.datetime_finished ?? null;
 
+    // -------------------------------------------------------------------------
+    // Stage 3: game engine — extract KPIs from the export actions + deck
+    // -------------------------------------------------------------------------
+    const effectiveVariantId = historyVariantId ?? variantId ?? seedVariantId;
+    let strikes: number | null = null;
+    let cluesRemaining: number | null = null;
+    let bottomDeckRisk: number | null = null;
+
+    const exportActions = Array.isArray((exportJson as Record<string, unknown>).actions)
+      ? ((exportJson as Record<string, unknown>).actions as unknown[])
+          .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+          .map(
+            (a): ExportAction => ({
+              type: typeof a.type === 'number' ? a.type : 0,
+              target: typeof a.target === 'number' ? a.target : 0,
+              value: typeof a.value === 'number' ? a.value : 0,
+            }),
+          )
+      : [];
+
+    const exportDeck = Array.isArray((exportJson as Record<string, unknown>).deck)
+      ? ((exportJson as Record<string, unknown>).deck as unknown[])
+          .filter((d): d is Record<string, unknown> => !!d && typeof d === 'object')
+          .map(
+            (d): ExportDeckCard => ({
+              suitIndex: typeof d.suitIndex === 'number' ? d.suitIndex : 0,
+              rank: typeof d.rank === 'number' ? d.rank : 0,
+            }),
+          )
+      : [];
+
+    if (exportActions.length > 0 && exportDeck.length > 0) {
+      try {
+        const kpis = extractGameKPIs(
+          effectiveVariantId,
+          exportPlayers.length,
+          exportPlayers,
+          exportActions,
+          exportDeck,
+        );
+        strikes = kpis.strikes;
+        cluesRemaining = kpis.cluesRemaining;
+        bottomDeckRisk = kpis.bottomDeckRisk;
+      } catch (engineErr) {
+        // Non-fatal: KPIs will be null if the engine fails
+        console.warn('[runReplayValidation] game engine error:', engineErr);
+      }
+    }
+
     return {
       ok: true,
       gameId,
@@ -253,6 +306,9 @@ export async function runReplayValidation(
         endCondition,
         startedAt,
         playedAt,
+        strikes,
+        cluesRemaining,
+        bottomDeckRisk,
       },
     };
   } catch (caughtErr) {

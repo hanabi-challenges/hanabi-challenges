@@ -47,7 +47,7 @@ async function createGauntletStage(token: string) {
     .send({
       label: 'Gauntlet',
       mechanism: 'GAUNTLET',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'BEST_OF_N',
       time_policy: 'WINDOW',

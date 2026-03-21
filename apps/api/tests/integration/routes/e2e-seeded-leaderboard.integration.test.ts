@@ -51,7 +51,7 @@ async function createSeededStage(token: string, label: string) {
     .send({
       label,
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

@@ -7,6 +7,8 @@ ADRs capture durable, high-impact technical decisions.
 - [0001: Role and Permission Model](./0001-role-model.md)
 - [0002: Event Type Model](./0002-event-types.md)
 - [0003: Realtime Notifications via WebSocket](./0003-realtime-notifications.md)
+- [0004: Event Model Redesign](./0004-event-model-redesign.md)
+- [0005: Stage Groups](./0005-stage-groups.md)
 
 ## ADR Workflow
 

@@ -9,23 +9,21 @@ export type EventSummary = {
   short_description: string | null;
   long_description: string;
   published: boolean;
-  status:
-    | 'ANNOUNCED'
-    | 'UPCOMING'
-    | 'REGISTRATION_OPEN'
-    | 'IN_PROGRESS'
-    | 'LIVE'
-    | 'COMPLETE'
-    | 'DORMANT';
+  status: 'ANNOUNCED' | 'REGISTRATION_OPEN' | 'UPCOMING' | 'IN_PROGRESS' | 'LIVE' | 'COMPLETE';
   registration_mode: 'ACTIVE' | 'PASSIVE';
   allowed_team_sizes: number[];
   combined_leaderboard: boolean;
+  team_scope: 'EVENT' | 'STAGE' | null;
   allow_late_registration: boolean;
+  multi_registration: 'ONE' | 'ONE_PER_SIZE' | 'UNRESTRICTED';
+  auto_pull_json: { enabled: boolean; interval_minutes: number } | null;
   registration_opens_at: string | null;
   registration_cutoff: string | null;
   starts_at: string | null;
   ends_at: string | null;
   stage_count: number;
+  variant_rule_json: { type: 'specific'; variantId: number } | { type: 'none' } | null;
+  seed_rule_json: { formula: string } | null;
 };
 
 type State = {

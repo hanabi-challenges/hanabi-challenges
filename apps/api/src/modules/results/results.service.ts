@@ -19,6 +19,8 @@ export type ResultRow = {
   score: number;
   zero_reason: string | null;
   bottom_deck_risk: number | null;
+  strikes: number | null;
+  clues_remaining: number | null;
   hanabi_live_game_id: number | null;
   started_at: Date | null;
   played_at: Date;
@@ -125,6 +127,8 @@ export type SubmitResultInput = {
   score: number;
   zeroReason?: string | null;
   bottomDeckRisk?: number | null;
+  strikes?: number | null;
+  cluesRemaining?: number | null;
   hanabiLiveGameId?: number | null;
   startedAt?: string | null;
   playedAt?: string | null;
@@ -248,8 +252,8 @@ export async function submitResult(
     const insertResult = await pool.query<{ id: number }>(
       `INSERT INTO event_game_results
          (event_team_id, stage_game_id, attempt_id, score, zero_reason, bottom_deck_risk,
-          hanabi_live_game_id, started_at, played_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, COALESCE($9::timestamptz, NOW()))
+          strikes, clues_remaining, hanabi_live_game_id, started_at, played_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, COALESCE($11::timestamptz, NOW()))
        RETURNING id`,
       [
         input.teamId,
@@ -258,6 +262,8 @@ export async function submitResult(
         input.score,
         input.zeroReason ?? null,
         input.bottomDeckRisk ?? null,
+        input.strikes ?? null,
+        input.cluesRemaining ?? null,
         input.hanabiLiveGameId ?? null,
         input.startedAt ?? null,
         input.playedAt ?? null,
@@ -324,6 +330,8 @@ export type UpdateResultInput = {
   score?: number;
   zeroReason?: string | null;
   bottomDeckRisk?: number | null;
+  strikes?: number | null;
+  cluesRemaining?: number | null;
   hanabiLiveGameId?: number | null;
   startedAt?: string | null;
   playedAt?: string | null;
@@ -366,16 +374,20 @@ export async function updateResult(
        score               = $1,
        zero_reason         = $2,
        bottom_deck_risk    = $3,
-       hanabi_live_game_id = $4,
-       started_at          = $5::timestamptz,
-       played_at           = COALESCE($6::timestamptz, NOW()),
-       corrected_by        = $7,
+       strikes             = $4,
+       clues_remaining     = $5,
+       hanabi_live_game_id = $6,
+       started_at          = $7::timestamptz,
+       played_at           = COALESCE($8::timestamptz, NOW()),
+       corrected_by        = $9,
        corrected_at        = NOW()
-     WHERE id = $8`,
+     WHERE id = $10`,
     [
       newScore,
       newZeroReason ?? null,
       input.bottomDeckRisk !== undefined ? input.bottomDeckRisk : existing.bottom_deck_risk,
+      input.strikes !== undefined ? input.strikes : existing.strikes,
+      input.cluesRemaining !== undefined ? input.cluesRemaining : existing.clues_remaining,
       input.hanabiLiveGameId !== undefined ? input.hanabiLiveGameId : existing.hanabi_live_game_id,
       input.startedAt !== undefined ? input.startedAt : existing.started_at,
       newPlayedAt,

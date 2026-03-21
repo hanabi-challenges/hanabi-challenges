@@ -91,15 +91,21 @@ export async function getTeam(teamId: number, eventId: number): Promise<TeamResp
 // Create (EVENT scope)
 // ---------------------------------------------------------------------------
 
+export type EventMetaForRegistration = {
+  registration_cutoff: Date | null;
+  allow_late_registration: boolean;
+};
+
 export type CreateTeamResult =
   | { ok: true; team: TeamResponse }
-  | { ok: false; reason: 'invalid_size' | 'not_registered' | 'already_on_team' };
+  | { ok: false; reason: 'invalid_size' | 'registration_closed' | 'already_on_team' };
 
 export async function createEventTeam(
   eventId: number,
   initiatorId: number,
   inviteUserIds: number[],
   allowedTeamSizes: number[],
+  eventMeta: EventMetaForRegistration,
 ): Promise<CreateTeamResult> {
   const allMemberIds = [initiatorId, ...inviteUserIds];
   const teamSize = allMemberIds.length;
@@ -108,14 +114,14 @@ export async function createEventTeam(
     return { ok: false, reason: 'invalid_size' };
   }
 
-  // All members must be registered (ACTIVE) for this event
-  const regCheck = await pool.query<{ count: string }>(
-    `SELECT COUNT(*) AS count FROM event_registrations
-     WHERE event_id = $1 AND user_id = ANY($2) AND status = 'ACTIVE'`,
-    [eventId, allMemberIds],
-  );
-  if (parseInt(regCheck.rows[0].count, 10) < teamSize) {
-    return { ok: false, reason: 'not_registered' };
+  // Check registration cutoff before opening a transaction
+  const now = new Date();
+  if (
+    eventMeta.registration_cutoff !== null &&
+    now > eventMeta.registration_cutoff &&
+    !eventMeta.allow_late_registration
+  ) {
+    return { ok: false, reason: 'registration_closed' };
   }
 
   // No member may already be on a confirmed team for this event (event-scoped)
@@ -135,6 +141,20 @@ export async function createEventTeam(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Auto-register all members — team creation is the registration act
+    for (const uid of allMemberIds) {
+      await client.query(
+        `INSERT INTO event_registrations (event_id, user_id, status)
+         VALUES ($1, $2, 'ACTIVE')
+         ON CONFLICT (event_id, user_id) DO UPDATE
+           SET status = CASE
+             WHEN event_registrations.status = 'WITHDRAWN' THEN 'ACTIVE'
+             ELSE event_registrations.status
+           END`,
+        [eventId, uid],
+      );
+    }
 
     const teamResult = await client.query<{ id: number }>(
       `INSERT INTO event_teams (event_id, stage_id, team_size, source)
@@ -287,6 +307,7 @@ export async function createStageTeam(
   initiatorId: number,
   inviteUserIds: number[],
   allowedTeamSizes: number[],
+  eventMeta: EventMetaForRegistration,
 ): Promise<CreateTeamResult> {
   const allMemberIds = [initiatorId, ...inviteUserIds];
   const teamSize = allMemberIds.length;
@@ -295,14 +316,14 @@ export async function createStageTeam(
     return { ok: false, reason: 'invalid_size' };
   }
 
-  // All members must be registered (ACTIVE) for this event
-  const regCheck = await pool.query<{ count: string }>(
-    `SELECT COUNT(*) AS count FROM event_registrations
-     WHERE event_id = $1 AND user_id = ANY($2) AND status = 'ACTIVE'`,
-    [eventId, allMemberIds],
-  );
-  if (parseInt(regCheck.rows[0].count, 10) < teamSize) {
-    return { ok: false, reason: 'not_registered' };
+  // Check registration cutoff before opening a transaction
+  const now = new Date();
+  if (
+    eventMeta.registration_cutoff !== null &&
+    now > eventMeta.registration_cutoff &&
+    !eventMeta.allow_late_registration
+  ) {
+    return { ok: false, reason: 'registration_closed' };
   }
 
   // No member may already be on a confirmed team for this specific stage
@@ -320,6 +341,20 @@ export async function createStageTeam(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Auto-register all members — team creation is the registration act
+    for (const uid of allMemberIds) {
+      await client.query(
+        `INSERT INTO event_registrations (event_id, user_id, status)
+         VALUES ($1, $2, 'ACTIVE')
+         ON CONFLICT (event_id, user_id) DO UPDATE
+           SET status = CASE
+             WHEN event_registrations.status = 'WITHDRAWN' THEN 'ACTIVE'
+             ELSE event_registrations.status
+           END`,
+        [eventId, uid],
+      );
+    }
 
     const teamResult = await client.query<{ id: number }>(
       `INSERT INTO event_teams (event_id, stage_id, team_size, source)

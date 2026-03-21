@@ -49,3 +49,8 @@ storybook-static/
 
 # Legacy content
 _legacy/*
+
+# Vendor build artifacts (rebuilt via `pnpm run build:vendor`)
+vendor/hanabi-live/packages/game/dist/
+vendor/hanabi-live/packages/game/node_modules/
+vendor/hanabi-live/node_modules/

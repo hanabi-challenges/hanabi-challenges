@@ -53,9 +53,10 @@ const BASE_QUERY = `
   LEFT JOIN event_stages es ON es.event_id = e.id
 `;
 
-export async function listEvents(): Promise<EventResponse[]> {
+export async function listEvents(includeUnpublished = false): Promise<EventResponse[]> {
+  const publishedFilter = includeUnpublished ? '' : 'WHERE e.published = TRUE';
   const result = await pool.query<EventWithStagesRow>(
-    `${BASE_QUERY} WHERE e.published = TRUE GROUP BY e.id ORDER BY e.created_at DESC, e.id DESC`,
+    `${BASE_QUERY} ${publishedFilter} GROUP BY e.id ORDER BY e.created_at DESC, e.id DESC`,
   );
   return result.rows.map(formatEvent);
 }
@@ -85,9 +86,10 @@ export async function createEvent(
       `INSERT INTO events (
          slug, name, short_description, long_description,
          registration_mode, allowed_team_sizes, combined_leaderboard,
-         variant_rule_json, seed_rule_json, aggregate_config_json,
-         registration_opens_at, registration_cutoff, allow_late_registration
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         team_scope, variant_rule_json, seed_rule_json, aggregate_config_json,
+         registration_opens_at, registration_cutoff, allow_late_registration,
+         multi_registration, auto_pull_json
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         body.slug,
@@ -97,12 +99,15 @@ export async function createEvent(
         body.registration_mode ?? 'ACTIVE',
         body.allowed_team_sizes,
         body.combined_leaderboard ?? false,
+        body.team_scope ?? null,
         body.variant_rule_json ?? null,
         body.seed_rule_json ?? null,
         body.aggregate_config_json ?? null,
         body.registration_opens_at ?? null,
         body.registration_cutoff ?? null,
         body.allow_late_registration ?? true,
+        body.multi_registration ?? 'ONE_PER_SIZE',
+        body.auto_pull_json ?? null,
       ],
     );
 
@@ -133,12 +138,15 @@ const UPDATABLE_FIELDS = [
   'registration_mode',
   'allowed_team_sizes',
   'combined_leaderboard',
+  'team_scope',
   'variant_rule_json',
   'seed_rule_json',
   'aggregate_config_json',
   'registration_opens_at',
   'registration_cutoff',
   'allow_late_registration',
+  'multi_registration',
+  'auto_pull_json',
 ] as const;
 
 export async function updateEvent(
@@ -199,8 +207,9 @@ export async function cloneEvent(
          slug, name, short_description, long_description,
          published, registration_mode, allowed_team_sizes, combined_leaderboard,
          variant_rule_json, seed_rule_json, aggregate_config_json,
-         registration_opens_at, registration_cutoff, allow_late_registration
-       ) VALUES ($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         registration_opens_at, registration_cutoff, allow_late_registration,
+         multi_registration, auto_pull_json
+       ) VALUES ($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [
         newSlug,
@@ -216,6 +225,8 @@ export async function cloneEvent(
         source.registration_opens_at ?? null,
         source.registration_cutoff ?? null,
         source.allow_late_registration,
+        source.multi_registration,
+        source.auto_pull_json ?? null,
       ],
     );
     const event = result.rows[0];

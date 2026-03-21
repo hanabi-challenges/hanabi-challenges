@@ -168,12 +168,12 @@ export async function previewDraw(
   stageId: number,
   allowedTeamSizes: number[],
 ): Promise<PreviewDrawResult> {
-  // Stage must be QUEUED
-  const stageCheck = await pool.query<{ team_policy: string }>(
-    `SELECT team_policy FROM event_stages WHERE id = $1`,
+  // Stage must be INDIVIDUAL participation
+  const stageCheck = await pool.query<{ participation_type: string }>(
+    `SELECT participation_type FROM event_stages WHERE id = $1`,
     [stageId],
   );
-  if (stageCheck.rowCount === 0 || stageCheck.rows[0].team_policy !== 'QUEUED') {
+  if (stageCheck.rowCount === 0 || stageCheck.rows[0].participation_type !== 'INDIVIDUAL') {
     return { ok: false, reason: 'wrong_stage_policy' };
   }
 
@@ -195,12 +195,12 @@ export async function confirmDraw(
   stageId: number,
   allowedTeamSizes: number[],
 ): Promise<ConfirmDrawResult> {
-  // Stage must be QUEUED
-  const stageCheck = await pool.query<{ team_policy: string }>(
-    `SELECT team_policy FROM event_stages WHERE id = $1`,
+  // Stage must be INDIVIDUAL participation
+  const stageCheck = await pool.query<{ participation_type: string }>(
+    `SELECT participation_type FROM event_stages WHERE id = $1`,
     [stageId],
   );
-  if (stageCheck.rowCount === 0 || stageCheck.rows[0].team_policy !== 'QUEUED') {
+  if (stageCheck.rowCount === 0 || stageCheck.rows[0].participation_type !== 'INDIVIDUAL') {
     return { ok: false, reason: 'wrong_stage_policy' };
   }
 
@@ -260,12 +260,12 @@ export type ResetDrawResult =
   | { ok: false; reason: 'has_results' | 'wrong_stage_policy' };
 
 export async function resetDraw(stageId: number): Promise<ResetDrawResult> {
-  // Stage must be QUEUED
-  const stageCheck = await pool.query<{ team_policy: string }>(
-    `SELECT team_policy FROM event_stages WHERE id = $1`,
+  // Stage must be INDIVIDUAL participation
+  const stageCheck = await pool.query<{ participation_type: string }>(
+    `SELECT participation_type FROM event_stages WHERE id = $1`,
     [stageId],
   );
-  if (stageCheck.rowCount === 0 || stageCheck.rows[0].team_policy !== 'QUEUED') {
+  if (stageCheck.rowCount === 0 || stageCheck.rows[0].participation_type !== 'INDIVIDUAL') {
     return { ok: false, reason: 'wrong_stage_policy' };
   }
 

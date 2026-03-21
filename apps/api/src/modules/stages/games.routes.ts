@@ -11,11 +11,11 @@ import {
   listGameSlots,
   getGameSlot,
   createGameSlot,
-  createGameSlotsBatch,
+  bulkAddGameSlots,
   updateGameSlot,
+  reorderGameSlot,
   deleteGameSlot,
-  cloneGameSlot,
-  propagateGames,
+  checkSeedConflicts,
   type CreateGameSlotBody,
   type UpdateGameSlotBody,
 } from './games.service';
@@ -45,7 +45,6 @@ async function resolveStageAndAdminCheck(
 
   const isSuperadmin = req.user?.role === 'SUPERADMIN';
   const isGlobalAdmin = req.user?.role === 'ADMIN' || isSuperadmin;
-  // For admin-required paths, always include unpublished so we can return 403 rather than 404
   const event = await getEventBySlug(slug, requireAdmin || isGlobalAdmin);
   if (!event) {
     res.status(404).json({ error: 'Event not found' });
@@ -84,13 +83,7 @@ async function resolveStageAndAdminCheck(
 router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const ctx = await resolveStageAndAdminCheck(req, res, false);
   if (!ctx) return;
-
-  const teamSize = req.query.team_size !== undefined ? Number(req.query.team_size) : undefined;
-  if (teamSize !== undefined && (!Number.isInteger(teamSize) || teamSize <= 0)) {
-    return res.status(400).json({ error: 'Invalid team_size filter' });
-  }
-
-  const slots = await listGameSlots(ctx.stageId, teamSize);
+  const slots = await listGameSlots(ctx.stageId);
   res.json(slots);
 });
 
@@ -109,59 +102,57 @@ router.get('/:gameId', authOptional, async (req: AuthenticatedRequest, res: Resp
   res.json(slot);
 });
 
-// POST /api/events/:slug/stages/:stageId/games/propagate — must come before /:gameId
-router.post('/propagate', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/events/:slug/stages/:stageId/games/bulk — must come before /:gameId
+router.post('/bulk', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   const ctx = await resolveStageAndAdminCheck(req, res, true);
   if (!ctx) return;
 
-  const overrideExisting = req.body?.override_existing === true;
-  await propagateGames(ctx.stageId, overrideExisting);
-  const slots = await listGameSlots(ctx.stageId);
-  res.json(slots);
-});
-
-// POST /api/events/:slug/stages/:stageId/games/batch — must come before /:gameId
-router.post('/batch', authRequired, async (req: AuthenticatedRequest, res: Response) => {
-  const ctx = await resolveStageAndAdminCheck(req, res, true);
-  if (!ctx) return;
-
-  const slots = req.body?.slots;
-  if (!Array.isArray(slots) || slots.length === 0) {
-    return res.status(400).json({ error: 'slots must be a non-empty array' });
+  const count = Number(req.body?.count);
+  if (!Number.isInteger(count) || count < 1 || count > 100) {
+    return res.status(400).json({ error: 'count must be an integer between 1 and 100' });
   }
 
-  for (const slot of slots as unknown[]) {
-    if (
-      typeof slot !== 'object' ||
-      slot === null ||
-      !Number.isInteger((slot as Record<string, unknown>).game_index) ||
-      Number((slot as Record<string, unknown>).game_index) < 0
-    ) {
-      return res.status(400).json({ error: 'Each slot must have a valid game_index' });
+  const seeds: unknown = req.body?.seeds;
+  if (seeds !== undefined && seeds !== null) {
+    if (!Array.isArray(seeds) || seeds.some((s) => typeof s !== 'string')) {
+      return res.status(400).json({ error: 'seeds must be an array of strings' });
+    }
+    if ((seeds as string[]).length !== count) {
+      return res.status(400).json({ error: 'seeds length must equal count' });
     }
   }
 
-  const result = await createGameSlotsBatch(ctx.stageId, slots as CreateGameSlotBody[]);
-  res.status(201).json(result);
+  if (seeds) {
+    const conflicts = await checkSeedConflicts(ctx.eventId, seeds as string[]);
+    if (conflicts.length > 0) {
+      return res.status(409).json({
+        error: `Seeds already used in another event: ${conflicts.join(', ')}`,
+      });
+    }
+  }
+
+  const created = await bulkAddGameSlots(ctx.stageId, count, seeds as string[] | undefined);
+  res.status(201).json(created);
 });
 
-// POST /api/events/:slug/stages/:stageId/games
+// POST /api/events/:slug/stages/:stageId/games — single slot (auto-assigns index)
 router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   const ctx = await resolveStageAndAdminCheck(req, res, true);
   if (!ctx) return;
 
   const body = req.body as CreateGameSlotBody;
-  if (!Number.isInteger(body.game_index) || body.game_index < 0) {
-    return res.status(400).json({ error: 'game_index must be a non-negative integer' });
+
+  if (body.seed_payload) {
+    const conflicts = await checkSeedConflicts(ctx.eventId, [body.seed_payload]);
+    if (conflicts.length > 0) {
+      return res.status(409).json({
+        error: `Seed already used in another event: ${conflicts[0]}`,
+      });
+    }
   }
 
-  const result = await createGameSlot(ctx.stageId, body);
-  if (result === 'duplicate') {
-    return res
-      .status(409)
-      .json({ error: 'A game slot with that index and team_size already exists' });
-  }
-  res.status(201).json(result);
+  const slot = await createGameSlot(ctx.stageId, body);
+  res.status(201).json(slot);
 });
 
 // PUT /api/events/:slug/stages/:stageId/games/:gameId
@@ -175,13 +166,23 @@ router.put('/:gameId', authRequired, async (req: AuthenticatedRequest, res: Resp
   }
 
   const body = req.body as UpdateGameSlotBody;
+
+  if (body.seed_payload) {
+    const conflicts = await checkSeedConflicts(ctx.eventId, [body.seed_payload]);
+    if (conflicts.length > 0) {
+      return res.status(409).json({
+        error: `Seed already used in another event: ${conflicts[0]}`,
+      });
+    }
+  }
+
   const updated = await updateGameSlot(ctx.stageId, gameId, body);
   if (!updated) return res.status(404).json({ error: 'Game slot not found' });
   res.json(updated);
 });
 
-// POST /api/events/:slug/stages/:stageId/games/:gameId/clone
-router.post('/:gameId/clone', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+// PATCH /api/events/:slug/stages/:stageId/games/:gameId/reorder
+router.patch('/:gameId/reorder', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   const ctx = await resolveStageAndAdminCheck(req, res, true);
   if (!ctx) return;
 
@@ -190,10 +191,14 @@ router.post('/:gameId/clone', authRequired, async (req: AuthenticatedRequest, re
     return res.status(400).json({ error: 'Invalid gameId' });
   }
 
-  const result = await cloneGameSlot(ctx.stageId, gameId);
-  if (result === 'not_found') return res.status(404).json({ error: 'Game slot not found' });
-  if (result === 'duplicate') return res.status(409).json({ error: 'Duplicate game slot' });
-  res.status(201).json(result);
+  const newIndex = Number(req.body?.game_index);
+  if (!Number.isInteger(newIndex) || newIndex < 0) {
+    return res.status(400).json({ error: 'game_index must be a non-negative integer' });
+  }
+
+  const slot = await reorderGameSlot(ctx.stageId, gameId, newIndex);
+  if (!slot) return res.status(404).json({ error: 'Game slot not found' });
+  res.json(slot);
 });
 
 // DELETE /api/events/:slug/stages/:stageId/games/:gameId

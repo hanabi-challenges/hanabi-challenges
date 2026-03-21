@@ -1,16 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  CoreActionIcon,
   CoreAlert as Alert,
   CoreBadge as Badge,
   CoreButton as Button,
   CoreGroup as Group,
+  CoreModal,
+  CoreNumberInput as NumberInput,
   CoreSelect,
   CoreStack as Stack,
+  CoreSwitch as Switch,
   CoreText as Text,
   CoreTextInput as TextInput,
   DatePicker,
   FormContainer,
   InputContainer,
+  MaterialIcon,
   PageHeader,
   SectionCard,
 } from '../../design-system';
@@ -18,6 +23,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ApiError, getJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import type { StageSummary } from '../../hooks/useStages';
+import type { EventSummary } from '../../hooks/useEvents';
 import { useVariants, variantSelectOptions } from '../../hooks/useVariants';
 import {
   ScoringChainEditor,
@@ -26,12 +32,12 @@ import {
 } from '../../features/admin/components';
 
 type Mechanism = 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
-type TeamPolicy = 'SELF_FORMED' | 'QUEUED';
+type ParticipationType = 'INDIVIDUAL' | 'TEAM';
 type TeamScope = 'EVENT' | 'STAGE';
 type AttemptPolicy = 'SINGLE' | 'REQUIRED_ALL' | 'BEST_OF_N' | 'UNLIMITED_BEST';
 type TimePolicy = 'WINDOW' | 'ROLLING' | 'SCHEDULED';
 type StageScoringMethod = 'sum' | 'best_attempt' | 'win_loss' | 'elo';
-type BracketType = 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION' | 'ROUND_ROBIN';
+type BracketType = 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION' | 'ROUND_ROBIN' | 'STEPLADDER';
 
 function defaultStageScoringMethod(mechanism: Mechanism): StageScoringMethod {
   switch (mechanism) {
@@ -61,7 +67,7 @@ function stageScoringMethodOptions(mechanism: Mechanism): { value: string; label
 type FormState = {
   label: string;
   mechanism: Mechanism;
-  team_policy: TeamPolicy;
+  participation_type: ParticipationType;
   team_scope: TeamScope;
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
@@ -75,26 +81,31 @@ type FormState = {
   seedFormula: string;
   starts_at: string;
   ends_at: string;
+  visible: boolean;
+  autoPullEnabled: boolean;
+  autoPullIntervalMinutes: string;
 };
 
 type FieldErrors = Partial<Record<keyof FormState, string>>;
-
-// "best_of_3" → 3, undefined/null → 1
-function parseMatchFormatN(matchFormat: string | undefined | null): number {
-  if (!matchFormat) return 1;
-  const m = matchFormat.match(/^best_of_(\d+)$/);
-  return m ? parseInt(m[1], 10) : 1;
-}
 
 function isoToDate(iso: string | Date | null): string {
   if (!iso) return '';
   return new Date(iso as string).toISOString().slice(0, 10);
 }
 
-function dateToIso(date: string): string | null {
+function dateToIsoStart(date: string): string | null {
   if (!date) return null;
-  return new Date(date).toISOString();
+  return `${date}T00:00:00.000Z`;
 }
+
+function dateToIsoEnd(date: string): string | null {
+  if (!date) return null;
+  return `${date}T23:59:59.000Z`;
+}
+
+// ---------------------------------------------------------------------------
+// AdminStageEditorPage
+// ---------------------------------------------------------------------------
 
 export function AdminStageEditorPage() {
   const { slug, stageId: stageIdParam } = useParams<{ slug: string; stageId: string }>();
@@ -105,7 +116,7 @@ export function AdminStageEditorPage() {
   const [form, setForm] = useState<FormState>({
     label: '',
     mechanism: 'SEEDED_LEADERBOARD',
-    team_policy: 'SELF_FORMED',
+    participation_type: 'TEAM',
     team_scope: 'EVENT',
     attempt_policy: 'SINGLE',
     time_policy: 'WINDOW',
@@ -119,12 +130,16 @@ export function AdminStageEditorPage() {
     seedFormula: '',
     starts_at: '',
     ends_at: '',
+    visible: false,
+    autoPullEnabled: false,
+    autoPullIntervalMinutes: '60',
   });
   const { variants } = useVariants();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [seedHelpOpen, setSeedHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!isEdit || !stageIdParam || !slug || !token) return;
@@ -159,12 +174,18 @@ export function AdminStageEditorPage() {
         setForm({
           label: data.label,
           mechanism: data.mechanism,
-          team_policy: data.team_policy,
+          participation_type: data.participation_type,
           team_scope: data.team_scope,
           attempt_policy: data.attempt_policy,
           time_policy: data.time_policy,
           bracket_type: (configJson?.bracket_type ?? '') as BracketType | '',
-          match_format_n: String(parseMatchFormatN(configJson?.match_format)),
+          match_format_n: (() => {
+            const fmt = configJson?.match_format;
+            if (!fmt) return '1';
+            if (Array.isArray(fmt)) return (fmt as number[]).join(',');
+            const m = String(fmt).match(/^best_of_(\d+)$/);
+            return m ? m[1] : '1';
+          })(),
           scoring_chain: gameScoringConfig?.chain ?? DEFAULT_SCORING_CHAIN,
           stage_scoring_method: (stageScoringConfig?.method ??
             defaultStageScoringMethod(data.mechanism)) as StageScoringMethod,
@@ -174,6 +195,9 @@ export function AdminStageEditorPage() {
           seedFormula: seedRule?.formula ?? '',
           starts_at: isoToDate(data.starts_at),
           ends_at: isoToDate(data.ends_at),
+          visible: data.visible,
+          autoPullEnabled: data.auto_pull_json?.enabled ?? false,
+          autoPullIntervalMinutes: String(data.auto_pull_json?.interval_minutes ?? 60),
         });
       } catch {
         if (!cancelled) setLoadError('Failed to load stage.');
@@ -185,6 +209,24 @@ export function AdminStageEditorPage() {
       cancelled = true;
     };
   }, [isEdit, stageIdParam, slug, token]);
+
+  // When creating a new stage, seed team_scope from the event's propagation default.
+  useEffect(() => {
+    if (isEdit || !slug || !token) return;
+    let cancelled = false;
+    getJsonAuth<EventSummary>(`/events/${encodeURIComponent(slug)}`, token)
+      .then((event) => {
+        if (!cancelled && event.team_scope != null) {
+          setForm((prev) => ({ ...prev, team_scope: event.team_scope as TeamScope }));
+        }
+      })
+      .catch(() => {
+        /* silently ignore — form keeps its default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, slug, token]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -236,21 +278,38 @@ export function AdminStageEditorPage() {
     const config_json: Record<string, unknown> = {};
     if (form.mechanism === 'MATCH_PLAY' && form.bracket_type) {
       config_json.bracket_type = form.bracket_type;
-      const n = parseInt(form.match_format_n, 10);
-      config_json.match_format = `best_of_${Number.isFinite(n) && n >= 1 ? n : 1}`;
+      // Support single value or comma-separated array
+      const raw = form.match_format_n.trim();
+      if (raw.includes(',')) {
+        const parts = raw
+          .split(',')
+          .map((s) => parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n) && n >= 1);
+        config_json.match_format = parts.length > 1 ? parts : `best_of_${parts[0] ?? 1}`;
+      } else {
+        const n = parseInt(raw, 10);
+        config_json.match_format = `best_of_${Number.isFinite(n) && n >= 1 ? n : 1}`;
+      }
     }
 
     const body: Record<string, unknown> = {
       label: form.label.trim(),
-      team_policy: form.team_policy,
+      participation_type: form.participation_type,
       team_scope: form.team_scope,
       attempt_policy: form.mechanism === 'MATCH_PLAY' ? 'SINGLE' : form.attempt_policy,
       time_policy: form.time_policy,
       game_scoring_config_json,
       stage_scoring_config_json,
       config_json,
-      starts_at: dateToIso(form.starts_at),
-      ends_at: dateToIso(form.ends_at),
+      starts_at: dateToIsoStart(form.starts_at),
+      ends_at: dateToIsoEnd(form.ends_at),
+      visible: form.visible,
+      auto_pull_json: form.autoPullEnabled
+        ? {
+            enabled: true,
+            interval_minutes: Math.max(1, parseInt(form.autoPullIntervalMinutes, 10) || 60),
+          }
+        : null,
       ...(form.defaultVariantId
         ? {
             variant_rule_json: { type: 'specific', variantId: parseInt(form.defaultVariantId, 10) },
@@ -296,7 +355,13 @@ export function AdminStageEditorPage() {
 
   const showAttemptPolicy = form.mechanism !== 'MATCH_PLAY';
   const showBracketConfig = form.mechanism === 'MATCH_PLAY';
-  const scoringMethodOptions = stageScoringMethodOptions(form.mechanism);
+
+  const chainHasMaxScore = form.scoring_chain.some(
+    (e) => e.kind === 'observable' && e.type === 'max_score',
+  );
+  const scoringMethodOptions = chainHasMaxScore
+    ? [{ value: 'sum', label: 'Count / Sum of max scores' }]
+    : stageScoringMethodOptions(form.mechanism);
 
   return (
     <Stack gap="md">
@@ -329,7 +394,7 @@ export function AdminStageEditorPage() {
                 disabled={isEdit}
                 description={isEdit ? 'Mechanism cannot be changed after creation.' : undefined}
                 data={[
-                  { value: 'SEEDED_LEADERBOARD', label: 'Seeded Leaderboard' },
+                  { value: 'SEEDED_LEADERBOARD', label: 'Challenge' },
                   { value: 'GAUNTLET', label: 'Gauntlet' },
                   { value: 'MATCH_PLAY', label: 'Match Play' },
                 ]}
@@ -337,12 +402,15 @@ export function AdminStageEditorPage() {
               />
 
               <CoreSelect
-                label="Team Policy"
-                value={form.team_policy}
-                onChange={(v) => setField('team_policy', (v ?? 'SELF_FORMED') as TeamPolicy)}
+                label="Participation"
+                value={form.participation_type}
+                onChange={(v) => setField('participation_type', (v ?? 'TEAM') as ParticipationType)}
                 data={[
-                  { value: 'SELF_FORMED', label: 'Self-formed' },
-                  { value: 'QUEUED', label: 'Queued (admin-drawn)' },
+                  { value: 'TEAM', label: 'Team — players register and compete as teams' },
+                  {
+                    value: 'INDIVIDUAL',
+                    label: 'Individual — players opt in solo; teams assigned',
+                  },
                 ]}
                 required
               />
@@ -363,9 +431,9 @@ export function AdminStageEditorPage() {
                 value={form.time_policy}
                 onChange={(v) => setField('time_policy', (v ?? 'WINDOW') as TimePolicy)}
                 data={[
-                  { value: 'WINDOW', label: 'Window (all games open/close together)' },
-                  { value: 'ROLLING', label: 'Rolling (games open as previous close)' },
-                  { value: 'SCHEDULED', label: 'Scheduled (explicit times per game)' },
+                  { value: 'WINDOW', label: 'Batch (all games open simultaneously)' },
+                  { value: 'ROLLING', label: 'Sequential (games unlock in order)' },
+                  { value: 'SCHEDULED', label: 'Custom Schedule (individual times per game)' },
                 ]}
                 required
               />
@@ -396,21 +464,29 @@ export function AdminStageEditorPage() {
                       { value: 'SINGLE_ELIMINATION', label: 'Single Elimination' },
                       { value: 'DOUBLE_ELIMINATION', label: 'Double Elimination' },
                       { value: 'ROUND_ROBIN', label: 'Round Robin' },
+                      { value: 'STEPLADDER', label: 'Stepladder' },
                     ]}
                     placeholder="Select bracket type"
                     required
                   />
                   <TextInput
-                    label="Best of N"
-                    description="Number of games per match (must be odd). e.g. 1, 3, 5."
-                    placeholder="1"
+                    label="Best of N (per round)"
+                    description="Single value (e.g. 3) or comma-separated per round from first to final (e.g. 3,5,7)"
+                    placeholder="e.g. 3 or 3,5,7"
                     value={form.match_format_n}
                     onChange={(e) =>
-                      setField('match_format_n', e.currentTarget.value.replace(/\D/g, ''))
+                      setField('match_format_n', e.currentTarget.value.replace(/[^0-9,]/g, ''))
                     }
                     error={fieldErrors.match_format_n}
-                    style={{ maxWidth: 120 }}
                   />
+                  {form.bracket_type === 'STEPLADDER' ? (
+                    <Text size="sm" c="dimmed">
+                      Stepladder: lowest-seeded players face off first; winner advances to face the
+                      next seed up, continuing until reaching the top seed. Best of N can be a
+                      single value (all rounds) or a comma-separated list per round from first match
+                      to final (e.g., 3,5,7).
+                    </Text>
+                  ) : null}
                 </>
               ) : null}
 
@@ -421,6 +497,13 @@ export function AdminStageEditorPage() {
                   </Badge>
                 </Group>
               ) : null}
+
+              <Switch
+                label="Visible to players"
+                description="When off, this stage is hidden from the public event page."
+                checked={form.visible}
+                onChange={(e) => setField('visible', e.currentTarget.checked)}
+              />
             </FormContainer>
           </SectionCard>
 
@@ -439,6 +522,24 @@ export function AdminStageEditorPage() {
                   onChange={(v) => setField('ends_at', v)}
                 />
               </Group>
+
+              <Switch
+                label="Automatically Pull Replays"
+                description="Periodically ingest hanab.live replay results for this stage's game slots. Overrides the event-level setting."
+                checked={form.autoPullEnabled}
+                onChange={(e) => setField('autoPullEnabled', e.currentTarget.checked)}
+              />
+
+              {form.autoPullEnabled ? (
+                <NumberInput
+                  label="Pull Interval (minutes)"
+                  description="How often to check for new replays."
+                  value={form.autoPullIntervalMinutes}
+                  onChange={(v) => setField('autoPullIntervalMinutes', String(v))}
+                  min={1}
+                  step={15}
+                />
+              ) : null}
             </FormContainer>
           </SectionCard>
 
@@ -455,7 +556,15 @@ export function AdminStageEditorPage() {
               >
                 <ScoringChainEditor
                   value={form.scoring_chain}
-                  onChange={(v) => setField('scoring_chain', v)}
+                  onChange={(v) => {
+                    setField('scoring_chain', v);
+                    const nextHasMaxScore = v.some(
+                      (e) => e.kind === 'observable' && e.type === 'max_score',
+                    );
+                    if (nextHasMaxScore) {
+                      setField('stage_scoring_method', 'sum');
+                    }
+                  }}
                 />
               </InputContainer>
 
@@ -511,13 +620,24 @@ export function AdminStageEditorPage() {
                 data={variantSelectOptions(variants)}
               />
 
-              <TextInput
-                label="Seed Formula"
-                placeholder="e.g. e{eID}s{sID}g{gID}"
-                value={form.seedFormula}
-                onChange={(e) => setField('seedFormula', e.currentTarget.value)}
-                description="Available tokens: {eID}, {sID}, {gID}, {tSize}"
-              />
+              <Group gap="xs" align="flex-end">
+                <TextInput
+                  label="Seed Formula"
+                  placeholder="e.g. e{eID}s{sID}g{gID}"
+                  value={form.seedFormula}
+                  onChange={(e) => setField('seedFormula', e.currentTarget.value)}
+                  style={{ flex: 1 }}
+                />
+                <CoreActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  title="Seed formula help"
+                  onClick={() => setSeedHelpOpen(true)}
+                >
+                  <MaterialIcon name="help_outline" size={16} />
+                </CoreActionIcon>
+              </Group>
             </FormContainer>
           </SectionCard>
 
@@ -535,6 +655,76 @@ export function AdminStageEditorPage() {
           </Group>
         </FormContainer>
       </form>
+
+      <CoreModal
+        opened={seedHelpOpen}
+        onClose={() => setSeedHelpOpen(false)}
+        title="Seed Formula Tokens"
+        size="md"
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            A seed formula is a template string that generates a unique seed for each game. Tokens
+            are replaced with their numeric values at play time:
+          </Text>
+          <Stack gap="xs">
+            {[
+              { token: '{eID}', desc: 'Event ID' },
+              { token: '{sID}', desc: 'Stage ID' },
+              { token: '{gID}', desc: 'Game number (1-based position within stage)' },
+              { token: '{mID}', desc: 'Match ID (Match Play only; empty when absent)' },
+              { token: '{aID}', desc: 'Attempt ID (empty when absent)' },
+              { token: '{tID}', desc: 'Team ID (empty when absent)' },
+            ].map(({ token, desc }) => (
+              <Group key={token} gap="sm" wrap={false}>
+                <Text size="sm" ff="monospace" style={{ minWidth: 60 }}>
+                  {token}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {desc}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+          <Text size="sm" fw={600}>
+            Include a letter prefix before each token so seeds are self-labelling and unambiguous.
+          </Text>
+          <Text size="sm" c="dimmed">
+            Example:{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'e{eID}s{sID}g{gID}'}
+            </Text>{' '}
+            produces{' '}
+            <Text component="span" ff="monospace" size="sm">
+              e1s3g1
+            </Text>
+            ,{' '}
+            <Text component="span" ff="monospace" size="sm">
+              e1s3g2
+            </Text>
+            , etc. Without prefixes,{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{eID}{sID}{gID}'}
+            </Text>{' '}
+            would produce{' '}
+            <Text component="span" ff="monospace" size="sm">
+              130
+            </Text>{' '}
+            — ambiguous between event 1, stage 3, game 1 and event 13, stage 1, game *.
+          </Text>
+          <Text size="sm" fw={600}>
+            For seeds to be unique, include at least{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{sID}'}
+            </Text>{' '}
+            and{' '}
+            <Text component="span" ff="monospace" size="sm">
+              {'{gID}'}
+            </Text>
+            .
+          </Text>
+        </Stack>
+      </CoreModal>
     </Stack>
   );
 }

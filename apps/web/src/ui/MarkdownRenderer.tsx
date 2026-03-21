@@ -11,8 +11,8 @@ import {
   Stack,
   Table,
   Text,
-  Title,
 } from '../mantine';
+import { Heading } from '../design-system';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
@@ -241,18 +241,13 @@ function renderBlocks(
     switch (node.type) {
       case 'heading': {
         const depth = node.depth <= 1 ? 2 : node.depth;
-        if (depth >= 5) {
-          rendered.push(
-            <Text key={key} fw={600} mb="xs">
-              {renderInline(node.children as PhrasingContent[], key, definitions)}
-            </Text>,
-          );
-          return;
-        }
+        const level = Math.min(depth, 6) as 2 | 3 | 4 | 5 | 6;
         rendered.push(
-          <Title key={key} order={depth as 2 | 3 | 4} mb="xs">
-            {renderInline(node.children as PhrasingContent[], key, definitions)}
-          </Title>,
+          <Box key={key} mb="xs">
+            <Heading level={level}>
+              {renderInline(node.children as PhrasingContent[], key, definitions)}
+            </Heading>
+          </Box>,
         );
         return;
       }

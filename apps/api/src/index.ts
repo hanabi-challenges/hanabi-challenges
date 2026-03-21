@@ -3,6 +3,7 @@ import { env } from './config/env';
 import { info, warn } from './utils/logger';
 import { runMigrations } from './modules/migrations/migrations.runner';
 import { startVariantSyncScheduler } from './modules/variants/variants.service';
+import { startReplayPullWorker } from './workers/replay-pull.worker';
 import { ensureNotificationsSchema } from './modules/notifications/notifications.service';
 import {
   initNotificationsWebSocketServer,
@@ -19,6 +20,7 @@ runMigrations()
     initNotificationsWebSocketServer(server);
 
     startVariantSyncScheduler();
+    startReplayPullWorker();
     return Promise.all([ensureNotificationsSchema(), ensureAdminAccessSchema()]);
   })
   .then(() => startNotificationDbListener())

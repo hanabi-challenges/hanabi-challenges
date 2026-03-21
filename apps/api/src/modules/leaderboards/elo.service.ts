@@ -2,17 +2,18 @@ import { pool } from '../../config/db';
 import type { PoolClient } from 'pg';
 
 // ---------------------------------------------------------------------------
-// ELO computation utility (T-035)
+// ELO computation utility
 // ---------------------------------------------------------------------------
-// ELO is per-player, per-stage on SEEDED_LEADERBOARD stages with
+// ELO is per-player on CHALLENGE stages (or SEEDED_LEADERBOARD stages) with
 // stage_scoring_config_json: { method: "elo", k_factor: N, participation_bonus: N }.
 //
-// For each game result, the submitting team's score is compared against all
-// other teams who played the same game slot. The outcome (win/loss/draw) is
-// derived by the caller from those score comparisons, then passed here.
+// Ratings are scoped to the stage's group when one exists, or to the stage
+// itself for ungrouped individual play. This lets ELO propagate across all
+// stages within a group while still working for a single standalone stage.
 //
-// When a team has no opponents on a given game slot, outcome is treated as
-// 'draw' (no change beyond participation bonus).
+// For each game result, all teams that played the same game slot are compared.
+// When a team has no opponents, outcome is treated as 'draw' (participation
+// bonus only).
 // ---------------------------------------------------------------------------
 
 export type EloOutcome = 'win' | 'loss' | 'draw';
@@ -75,9 +76,6 @@ export function computeEloDeltas(
  * Win: scored strictly higher than ALL opponents.
  * Loss: scored strictly lower than ALL opponents.
  * Draw: otherwise (mixed results or ties with everyone).
- *
- * This is a simplified aggregation for the field-vs-field comparison. For a
- * more granular approach, call computeEloDeltas for each head-to-head pair.
  */
 export function deriveOutcome(teamScore: number, opponentScores: number[]): EloOutcome {
   if (opponentScores.length === 0) return 'draw';
@@ -91,9 +89,39 @@ export function deriveOutcome(teamScore: number, opponentScores: number[]): EloO
 }
 
 // ---------------------------------------------------------------------------
-// ELO rating materialization (T-036)
+// Scope resolution
 // ---------------------------------------------------------------------------
-// Called after a SEEDED_LEADERBOARD + ELO game result is inserted.
+// ELO ratings are keyed on (group_id, user_id) when the stage belongs to a
+// group, or (stage_id, user_id) for ungrouped stages. Exactly one of the two
+// FK columns is non-null (enforced by DB constraint).
+
+type EloScope = { type: 'group'; id: number } | { type: 'stage'; id: number };
+
+async function resolveEloScope(stageId: number, q: typeof pool | PoolClient): Promise<EloScope> {
+  const res = await q.query<{ group_id: number | null }>(
+    `SELECT group_id FROM event_stages WHERE id = $1`,
+    [stageId],
+  );
+  const groupId = res.rows[0]?.group_id ?? null;
+  return groupId !== null ? { type: 'group', id: groupId } : { type: 'stage', id: stageId };
+}
+
+function scopeWhere(scope: EloScope): { clause: string; param: number } {
+  return scope.type === 'group'
+    ? { clause: 'group_id = $1 AND stage_id IS NULL', param: scope.id }
+    : { clause: 'stage_id = $1 AND group_id IS NULL', param: scope.id };
+}
+
+function scopeInsertCols(scope: EloScope): { cols: string; scopeVal: number } {
+  return scope.type === 'group'
+    ? { cols: 'group_id', scopeVal: scope.id }
+    : { cols: 'stage_id', scopeVal: scope.id };
+}
+
+// ---------------------------------------------------------------------------
+// ELO rating materialization
+// ---------------------------------------------------------------------------
+// Called after a game result is inserted for a stage with method: "elo".
 // Fetches all opponent scores for the same game slot, computes ELO deltas,
 // and upserts into event_player_ratings (one row per team member).
 //
@@ -135,7 +163,12 @@ export async function maybeUpdateEloRatings(
   const participationBonus = config.participation_bonus ?? 0;
   const eloConfig: EloConfig = { kFactor, participationBonus };
 
-  // 2. Get team members
+  // 2. Resolve ELO scope (group or standalone stage)
+  const scope = await resolveEloScope(stageId, q);
+  const { clause: whereClause } = scopeWhere(scope);
+  const { cols: scopeCol, scopeVal } = scopeInsertCols(scope);
+
+  // 3. Get team members
   const membersRes = await q.query<{ user_id: number }>(
     `SELECT user_id FROM event_team_members WHERE event_team_id = $1 AND confirmed = TRUE`,
     [teamId],
@@ -143,10 +176,10 @@ export async function maybeUpdateEloRatings(
   const memberUserIds = membersRes.rows.map((r) => r.user_id);
   if (memberUserIds.length === 0) return;
 
-  // 3. Get current ratings for this team's members (default 1000)
+  // 4. Get current ratings for this team's members (default 1000)
   const currentRatingsRes = await q.query<{ user_id: number; rating: string }>(
-    `SELECT user_id, rating FROM event_player_ratings WHERE stage_id = $1 AND user_id = ANY($2)`,
-    [stageId, memberUserIds],
+    `SELECT user_id, rating FROM event_player_ratings WHERE ${whereClause} AND user_id = ANY($2)`,
+    [scopeVal, memberUserIds],
   );
   const currentRatings = new Map<number, number>();
   for (const r of currentRatingsRes.rows) {
@@ -157,7 +190,7 @@ export async function maybeUpdateEloRatings(
     memberUserIds.reduce((sum, uid) => sum + (currentRatings.get(uid) ?? 1000), 0) /
     memberUserIds.length;
 
-  // 4. Get other teams' scores on this game slot (excluding the submitting team)
+  // 5. Get other teams' scores on this game slot (excluding the submitting team)
   const opponentScoresRes = await q.query<{ event_team_id: number; score: number }>(
     `SELECT egr.event_team_id, egr.score
      FROM event_game_results egr
@@ -166,7 +199,7 @@ export async function maybeUpdateEloRatings(
   );
   const opponentRows = opponentScoresRes.rows;
 
-  // 5. Resolve opponent team avg ratings
+  // 6. Resolve opponent team avg ratings
   let opponentTeamAvgRatings: number[] = [];
   if (opponentRows.length > 0) {
     const opponentTeamIds = opponentRows.map((r) => r.event_team_id);
@@ -178,8 +211,8 @@ export async function maybeUpdateEloRatings(
     const allOppUserIds = opponentMembersRes.rows.map((r) => r.user_id);
     const oppRatingsRes = await q.query<{ user_id: number; rating: string }>(
       `SELECT user_id, rating FROM event_player_ratings
-       WHERE stage_id = $1 AND user_id = ANY($2)`,
-      [stageId, allOppUserIds],
+       WHERE ${whereClause} AND user_id = ANY($2)`,
+      [scopeVal, allOppUserIds],
     );
     const oppRatingMap = new Map<number, number>();
     for (const r of oppRatingsRes.rows) oppRatingMap.set(r.user_id, Number(r.rating));
@@ -199,26 +232,32 @@ export async function maybeUpdateEloRatings(
     });
   }
 
-  // 6. Derive outcome and compute delta
+  // 7. Derive outcome and compute delta
   const opponentScores = opponentRows.map((r) => r.score);
   const outcome = deriveOutcome(newScore, opponentScores);
   const { newRating } = computeEloDeltas(teamAvgRating, opponentTeamAvgRatings, outcome, eloConfig);
   const ratingDelta = newRating - teamAvgRating;
 
-  // 7. Upsert ratings for each team member
+  // 8. Upsert ratings for each team member
+  // ON CONFLICT predicate must exactly match the partial unique index definition.
+  const conflictClause =
+    scope.type === 'group'
+      ? `ON CONFLICT (group_id, user_id) WHERE group_id IS NOT NULL`
+      : `ON CONFLICT (stage_id, user_id) WHERE stage_id IS NOT NULL`;
+
   for (const userId of memberUserIds) {
     const currentRating = currentRatings.get(userId) ?? 1000;
     const updatedRating = currentRating + ratingDelta;
 
     await q.query(
-      `INSERT INTO event_player_ratings (stage_id, user_id, rating, games_played, last_played_at, updated_at)
+      `INSERT INTO event_player_ratings (${scopeCol}, user_id, rating, games_played, last_played_at, updated_at)
        VALUES ($1, $2, $3, 1, NOW(), NOW())
-       ON CONFLICT (stage_id, user_id) DO UPDATE SET
+       ${conflictClause} DO UPDATE SET
          rating         = $3,
          games_played   = event_player_ratings.games_played + 1,
          last_played_at = NOW(),
          updated_at     = NOW()`,
-      [stageId, userId, updatedRating.toFixed(3)],
+      [scopeVal, userId, updatedRating.toFixed(3)],
     );
   }
 }

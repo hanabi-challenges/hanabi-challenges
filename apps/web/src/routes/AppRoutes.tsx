@@ -28,16 +28,14 @@ import { AdminBadgeDesignerPage } from '../pages/admin/AdminBadgeDesignerPage';
 import { AdminManageUsersPage } from '../pages/admin/AdminManageUsersPage';
 import { AdminEventOverviewPage } from '../pages/admin/AdminEventOverviewPage';
 import { AdminEventStagesPage } from '../pages/admin/AdminEventStagesPage';
-import { AdminEventRegistrationsPage } from '../pages/admin/AdminEventRegistrationsPage';
-import { AdminEventResultsPage } from '../pages/admin/AdminEventResultsPage';
 import { AdminEventAwardsPage } from '../pages/admin/AdminEventAwardsPage';
 import { AdminStageEditorPage } from '../pages/admin/AdminStageEditorPage';
-import { AdminGameSlotsPage } from '../pages/admin/AdminGameSlotsPage';
 import { AdminStageDrawPage } from '../pages/admin/AdminStageDrawPage';
 import { AdminStageBracketPage } from '../pages/admin/AdminStageBracketPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { EventStatsPage } from '../pages/EventStatsPage';
 import { StageDetailPage } from '../pages/StageDetailPage';
+import { EventTeamResultsPage } from '../pages/EventTeamResultsPage';
 import { SessionLivePage } from '../pages/SessionLivePage';
 import { SessionTeamPage } from '../pages/SessionTeamPage';
 import { RequireAdmin } from '../features/admin/guards/RequireAdmin';
@@ -77,11 +75,8 @@ function AdminRoutes() {
           <Route path="stages" element={<AdminEventStagesPage />} />
           <Route path="stages/new" element={<AdminStageEditorPage />} />
           <Route path="stages/:stageId/edit" element={<AdminStageEditorPage />} />
-          <Route path="stages/:stageId/games" element={<AdminGameSlotsPage />} />
           <Route path="stages/:stageId/draw" element={<AdminStageDrawPage />} />
           <Route path="stages/:stageId/bracket" element={<AdminStageBracketPage />} />
-          <Route path="registrations" element={<AdminEventRegistrationsPage />} />
-          <Route path="results" element={<AdminEventResultsPage />} />
           <Route path="awards" element={<AdminEventAwardsPage />} />
         </Route>
       </Route>
@@ -149,6 +144,7 @@ export function AppRoutes() {
             <Route path=":slug" element={<EventDetailPage />} />
             <Route path=":slug/:teamSize" element={<EventDetailPage />} />
             <Route path=":slug/teams/:teamId" element={<TeamPage />} />
+            <Route path=":slug/event-teams/:teamId" element={<EventTeamResultsPage />} />
             <Route path=":slug/stats" element={<EventStatsPage />} />
             <Route path=":slug/stages/:stageId" element={<StageDetailPage />} />
             <Route

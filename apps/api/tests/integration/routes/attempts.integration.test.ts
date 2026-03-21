@@ -31,7 +31,7 @@ async function createGauntletStage(token: string, slug = 'test-event') {
     .send({
       label: 'Gauntlet Stage',
       mechanism: 'GAUNTLET',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'BEST_OF_N',
       time_policy: 'WINDOW',
@@ -166,7 +166,7 @@ describe('POST /stages/:stageId/attempts', () => {
         .send({
           label: 'LB Stage',
           mechanism: 'SEEDED_LEADERBOARD',
-          team_policy: 'SELF_FORMED',
+          participation_type: 'TEAM',
           team_scope: 'STAGE',
           attempt_policy: 'SINGLE',
           time_policy: 'WINDOW',
@@ -567,7 +567,7 @@ describe('BEST_OF_N attempt limit', () => {
       .send({
         label: 'BestOf1',
         mechanism: 'GAUNTLET',
-        team_policy: 'SELF_FORMED',
+        participation_type: 'TEAM',
         team_scope: 'STAGE',
         attempt_policy: 'BEST_OF_N',
         time_policy: 'WINDOW',
@@ -604,7 +604,7 @@ describe('BEST_OF_N attempt limit', () => {
       .send({
         label: 'BestOf1b',
         mechanism: 'GAUNTLET',
-        team_policy: 'SELF_FORMED',
+        participation_type: 'TEAM',
         team_scope: 'STAGE',
         attempt_policy: 'BEST_OF_N',
         time_policy: 'WINDOW',

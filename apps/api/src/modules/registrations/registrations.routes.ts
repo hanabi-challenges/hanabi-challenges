@@ -192,13 +192,15 @@ router.get(
     const ctx = await resolveEventForRegistration(req, res, true);
     if (!ctx) return;
 
+    const mine = req.query.mine === 'true';
     const isSuperadmin = req.user!.role === 'SUPERADMIN';
     const role = isSuperadmin
       ? 'SUPERADMIN'
       : await getEventAdminRole(ctx.eventId, req.user!.userId);
     const isAdmin = role !== null;
 
-    const teams = await listEventTeams(ctx.eventId, isAdmin ? undefined : req.user!.userId);
+    const userId = mine || !isAdmin ? req.user!.userId : undefined;
+    const teams = await listEventTeams(ctx.eventId, userId);
     res.json(teams);
   },
 );
@@ -245,6 +247,10 @@ router.post(
       req.user!.userId,
       inviteUserIds,
       ctx.event!.allowed_team_sizes,
+      {
+        registration_cutoff: ctx.event!.registration_cutoff,
+        allow_late_registration: ctx.event!.allow_late_registration,
+      },
     );
 
     if (result.ok === false) {
@@ -254,10 +260,8 @@ router.post(
           error: `Team size must be one of: ${ctx.event!.allowed_team_sizes.join(', ')}`,
         });
       }
-      if (reason === 'not_registered') {
-        return res
-          .status(409)
-          .json({ error: 'All team members must have an active event registration' });
+      if (reason === 'registration_closed') {
+        return res.status(409).json({ error: 'Registration has closed for this event' });
       }
       return res
         .status(409)

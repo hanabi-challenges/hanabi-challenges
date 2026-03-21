@@ -36,7 +36,7 @@ async function createStage(token: string, slug = 'test-event', label = 'Stage') 
     .send({
       label,
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'EVENT',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

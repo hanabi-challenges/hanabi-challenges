@@ -14,6 +14,7 @@ import {
   SearchSelect,
   Section,
   Stack,
+  Tabs,
   Text,
   CoreTable as Table,
 } from '../design-system';
@@ -32,7 +33,7 @@ type StageDetail = {
   label: string;
   mechanism: 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
   team_scope: 'EVENT' | 'STAGE';
-  team_policy: 'SELF_FORMED' | 'QUEUED';
+  participation_type: 'INDIVIDUAL' | 'TEAM';
   status: string;
   starts_at: string | null;
   ends_at: string | null;
@@ -857,9 +858,10 @@ function GauntletSection({
 type MatchPlaySectionProps = {
   standings: MatchPlayStandings;
   userId: number | undefined;
+  hideStandings?: boolean;
 };
 
-function MatchPlaySection({ standings, userId }: MatchPlaySectionProps) {
+function MatchPlaySection({ standings, userId, hideStandings }: MatchPlaySectionProps) {
   // Find user's team from entries
   const myTeamEntry = standings.entries.find((e) =>
     e.team.members.some((m) => m.user_id === userId),
@@ -922,7 +924,7 @@ function MatchPlaySection({ standings, userId }: MatchPlaySectionProps) {
       ))}
 
       {/* Standings */}
-      {standings.entries.length > 0 ? (
+      {!hideStandings && standings.entries.length > 0 ? (
         <Stack gap="sm">
           <Heading level={3}>Standings</Heading>
           <Table>
@@ -967,8 +969,9 @@ export function StageDetailPage() {
 
   // Public data
   const [stage, setStage] = useState<StageDetail | null>(null);
+  const [allStages, setAllStages] = useState<StageDetail[]>([]);
   const [games, setGames] = useState<GameSlot[]>([]);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
+  const [lbByStage, setLbByStage] = useState<Map<number, LeaderboardData | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -981,6 +984,7 @@ export function StageDetailPage() {
   const [authVersion, setAuthVersion] = useState(0);
 
   // Leaderboard tab selection (must be before early returns)
+  const [activeLbStageId, setActiveLbStageId] = useState<number | null>(null);
   const [activeLbSize, setActiveLbSize] = useState<number | null>(null);
 
   // Load public data
@@ -1006,8 +1010,9 @@ export function StageDetailPage() {
             setNotFound(true);
           } else {
             setStage(found);
+            setAllStages(stagesData);
             setGames(gamesData);
-            setLeaderboard(lbData);
+            setLbByStage(new Map([[stageId, lbData]]));
           }
           setLoading(false);
         }
@@ -1116,13 +1121,22 @@ export function StageDetailPage() {
 
   function handleResultSuccess(gameId: number, result: ResultResponse) {
     setMyResults((prev) => new Map(prev).set(gameId, result));
-    // Also refresh leaderboard
+    // Refresh leaderboard for the current stage
     if (slug && stageId) {
       getJson<LeaderboardData>(`/events/${encodeURIComponent(slug)}/stages/${stageId}/leaderboard`)
-        .then((lb) => setLeaderboard(lb))
+        .then((lb) => setLbByStage((prev) => new Map(prev).set(stageId, lb)))
         .catch(() => null);
     }
   }
+
+  // Lazy-load leaderboard for other stages when a stage tab is selected
+  useEffect(() => {
+    const id = activeLbStageId ?? stageId;
+    if (!slug || !id || lbByStage.has(id)) return;
+    getJson<LeaderboardData>(`/events/${encodeURIComponent(slug)}/stages/${id}/leaderboard`)
+      .then((lb) => setLbByStage((prev) => new Map(prev).set(id, lb)))
+      .catch(() => setLbByStage((prev) => new Map(prev).set(id, null)));
+  }, [slug, stageId, activeLbStageId, lbByStage]);
 
   // Derive team_id for result submission (from stage team or event team)
   const myTeamId = stageTeam?.all_confirmed ? stageTeam.id : null;
@@ -1151,7 +1165,7 @@ export function StageDetailPage() {
 
   const dateRange = stageDateRange(stage);
   const isStageScope = stage.team_scope === 'STAGE';
-  const isQueuedPolicy = stage.team_policy === 'QUEUED';
+  const isQueuedPolicy = stage.participation_type === 'INDIVIDUAL';
   const showParticipation =
     registered &&
     token &&
@@ -1159,35 +1173,115 @@ export function StageDetailPage() {
     (isStageScope || isQueuedPolicy) &&
     (stage.status === 'UPCOMING' || stage.status === 'IN_PROGRESS');
 
-  // Leaderboard: group by team_size if not combined (SEEDED_LEADERBOARD only)
+  // Active leaderboard stage (may differ from current URL stage via stage tabs)
+  const effectiveLbStageId = activeLbStageId ?? stageId;
+  const activeLbStage = allStages.find((s) => s.id === effectiveLbStageId) ?? stage;
+  const activeLb = lbByStage.get(effectiveLbStageId) ?? null;
+  const isIndividualLbStage = activeLbStage?.participation_type === 'INDIVIDUAL';
+
+  // SEEDED leaderboard entries
   const seededLb =
-    stage.mechanism === 'SEEDED_LEADERBOARD' &&
-    leaderboard != null &&
-    'combined_leaderboard' in leaderboard
-      ? (leaderboard as { combined_leaderboard: boolean; entries: LeaderboardEntry[] })
+    activeLbStage?.mechanism === 'SEEDED_LEADERBOARD' &&
+    activeLb != null &&
+    'combined_leaderboard' in activeLb
+      ? (activeLb as { combined_leaderboard: boolean; entries: LeaderboardEntry[] })
       : null;
   const seededEntries = seededLb?.entries ?? [];
-  const teamSizes = [...new Set(seededEntries.map((e) => e.team_size))].sort((a, b) => a - b);
-  const showLbTabs = seededLb != null && !seededLb.combined_leaderboard && teamSizes.length > 1;
-  const visibleLbEntries =
-    showLbTabs && activeLbSize != null
-      ? seededEntries.filter((e) => e.team_size === activeLbSize)
-      : seededEntries;
 
+  // GAUNTLET leaderboard entries
   const gauntletLb =
-    stage.mechanism === 'GAUNTLET' &&
-    leaderboard != null &&
-    !('combined_leaderboard' in leaderboard) &&
-    !('rounds' in leaderboard)
-      ? (leaderboard as { entries: GauntletLeaderboardEntry[] })
+    activeLbStage?.mechanism === 'GAUNTLET' &&
+    activeLb != null &&
+    !('combined_leaderboard' in activeLb) &&
+    !('rounds' in activeLb)
+      ? (activeLb as { entries: GauntletLeaderboardEntry[] })
       : null;
+  const gauntletEntries = gauntletLb?.entries ?? [];
 
+  // MATCH_PLAY standings
   const matchPlayStandings =
-    stage.mechanism === 'MATCH_PLAY' && leaderboard != null && 'rounds' in leaderboard
-      ? (leaderboard as MatchPlayStandings)
+    activeLbStage?.mechanism === 'MATCH_PLAY' && activeLb != null && 'rounds' in activeLb
+      ? (activeLb as MatchPlayStandings)
       : null;
 
-  // Game columns for leaderboard
+  // Current URL stage's MATCH_PLAY standings (for the bracket rounds section)
+  const currentStageMatchPlay =
+    stage.mechanism === 'MATCH_PLAY' &&
+    lbByStage.get(stageId) != null &&
+    'rounds' in (lbByStage.get(stageId) ?? {})
+      ? (lbByStage.get(stageId) as MatchPlayStandings)
+      : null;
+
+  // Size tabs: applicable for SEEDED (non-combined) and GAUNTLET
+  const sizeCandidates: number[] = seededLb
+    ? [...new Set(seededEntries.map((e) => e.team_size))].sort((a, b) => a - b)
+    : gauntletLb
+      ? [...new Set(gauntletEntries.map((e) => e.team_size))].sort((a, b) => a - b)
+      : [];
+  const showSizeTabs = sizeCandidates.length > 1 && !(seededLb?.combined_leaderboard ?? false);
+  const effectiveLbSize = showSizeTabs ? (activeLbSize ?? sizeCandidates[0]) : null;
+
+  // Filter entries by size
+  const filteredSeededEntries =
+    effectiveLbSize != null
+      ? seededEntries.filter((e) => e.team_size === effectiveLbSize)
+      : seededEntries;
+  const filteredGauntletEntries =
+    effectiveLbSize != null
+      ? gauntletEntries.filter((e) => e.team_size === effectiveLbSize)
+      : gauntletEntries;
+
+  // For individual stages, expand team entries into per-player rows
+  type IndividualRow = {
+    rank: number;
+    name: string;
+    stage_score: number;
+    game_scores: { game_index: number; score: number; bdr: number | null }[];
+    isMe: boolean;
+  };
+  function toIndividualRows(entries: LeaderboardEntry[]): IndividualRow[] {
+    return entries.flatMap((e) =>
+      e.team.members.map((m) => ({
+        rank: e.rank,
+        name: m.display_name,
+        stage_score: e.stage_score,
+        game_scores: e.game_scores,
+        isMe: m.user_id === user?.id,
+      })),
+    );
+  }
+  type GauntletIndividualRow = {
+    rank: number | null;
+    dnf: boolean;
+    name: string;
+    stage_score: number | null;
+    game_scores: { game_index: number; score: number; bdr: number | null }[];
+    isMe: boolean;
+  };
+  function toGauntletIndividualRows(entries: GauntletLeaderboardEntry[]): GauntletIndividualRow[] {
+    return entries.flatMap((e) =>
+      e.team.members.map((m) => ({
+        rank: e.rank,
+        dnf: e.dnf,
+        name: m.display_name,
+        stage_score: e.stage_score,
+        game_scores: e.game_scores,
+        isMe: m.user_id === user?.id,
+      })),
+    );
+  }
+
+  // Stage tabs: show if more than one stage
+  const showStageTabs = allStages.length > 1;
+
+  // Show the leaderboard section whenever a fetch was attempted (activeLb not undefined in the map)
+  const lbFetched = lbByStage.has(effectiveLbStageId);
+  const hasLbEntries =
+    filteredSeededEntries.length > 0 ||
+    filteredGauntletEntries.length > 0 ||
+    (matchPlayStandings?.entries.length ?? 0) > 0;
+
+  // Game columns: derive from entry game_scores (works for any stage, not just current)
   const gameIndices = games.map((g) => g.game_index);
 
   return (
@@ -1290,63 +1384,6 @@ export function StageDetailPage() {
             </Stack>
           ) : null}
 
-          {/* SEEDED_LEADERBOARD: leaderboard */}
-          {stage.mechanism === 'SEEDED_LEADERBOARD' && seededEntries.length > 0 ? (
-            <Stack gap="sm">
-              <Heading level={2}>Leaderboard</Heading>
-
-              {showLbTabs ? (
-                <Inline gap="xs">
-                  {teamSizes.map((sz) => (
-                    <Button
-                      key={sz}
-                      size="sm"
-                      variant={activeLbSize === sz ? 'filled' : 'outline'}
-                      onClick={() => setActiveLbSize(sz)}
-                    >
-                      {sz}-player
-                    </Button>
-                  ))}
-                </Inline>
-              ) : null}
-
-              <Table>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>#</Table.Th>
-                    <Table.Th>Team</Table.Th>
-                    {gameIndices.map((gi) => (
-                      <Table.Th key={gi} style={{ textAlign: 'right' }}>
-                        G{gi + 1}
-                      </Table.Th>
-                    ))}
-                    <Table.Th style={{ textAlign: 'right' }}>Total</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {visibleLbEntries.map((entry) => {
-                    const isMe = entry.team.members.some((m) => m.user_id === user?.id);
-                    return (
-                      <Table.Tr key={entry.team.id} style={isMe ? { fontWeight: 'bold' } : {}}>
-                        <Table.Td>{entry.rank}</Table.Td>
-                        <Table.Td>{entry.team.display_name}</Table.Td>
-                        {gameIndices.map((gi) => {
-                          const gs = entry.game_scores.find((g) => g.game_index === gi);
-                          return (
-                            <Table.Td key={gi} style={{ textAlign: 'right' }}>
-                              {gs != null ? gs.score : '—'}
-                            </Table.Td>
-                          );
-                        })}
-                        <Table.Td style={{ textAlign: 'right' }}>{entry.stage_score}</Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
-            </Stack>
-          ) : null}
-
           {/* GAUNTLET section (T-063) */}
           {stage.mechanism === 'GAUNTLET' && token ? (
             <GauntletSection
@@ -1360,58 +1397,256 @@ export function StageDetailPage() {
             />
           ) : null}
 
-          {/* GAUNTLET leaderboard */}
-          {stage.mechanism === 'GAUNTLET' && gauntletLb && gauntletLb.entries.length > 0 ? (
-            <Stack gap="sm">
-              <Heading level={2}>Leaderboard</Heading>
-              <Table>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>#</Table.Th>
-                    <Table.Th>Team</Table.Th>
-                    {gameIndices.map((gi) => (
-                      <Table.Th key={gi} style={{ textAlign: 'right' }}>
-                        G{gi + 1}
-                      </Table.Th>
-                    ))}
-                    <Table.Th style={{ textAlign: 'right' }}>Best</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {gauntletLb.entries.map((entry, idx) => {
-                    const isMe = entry.team.members.some((m) => m.user_id === user?.id);
-                    return (
-                      <Table.Tr
-                        key={entry.team.id ?? idx}
-                        style={isMe ? { fontWeight: 'bold' } : {}}
-                      >
-                        <Table.Td>{entry.rank ?? '—'}</Table.Td>
-                        <Table.Td>
-                          {entry.team.display_name}
-                          {entry.dnf ? ' (DNF)' : ''}
-                        </Table.Td>
-                        {gameIndices.map((gi) => {
-                          const gs = entry.game_scores.find((g) => g.game_index === gi);
-                          return (
-                            <Table.Td key={gi} style={{ textAlign: 'right' }}>
-                              {gs != null ? gs.score : '—'}
-                            </Table.Td>
-                          );
-                        })}
-                        <Table.Td style={{ textAlign: 'right' }}>
-                          {entry.stage_score ?? '—'}
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
-            </Stack>
+          {/* MATCH_PLAY bracket rounds (T-064) — standings moved to unified leaderboard section */}
+          {stage.mechanism === 'MATCH_PLAY' && currentStageMatchPlay ? (
+            <MatchPlaySection standings={currentStageMatchPlay} userId={user?.id} hideStandings />
           ) : null}
 
-          {/* MATCH_PLAY section (T-064) */}
-          {stage.mechanism === 'MATCH_PLAY' && matchPlayStandings ? (
-            <MatchPlaySection standings={matchPlayStandings} userId={user?.id} />
+          {/* Unified leaderboard section */}
+          {lbFetched ? (
+            <Stack gap="sm">
+              <Heading level={2}>Leaderboard</Heading>
+
+              {/* Stage tabs */}
+              {showStageTabs ? (
+                <Tabs
+                  items={allStages.map((s) => ({
+                    key: String(s.id),
+                    label: s.label,
+                    active: effectiveLbStageId === s.id,
+                    onSelect: () => {
+                      setActiveLbStageId(s.id);
+                      setActiveLbSize(null);
+                    },
+                  }))}
+                />
+              ) : null}
+
+              {/* Player count tabs */}
+              {showSizeTabs ? (
+                <Tabs
+                  items={sizeCandidates.map((sz) => ({
+                    key: String(sz),
+                    label: `${sz}-player`,
+                    active: (effectiveLbSize ?? sizeCandidates[0]) === sz,
+                    onSelect: () => setActiveLbSize(sz),
+                  }))}
+                />
+              ) : null}
+
+              {/* SEEDED_LEADERBOARD table */}
+              {seededLb && filteredSeededEntries.length > 0
+                ? (() => {
+                    const lbGameIndices =
+                      effectiveLbStageId === stageId
+                        ? gameIndices
+                        : [
+                            ...new Set(
+                              filteredSeededEntries.flatMap((e) =>
+                                e.game_scores.map((gs) => gs.game_index),
+                              ),
+                            ),
+                          ].sort((a, b) => a - b);
+                    const rows = isIndividualLbStage
+                      ? toIndividualRows(filteredSeededEntries)
+                      : null;
+                    return (
+                      <Table>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>#</Table.Th>
+                            <Table.Th>{isIndividualLbStage ? 'Player' : 'Team'}</Table.Th>
+                            {lbGameIndices.map((gi) => (
+                              <Table.Th key={gi} style={{ textAlign: 'right' }}>
+                                G{gi + 1}
+                              </Table.Th>
+                            ))}
+                            <Table.Th style={{ textAlign: 'right' }}>Total</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {rows
+                            ? rows.map((row, idx) => (
+                                <Table.Tr key={idx} style={row.isMe ? { fontWeight: 'bold' } : {}}>
+                                  <Table.Td>{row.rank}</Table.Td>
+                                  <Table.Td>{row.name}</Table.Td>
+                                  {lbGameIndices.map((gi) => {
+                                    const gs = row.game_scores.find((g) => g.game_index === gi);
+                                    return (
+                                      <Table.Td key={gi} style={{ textAlign: 'right' }}>
+                                        {gs != null ? gs.score : '—'}
+                                      </Table.Td>
+                                    );
+                                  })}
+                                  <Table.Td style={{ textAlign: 'right' }}>
+                                    {row.stage_score}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ))
+                            : filteredSeededEntries.map((entry) => {
+                                const isMe = entry.team.members.some((m) => m.user_id === user?.id);
+                                return (
+                                  <Table.Tr
+                                    key={entry.team.id}
+                                    style={isMe ? { fontWeight: 'bold' } : {}}
+                                  >
+                                    <Table.Td>{entry.rank}</Table.Td>
+                                    <Table.Td>{entry.team.display_name}</Table.Td>
+                                    {lbGameIndices.map((gi) => {
+                                      const gs = entry.game_scores.find((g) => g.game_index === gi);
+                                      return (
+                                        <Table.Td key={gi} style={{ textAlign: 'right' }}>
+                                          {gs != null ? gs.score : '—'}
+                                        </Table.Td>
+                                      );
+                                    })}
+                                    <Table.Td style={{ textAlign: 'right' }}>
+                                      {entry.stage_score}
+                                    </Table.Td>
+                                  </Table.Tr>
+                                );
+                              })}
+                        </Table.Tbody>
+                      </Table>
+                    );
+                  })()
+                : null}
+
+              {/* GAUNTLET table */}
+              {gauntletLb && filteredGauntletEntries.length > 0
+                ? (() => {
+                    const lbGameIndices =
+                      effectiveLbStageId === stageId
+                        ? gameIndices
+                        : [
+                            ...new Set(
+                              filteredGauntletEntries.flatMap((e) =>
+                                e.game_scores.map((gs) => gs.game_index),
+                              ),
+                            ),
+                          ].sort((a, b) => a - b);
+                    const rows = isIndividualLbStage
+                      ? toGauntletIndividualRows(filteredGauntletEntries)
+                      : null;
+                    return (
+                      <Table>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>#</Table.Th>
+                            <Table.Th>{isIndividualLbStage ? 'Player' : 'Team'}</Table.Th>
+                            {lbGameIndices.map((gi) => (
+                              <Table.Th key={gi} style={{ textAlign: 'right' }}>
+                                G{gi + 1}
+                              </Table.Th>
+                            ))}
+                            <Table.Th style={{ textAlign: 'right' }}>Best</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {rows
+                            ? rows.map((row, idx) => (
+                                <Table.Tr key={idx} style={row.isMe ? { fontWeight: 'bold' } : {}}>
+                                  <Table.Td>{row.rank ?? '—'}</Table.Td>
+                                  <Table.Td>
+                                    {row.name}
+                                    {row.dnf ? ' (DNF)' : ''}
+                                  </Table.Td>
+                                  {lbGameIndices.map((gi) => {
+                                    const gs = row.game_scores.find((g) => g.game_index === gi);
+                                    return (
+                                      <Table.Td key={gi} style={{ textAlign: 'right' }}>
+                                        {gs != null ? gs.score : '—'}
+                                      </Table.Td>
+                                    );
+                                  })}
+                                  <Table.Td style={{ textAlign: 'right' }}>
+                                    {row.stage_score ?? '—'}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ))
+                            : filteredGauntletEntries.map((entry, idx) => {
+                                const isMe = entry.team.members.some((m) => m.user_id === user?.id);
+                                return (
+                                  <Table.Tr
+                                    key={entry.team.id ?? idx}
+                                    style={isMe ? { fontWeight: 'bold' } : {}}
+                                  >
+                                    <Table.Td>{entry.rank ?? '—'}</Table.Td>
+                                    <Table.Td>
+                                      {entry.team.display_name}
+                                      {entry.dnf ? ' (DNF)' : ''}
+                                    </Table.Td>
+                                    {lbGameIndices.map((gi) => {
+                                      const gs = entry.game_scores.find((g) => g.game_index === gi);
+                                      return (
+                                        <Table.Td key={gi} style={{ textAlign: 'right' }}>
+                                          {gs != null ? gs.score : '—'}
+                                        </Table.Td>
+                                      );
+                                    })}
+                                    <Table.Td style={{ textAlign: 'right' }}>
+                                      {entry.stage_score ?? '—'}
+                                    </Table.Td>
+                                  </Table.Tr>
+                                );
+                              })}
+                        </Table.Tbody>
+                      </Table>
+                    );
+                  })()
+                : null}
+
+              {/* MATCH_PLAY standings */}
+              {matchPlayStandings && matchPlayStandings.entries.length > 0 ? (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{isIndividualLbStage ? 'Player' : 'Team'}</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {matchPlayStandings.entries.flatMap((entry, idx) => {
+                      const rows = isIndividualLbStage
+                        ? entry.team.members.map((m) => ({
+                            name: m.display_name,
+                            isMe: m.user_id === user?.id,
+                          }))
+                        : [
+                            {
+                              name: entry.team.display_name,
+                              isMe: entry.team.members.some((m) => m.user_id === user?.id),
+                            },
+                          ];
+                      return rows.map((row, rowIdx) => (
+                        <Table.Tr
+                          key={`${idx}-${rowIdx}`}
+                          style={row.isMe ? { fontWeight: 'bold' } : {}}
+                        >
+                          <Table.Td>{row.name}</Table.Td>
+                          <Table.Td>
+                            {entry.status === 'champion'
+                              ? 'Champion'
+                              : entry.status === 'active'
+                                ? 'Active'
+                                : `Eliminated (${entry.placement != null ? `#${entry.placement}` : '—'})`}
+                          </Table.Td>
+                        </Table.Tr>
+                      ));
+                    })}
+                  </Table.Tbody>
+                </Table>
+              ) : null}
+
+              {/* Empty / error state */}
+              {!hasLbEntries ? (
+                activeLb === null ? (
+                  <Text variant="muted">Leaderboard unavailable.</Text>
+                ) : (
+                  <Text variant="muted">No results submitted yet.</Text>
+                )
+              ) : null}
+            </Stack>
           ) : null}
         </Section>
       </PageContainer>

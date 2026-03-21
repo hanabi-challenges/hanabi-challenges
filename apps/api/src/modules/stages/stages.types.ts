@@ -1,5 +1,5 @@
 export type StageMechanism = 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
-export type TeamPolicy = 'SELF_FORMED' | 'QUEUED';
+export type ParticipationType = 'INDIVIDUAL' | 'TEAM';
 export type TeamScope = 'EVENT' | 'STAGE';
 export type AttemptPolicy = 'SINGLE' | 'REQUIRED_ALL' | 'BEST_OF_N' | 'UNLIMITED_BEST';
 export type TimePolicy = 'WINDOW' | 'ROLLING' | 'SCHEDULED';
@@ -9,8 +9,9 @@ export type StageRow = {
   event_id: number;
   label: string;
   stage_index: number;
+  group_id: number | null;
   mechanism: StageMechanism;
-  team_policy: TeamPolicy;
+  participation_type: ParticipationType;
   team_scope: TeamScope;
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
@@ -19,8 +20,10 @@ export type StageRow = {
   variant_rule_json: Record<string, unknown> | null;
   seed_rule_json: Record<string, unknown> | null;
   config_json: Record<string, unknown>;
+  auto_pull_json: { enabled: boolean; interval_minutes: number } | null;
   starts_at: Date | null;
   ends_at: Date | null;
+  visible: boolean;
   created_at: Date;
 };
 
@@ -33,7 +36,7 @@ export type StageResponse = StageRow & {
 export type CreateStageBody = {
   label: string;
   mechanism: StageMechanism;
-  team_policy: TeamPolicy;
+  participation_type: ParticipationType;
   team_scope: TeamScope;
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
@@ -42,8 +45,10 @@ export type CreateStageBody = {
   variant_rule_json?: Record<string, unknown> | null;
   seed_rule_json?: Record<string, unknown> | null;
   config_json?: Record<string, unknown>;
+  auto_pull_json?: { enabled: boolean; interval_minutes: number } | null;
   starts_at?: string | null;
   ends_at?: string | null;
+  visible?: boolean;
 };
 
 export type UpdateStageBody = Partial<Omit<CreateStageBody, 'mechanism'>>;

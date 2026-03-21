@@ -18,6 +18,8 @@ DROP TABLE IF EXISTS event_registrations CASCADE;
 DROP TABLE IF EXISTS event_stage_games CASCADE;
 DROP TABLE IF EXISTS event_stage_relationships CASCADE;
 DROP TABLE IF EXISTS event_player_ratings CASCADE;
+DROP TABLE IF EXISTS event_stage_transitions CASCADE;
+DROP TABLE IF EXISTS event_stage_groups CASCADE;
 DROP TABLE IF EXISTS event_stages CASCADE;
 DROP TABLE IF EXISTS event_badges CASCADE;
 DROP TABLE IF EXISTS event_challenge_badge_config CASCADE;
@@ -27,6 +29,7 @@ DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS badge_sets CASCADE;
 DROP TABLE IF EXISTS user_notifications CASCADE;
 DROP TABLE IF EXISTS admin_access_requests CASCADE;
+DROP TABLE IF EXISTS hanabi_live_game_exports CASCADE;
 DROP TABLE IF EXISTS hanabi_variant_sync_state CASCADE;
 DROP TABLE IF EXISTS hanabi_variants CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -40,7 +43,7 @@ DROP FUNCTION IF EXISTS notify_badge_award_insert() CASCADE;
 CREATE TABLE users (
   id           SERIAL PRIMARY KEY,
   display_name CITEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,  -- NULL for shadow accounts created by the replay ingestor
   role         TEXT NOT NULL DEFAULT 'USER'
                  CHECK (role IN ('SUPERADMIN', 'ADMIN', 'USER')),
   color_hex    TEXT NOT NULL DEFAULT '#777777',
@@ -57,6 +60,8 @@ CREATE TABLE hanabi_variants (
   code       INTEGER PRIMARY KEY,
   name       TEXT NOT NULL,
   label      TEXT NOT NULL,
+  num_suits  INTEGER NOT NULL DEFAULT 5,
+  is_sudoku  BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -71,6 +76,25 @@ VALUES (0, 'No Variant', 'No Variant')
 ON CONFLICT (code) DO NOTHING;
 
 ------------------------------------------------------------
+-- HANAB.LIVE GAME EXPORT CACHE
+------------------------------------------------------------
+
+CREATE TABLE hanabi_live_game_exports (
+  game_id           BIGINT      NOT NULL PRIMARY KEY,
+  seed              TEXT        NOT NULL DEFAULT '',
+  players           TEXT[]      NOT NULL,
+  score             SMALLINT    NOT NULL DEFAULT 0,
+  end_condition     SMALLINT    NOT NULL DEFAULT 1,
+  variant_id        INTEGER,
+  options_json      JSONB       NOT NULL DEFAULT '{}',
+  datetime_started  TIMESTAMPTZ,
+  datetime_finished TIMESTAMPTZ,
+  actions           JSONB       NOT NULL DEFAULT '[]',
+  deck              JSONB       NOT NULL DEFAULT '[]',
+  fetched_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+------------------------------------------------------------
 -- EVENTS
 -- Inert containers; status and dates are inferred from stages
 ------------------------------------------------------------
@@ -78,7 +102,7 @@ ON CONFLICT (code) DO NOTHING;
 CREATE TABLE events (
   id                       SERIAL PRIMARY KEY,
   slug                     TEXT NOT NULL UNIQUE,
-  name                     TEXT NOT NULL UNIQUE,
+  name                     TEXT NOT NULL,
   short_description        TEXT,
   long_description         TEXT NOT NULL,
   published                BOOLEAN NOT NULL DEFAULT FALSE,
@@ -86,12 +110,16 @@ CREATE TABLE events (
                              CHECK (registration_mode IN ('ACTIVE', 'PASSIVE')),
   allowed_team_sizes       INTEGER[] NOT NULL,
   combined_leaderboard     BOOLEAN NOT NULL DEFAULT FALSE,
+  team_scope               TEXT CHECK (team_scope IN ('EVENT', 'STAGE')),
   variant_rule_json        JSONB,
   seed_rule_json           JSONB,
   aggregate_config_json    JSONB,
   registration_opens_at    TIMESTAMPTZ,
   registration_cutoff      TIMESTAMPTZ,
   allow_late_registration  BOOLEAN NOT NULL DEFAULT TRUE,
+  multi_registration       TEXT NOT NULL DEFAULT 'ONE_PER_SIZE'
+                             CHECK (multi_registration IN ('ONE', 'ONE_PER_SIZE', 'UNRESTRICTED')),
+  auto_pull_json           JSONB,    -- { "enabled": true, "interval_minutes": 60 }
   created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -178,35 +206,66 @@ CREATE TABLE event_stages (
   variant_rule_json         JSONB,
   seed_rule_json            JSONB,
   config_json               JSONB NOT NULL DEFAULT '{}'::jsonb,
+  auto_pull_json            JSONB,    -- { "enabled": true, "interval_minutes": 60 }; inherits from event
   starts_at                 TIMESTAMPTZ,
   ends_at                   TIMESTAMPTZ,
+  visible                   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at                TIMESTAMPTZ DEFAULT NOW(),
+  group_id                  INTEGER,  -- FK added below after event_stage_groups is created
   UNIQUE (event_id, stage_index)
 );
 
-CREATE TABLE event_stage_relationships (
-  id               SERIAL PRIMARY KEY,
-  source_stage_id  INTEGER NOT NULL REFERENCES event_stages(id) ON DELETE CASCADE,
-  target_stage_id  INTEGER NOT NULL REFERENCES event_stages(id) ON DELETE CASCADE,
-  filter_type      TEXT NOT NULL
-                     CHECK (filter_type IN ('ALL', 'TOP_N', 'THRESHOLD', 'MANUAL')),
-  filter_value     NUMERIC,
-  seeding_method   TEXT NOT NULL DEFAULT 'RANKED'
-                     CHECK (seeding_method IN ('RANKED', 'RANDOM', 'MANUAL')),
-  created_at       TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (source_stage_id, target_stage_id)
+------------------------------------------------------------
+-- STAGE GROUPS (ADR 0005)
+-- Optional aggregation layer over multiple stages.
+-- A group produces a combined leaderboard from its member stages.
+------------------------------------------------------------
+
+CREATE TABLE event_stage_groups (
+  id                  SERIAL PRIMARY KEY,
+  event_id            INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  label               TEXT NOT NULL,
+  group_index         INTEGER NOT NULL,
+  scoring_config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  template_json       JSONB,
+  visible             BOOLEAN NOT NULL DEFAULT TRUE,
+  parent_group_id     INTEGER REFERENCES event_stage_groups(id) ON DELETE SET NULL,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (event_id, group_index)
+);
+
+-- Now add the FK from event_stages to event_stage_groups
+ALTER TABLE event_stages
+  ADD CONSTRAINT fk_stage_group FOREIGN KEY (group_id) REFERENCES event_stage_groups(id) ON DELETE SET NULL;
+
+CREATE TABLE event_stage_transitions (
+  id              SERIAL PRIMARY KEY,
+  event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  after_stage_id  INTEGER REFERENCES event_stages(id) ON DELETE CASCADE,
+  after_group_id  INTEGER REFERENCES event_stage_groups(id) ON DELETE CASCADE,
+  filter_type     TEXT NOT NULL DEFAULT 'ALL'
+                    CHECK (filter_type IN ('ALL', 'TOP_N', 'THRESHOLD', 'MANUAL')),
+  filter_value    INTEGER,
+  seeding_method  TEXT NOT NULL DEFAULT 'PRESERVE'
+                    CHECK (seeding_method IN ('PRESERVE', 'RANKED', 'RANDOM', 'MANUAL')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_transition_predecessor
+    CHECK ((after_stage_id IS NOT NULL)::int + (after_group_id IS NOT NULL)::int = 1),
+  CONSTRAINT uq_transition_after_stage UNIQUE (after_stage_id),
+  CONSTRAINT uq_transition_after_group UNIQUE (after_group_id)
 );
 
 CREATE TABLE event_stage_games (
   id            SERIAL PRIMARY KEY,
   stage_id      INTEGER NOT NULL REFERENCES event_stages(id) ON DELETE CASCADE,
   game_index    INTEGER NOT NULL,
-  team_size     INTEGER CHECK (team_size IN (2, 3, 4, 5, 6)),
+  nickname      TEXT,
   variant_id    INTEGER REFERENCES hanabi_variants(code),
-  seed_payload  TEXT,
-  max_score     INTEGER,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE NULLS NOT DISTINCT (stage_id, game_index, team_size)
+  seed_payload             TEXT,
+  max_score                INTEGER,
+  last_replays_pulled_at   TIMESTAMPTZ,
+  created_at               TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (stage_id, game_index)
 );
 
 ------------------------------------------------------------
@@ -333,11 +392,11 @@ CREATE TABLE event_matches (
   id              SERIAL PRIMARY KEY,
   stage_id        INTEGER NOT NULL REFERENCES event_stages(id) ON DELETE CASCADE,
   round_number    INTEGER NOT NULL,
-  team1_id        INTEGER NOT NULL REFERENCES event_teams(id),
-  team2_id        INTEGER NOT NULL REFERENCES event_teams(id),
+  team1_id        INTEGER NOT NULL REFERENCES event_teams(id) ON DELETE CASCADE,
+  team2_id        INTEGER NOT NULL REFERENCES event_teams(id) ON DELETE CASCADE,
   status          TEXT NOT NULL DEFAULT 'PENDING'
                     CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETE')),
-  winner_team_id  INTEGER REFERENCES event_teams(id),
+  winner_team_id  INTEGER REFERENCES event_teams(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -394,21 +453,48 @@ CREATE TABLE event_award_grants (
 );
 
 ------------------------------------------------------------
--- ELO RATINGS (materialized per stage)
+-- ELO RATINGS (scoped to group or standalone stage)
 ------------------------------------------------------------
 
 CREATE TABLE event_player_ratings (
-  stage_id        INTEGER NOT NULL REFERENCES event_stages(id) ON DELETE CASCADE,
+  stage_id        INTEGER REFERENCES event_stages(id) ON DELETE CASCADE,
+  group_id        INTEGER REFERENCES event_stage_groups(id) ON DELETE CASCADE,
   user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   rating          NUMERIC(10, 3) NOT NULL DEFAULT 1000,
   games_played    INTEGER NOT NULL DEFAULT 0,
   last_played_at  TIMESTAMPTZ,
   updated_at      TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (stage_id, user_id)
+  CONSTRAINT chk_elo_scope
+    CHECK ((stage_id IS NOT NULL)::int + (group_id IS NOT NULL)::int = 1)
 );
 
-CREATE INDEX idx_event_player_ratings_rank
-  ON event_player_ratings (stage_id, rating DESC);
+-- Exactly one of stage_id / group_id is set; partial unique indexes enforce uniqueness per scope
+CREATE UNIQUE INDEX uq_elo_stage_user
+  ON event_player_ratings (stage_id, user_id)
+  WHERE stage_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_elo_group_user
+  ON event_player_ratings (group_id, user_id)
+  WHERE group_id IS NOT NULL;
+
+CREATE INDEX idx_elo_stage_rank
+  ON event_player_ratings (stage_id, rating DESC)
+  WHERE stage_id IS NOT NULL;
+
+CREATE INDEX idx_elo_group_rank
+  ON event_player_ratings (group_id, rating DESC)
+  WHERE group_id IS NOT NULL;
+
+------------------------------------------------------------
+-- EVENT FORFEITURES
+------------------------------------------------------------
+
+CREATE TABLE event_forfeitures (
+  event_id     INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  forfeited_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (event_id, user_id)
+);
 
 ------------------------------------------------------------
 -- USER NOTIFICATIONS
@@ -538,5 +624,13 @@ INSERT INTO schema_migrations (name) VALUES
   ('001_variant_id.sql'),
   ('002_new_event_model.sql'),
   ('003_team_member_confirmed.sql'),
-  ('004_result_correction_metadata.sql')
+  ('004_result_correction_metadata.sql'),
+  ('005_gauntlet_attempt_abandoned.sql'),
+  ('006_result_started_at.sql'),
+  ('007_stage_groups.sql'),
+  ('008_stage_group_visible.sql'),
+  ('009_stage_transitions.sql'),
+  ('010_stage_visible.sql'),
+  ('011_game_slots_redesign.sql'),
+  ('022_event_matches_cascade.sql')
 ON CONFLICT (name) DO NOTHING;

@@ -36,7 +36,7 @@ async function createQueuedStage(token: string, slug = 'test-event') {
     .send({
       label: 'Queue Stage',
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'QUEUED',
+      participation_type: 'INDIVIDUAL',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',
@@ -50,7 +50,7 @@ async function createSelfFormedStage(token: string, slug = 'test-event') {
     .send({
       label: 'Self Formed Stage',
       mechanism: 'SEEDED_LEADERBOARD',
-      team_policy: 'SELF_FORMED',
+      participation_type: 'TEAM',
       team_scope: 'STAGE',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',

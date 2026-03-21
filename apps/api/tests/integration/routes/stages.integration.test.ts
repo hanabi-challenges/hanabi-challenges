@@ -33,7 +33,7 @@ async function createEvent(token: string, slug = 'test-event') {
 const VALID_STAGE = {
   label: 'Stage 1',
   mechanism: 'SEEDED_LEADERBOARD',
-  team_policy: 'SELF_FORMED',
+  participation_type: 'TEAM',
   team_scope: 'EVENT',
   attempt_policy: 'SINGLE',
   time_policy: 'WINDOW',

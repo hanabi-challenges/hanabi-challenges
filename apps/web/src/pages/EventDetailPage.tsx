@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Alert,
-  Button,
   Card,
   CardBody,
   CardHeader,
@@ -11,19 +10,17 @@ import {
   Main,
   PageContainer,
   Pill,
-  SearchSelect,
   Section,
-  Select,
   Stack,
   Tabs,
   Text,
   CoreTable as Table,
 } from '../design-system';
 import { useAuth } from '../context/AuthContext';
-import { ApiError, getJson, getJsonAuth, postJsonAuth } from '../lib/api';
+import { ApiError, getJson, getJsonAuth } from '../lib/api';
 import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 import type { EventSummary } from '../hooks/useEvents';
-import { useUserDirectory, type UserDirectoryEntry } from '../hooks/useUserDirectory';
+import { useUserDirectory } from '../hooks/useUserDirectory';
 import { UserPill } from '../features/users/UserPill';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -31,23 +28,16 @@ import { NotFoundPage } from './NotFoundPage';
 // Types
 // ---------------------------------------------------------------------------
 
-type RegistrationRow = {
-  id: number;
-  status: 'PENDING' | 'ACTIVE' | 'WITHDRAWN';
-};
-
-type TeamMember = {
+type MyTeamMember = {
   user_id: number;
   display_name: string;
   confirmed: boolean;
 };
 
-type TeamResponse = {
+type MyTeam = {
   id: number;
-  stage_id: number | null;
   display_name: string;
-  members: TeamMember[];
-  all_confirmed: boolean;
+  members: MyTeamMember[];
 };
 
 type PlayerStageScore = {
@@ -58,9 +48,14 @@ type PlayerStageScore = {
 
 type AggregateEntry = {
   rank: number;
-  user: { id: number; display_name: string };
+  team: { id: number; display_name: string; members: { user_id: number; display_name: string }[] };
   total_score: number;
   stage_scores: PlayerStageScore[];
+};
+
+type AggregateTrack = {
+  team_size: number | null;
+  entries: AggregateEntry[];
 };
 
 type StageSummary = {
@@ -139,26 +134,6 @@ function statusBannerVariant(event: EventSummary): 'default' | 'accent' {
     : 'default';
 }
 
-function mechanismLabel(mechanism: string): string {
-  switch (mechanism) {
-    case 'SEEDED_LEADERBOARD':
-      return 'Leaderboard';
-    case 'GAUNTLET':
-      return 'Gauntlet';
-    case 'MATCH_PLAY':
-      return 'Match Play';
-    default:
-      return mechanism;
-  }
-}
-
-function isRegistrationOpen(event: EventSummary): boolean {
-  return (
-    event.status === 'REGISTRATION_OPEN' ||
-    (event.status === 'IN_PROGRESS' && event.allow_late_registration)
-  );
-}
-
 function stageDateRange(stage: StageSummary): string | null {
   if (stage.starts_at && stage.ends_at) {
     return `${formatDate(stage.starts_at)} — ${formatDate(stage.ends_at)}`;
@@ -175,34 +150,33 @@ function stageDateRange(stage: StageSummary): string | null {
 export function EventDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user, token } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
 
   // Public data
   const [event, setEvent] = useState<EventSummary | null>(null);
   const [stages, setStages] = useState<StageSummary[]>([]);
-  const [leaderboard, setLeaderboard] = useState<AggregateEntry[]>([]);
+  const [lbTracks, setLbTracks] = useState<AggregateTrack[]>([]);
+  const [activeLbSize, setActiveLbSize] = useState<number | null | undefined>(undefined);
   const [awards, setAwards] = useState<GroupedAwardsResponse | null>(null);
   const [grantsByAward, setGrantsByAward] = useState<Map<number, AwardGrant[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Auth data
-  const [registration, setRegistration] = useState<RegistrationRow | null>(null);
-  const [myTeams, setMyTeams] = useState<TeamResponse[]>([]);
-  const [version, setVersion] = useState(0);
+  // My teams (auth)
+  const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
 
-  // Register action
-  const [registerBusy, setRegisterBusy] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
+  // Stage seed accordion
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
+  const [stageSeeds, setStageSeeds] = useState<
+    Map<
+      number,
+      { id: number; game_index: number; nickname: string | null; effective_seed: string | null }[]
+    >
+  >(new Map());
 
-  // Team formation (EVENT scope)
   const { users: allUsers } = useUserDirectory();
-  const [teamSize, setTeamSize] = useState('');
-  const [partnerSearch, setPartnerSearch] = useState('');
-  const [partners, setPartners] = useState<UserDirectoryEntry[]>([]);
-  const [teamBusy, setTeamBusy] = useState(false);
-  const [teamError, setTeamError] = useState<string | null>(null);
 
   // Load public data
   useEffect(() => {
@@ -217,9 +191,9 @@ export function EventDetailPage() {
         const [eventData, stagesData, lbData, awardsData] = await Promise.all([
           getJson<EventSummary>(`/events/${encodeURIComponent(slug!)}`),
           getJson<StageSummary[]>(`/events/${encodeURIComponent(slug!)}/stages`),
-          getJson<{ entries: AggregateEntry[] }>(
+          getJson<{ tracks: AggregateTrack[] }>(
             `/events/${encodeURIComponent(slug!)}/leaderboard`,
-          ).catch(() => ({ entries: [] as AggregateEntry[] })),
+          ).catch(() => ({ tracks: [] as AggregateTrack[] })),
           getJson<GroupedAwardsResponse>(`/events/${encodeURIComponent(slug!)}/awards`).catch(
             () => null,
           ),
@@ -227,7 +201,8 @@ export function EventDetailPage() {
         if (!cancelled) {
           setEvent(eventData);
           setStages(stagesData);
-          setLeaderboard(lbData.entries);
+          setLbTracks(lbData.tracks);
+          setActiveLbSize(lbData.tracks[0]?.team_size ?? undefined);
           setAwards(awardsData);
           setLoading(false);
         }
@@ -249,40 +224,24 @@ export function EventDetailPage() {
     };
   }, [slug]);
 
-  // Load auth data
+  // Load user's teams
   useEffect(() => {
-    if (!slug || !token) return;
-    let cancelled = false;
-
-    async function loadAuth() {
-      try {
-        const [regData, teamsData] = await Promise.all([
-          getJsonAuth<RegistrationRow>(
-            `/events/${encodeURIComponent(slug!)}/registrations/me`,
-            token as string,
-          ).catch((err) => {
-            if (err instanceof ApiError && err.status === 404) return null;
-            return null;
-          }),
-          getJsonAuth<TeamResponse[]>(
-            `/events/${encodeURIComponent(slug!)}/teams`,
-            token as string,
-          ).catch(() => [] as TeamResponse[]),
-        ]);
-        if (!cancelled) {
-          setRegistration(regData);
-          setMyTeams(teamsData);
-        }
-      } catch {
-        // silently ignore
-      }
+    if (!slug || !token) {
+      setMyTeams([]);
+      return;
     }
-
-    loadAuth();
+    let cancelled = false;
+    getJsonAuth<MyTeam[]>(`/events/${encodeURIComponent(slug)}/teams?mine=true`, token)
+      .then((teams) => {
+        if (!cancelled) setMyTeams(teams);
+      })
+      .catch(() => {
+        if (!cancelled) setMyTeams([]);
+      });
     return () => {
       cancelled = true;
     };
-  }, [slug, token, version]);
+  }, [slug, token]);
 
   // Load grants when awards tab is active
   useEffect(() => {
@@ -313,47 +272,6 @@ export function EventDetailPage() {
     };
   }, [slug, activeTab, awards]);
 
-  async function handleRegister() {
-    if (!slug || !token) return;
-    setRegisterBusy(true);
-    setRegisterError(null);
-    try {
-      await postJsonAuth(`/events/${encodeURIComponent(slug)}/register`, token as string, {});
-      setVersion((v) => v + 1);
-    } catch (err) {
-      setRegisterError(
-        err instanceof ApiError
-          ? ((err.body as { error?: string })?.error ?? 'Registration failed.')
-          : 'Registration failed.',
-      );
-    } finally {
-      setRegisterBusy(false);
-    }
-  }
-
-  async function handleCreateTeam() {
-    if (!slug || !token || !teamSize) return;
-    setTeamBusy(true);
-    setTeamError(null);
-    try {
-      await postJsonAuth(`/events/${encodeURIComponent(slug)}/teams`, token as string, {
-        invite_user_ids: partners.map((p) => p.id),
-      });
-      setTeamSize('');
-      setPartners([]);
-      setPartnerSearch('');
-      setVersion((v) => v + 1);
-    } catch (err) {
-      setTeamError(
-        err instanceof ApiError
-          ? ((err.body as { error?: string })?.error ?? 'Team creation failed.')
-          : 'Team creation failed.',
-      );
-    } finally {
-      setTeamBusy(false);
-    }
-  }
-
   if (loading) {
     return (
       <Main>
@@ -380,29 +298,36 @@ export function EventDetailPage() {
 
   // Derived state
   const bannerText = statusBannerText(event);
-  const regOpen = isRegistrationOpen(event);
-  const confirmedTeam = myTeams.find((t) => t.stage_id === null && t.all_confirmed) ?? null;
-  const pendingTeam = myTeams.find((t) => t.stage_id === null && !t.all_confirmed) ?? null;
-  const showLeaderboard = leaderboard.length > 0;
-  const eventTeamScope: 'EVENT' | 'STAGE' = stages.some((s) => s.team_scope === 'EVENT')
-    ? 'EVENT'
-    : 'STAGE';
+  async function toggleStage(stageId: number) {
+    if (expandedStages.has(stageId)) {
+      setExpandedStages((prev) => {
+        const next = new Set(prev);
+        next.delete(stageId);
+        return next;
+      });
+      return;
+    }
+    setExpandedStages((prev) => new Set(prev).add(stageId));
+    if (!stageSeeds.has(stageId)) {
+      try {
+        const seeds = await getJson<
+          {
+            id: number;
+            game_index: number;
+            nickname: string | null;
+            effective_seed: string | null;
+          }[]
+        >(`/events/${encodeURIComponent(slug!)}/stages/${stageId}/games`);
+        setStageSeeds((prev) => new Map(prev).set(stageId, seeds));
+      } catch {
+        setStageSeeds((prev) => new Map(prev).set(stageId, []));
+      }
+    }
+  }
 
-  // Team size options for formation (EVENT scope)
-  const teamSizeOptions = event.allowed_team_sizes.map((s) => ({
-    value: String(s),
-    label: s === 1 ? 'Solo' : `${s}-player`,
-  }));
-  const selectedTeamSize = teamSize ? Number(teamSize) : null;
-  const partnersNeeded = selectedTeamSize ? selectedTeamSize - 1 : 0;
-  const partnerSuggestions = allUsers
-    .filter((u) => u.id !== user?.id && !partners.some((p) => p.id === u.id))
-    .filter((u) => u.display_name.toLowerCase().includes(partnerSearch.toLowerCase()))
-    .map((u) => ({
-      key: u.id,
-      value: u,
-      node: <UserPill name={u.display_name} color={u.color_hex} textColor={u.text_color} />,
-    }));
+  const showLeaderboard = lbTracks.length > 0 && lbTracks.some((t) => t.entries.length > 0);
+  const activeLbTrack = lbTracks.find((t) => t.team_size === activeLbSize) ?? lbTracks[0];
+  const leaderboard = activeLbTrack?.entries ?? [];
 
   const tabItems = [
     {
@@ -410,19 +335,6 @@ export function EventDetailPage() {
       label: 'Overview',
       active: activeTab === 'overview',
       onSelect: () => setActiveTab('overview'),
-    },
-    {
-      key: 'register',
-      label: 'Register',
-      active: activeTab === 'register',
-      onSelect: () => setActiveTab('register'),
-    },
-    {
-      key: 'stages',
-      label: `Stages${stages.length > 0 ? ` (${stages.length})` : ''}`,
-      active: activeTab === 'stages',
-      onSelect: () => setActiveTab('stages'),
-      disabled: stages.length === 0,
     },
     ...(showLeaderboard
       ? [
@@ -444,6 +356,22 @@ export function EventDetailPage() {
           },
         ]
       : []),
+    ...(user && myTeams.length > 0
+      ? [
+          {
+            key: 'my-teams',
+            label: myTeams.length === 1 ? 'My Team' : 'My Teams',
+            active: activeTab === 'my-teams',
+            onSelect: () => {
+              if (myTeams.length === 1) {
+                void navigate(`/events/${slug}/event-teams/${myTeams[0].id}`);
+              } else {
+                setActiveTab('my-teams');
+              }
+            },
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -451,346 +379,257 @@ export function EventDetailPage() {
       <PageContainer>
         <Section paddingY="lg">
           {/* Header */}
-          <Stack gap="sm">
-            <Heading level={1}>{event.name}</Heading>
-            <Inline gap="xs" wrap>
-              {bannerText ? (
-                <Pill size="sm" variant={statusBannerVariant(event)}>
-                  {bannerText}
-                </Pill>
-              ) : null}
-              {event.allowed_team_sizes.map((size) => (
-                <Pill key={size} size="sm" variant="default">
-                  {size === 1 ? 'Solo' : `${size}-player`}
-                </Pill>
-              ))}
-            </Inline>
+          <Stack gap="md">
+            <Stack gap="xs">
+              <Heading level={1}>{event.name}</Heading>
+              <Inline gap="xs" wrap>
+                {bannerText ? (
+                  <Pill size="sm" variant={statusBannerVariant(event)}>
+                    {bannerText}
+                  </Pill>
+                ) : null}
+                {event.starts_at || event.ends_at ? (
+                  <Pill size="sm" variant="default">
+                    {event.starts_at && event.ends_at
+                      ? `${formatDate(event.starts_at)} – ${formatDate(event.ends_at)}`
+                      : event.starts_at
+                        ? `Starts ${formatDate(event.starts_at)}`
+                        : `Ends ${formatDate(event.ends_at)}`}
+                  </Pill>
+                ) : null}
+              </Inline>
+            </Stack>
+
+            {/* Tabs */}
+            <Tabs items={tabItems} />
           </Stack>
 
-          {/* Tabs */}
-          <Tabs items={tabItems} />
-
           {/* Tab content */}
-          {activeTab === 'overview' ? (
-            <Stack gap="md">
-              <MarkdownRenderer markdown={event.long_description} />
-            </Stack>
-          ) : null}
-
-          {activeTab === 'register' ? (
-            <Stack gap="sm">
-              <Heading level={3}>Registration</Heading>
-              {registerError ? <Alert variant="error" message={registerError} /> : null}
-              {!user ? (
-                <Text variant="muted">Log in to register for this event.</Text>
-              ) : registration?.status === 'ACTIVE' ? (
-                confirmedTeam ? (
-                  /* Registered + confirmed team */
-                  <Stack gap="xs">
-                    <Text variant="body">
-                      You are registered with team: <strong>{confirmedTeam.display_name}</strong>
-                    </Text>
-                    <Inline gap="xs" wrap>
-                      {confirmedTeam.members.map((m) => (
-                        <Pill key={m.user_id} size="sm" variant="default">
-                          {m.display_name}
-                        </Pill>
-                      ))}
-                    </Inline>
-                  </Stack>
-                ) : pendingTeam ? (
-                  /* Registered + pending team confirmation */
-                  <Stack gap="xs">
-                    <Text variant="body">You are registered — team pending confirmation.</Text>
-                    <Text variant="muted">
-                      Waiting for all members of {pendingTeam.display_name} to confirm.
-                    </Text>
-                  </Stack>
-                ) : eventTeamScope === 'STAGE' ? (
-                  /* Registered, STAGE scope — no team needed yet */
-                  <Text variant="body">
-                    You are registered. Form a team for each stage when it begins.
-                  </Text>
-                ) : (
-                  /* Registered, EVENT scope — team formation flow */
+          <Stack gap="md" style={{ marginTop: 'var(--ds-space-lg)' }}>
+            {activeTab === 'overview' ? (
+              <Stack gap="lg">
+                <MarkdownRenderer markdown={event.long_description} />
+                {stages.length > 0 ? (
                   <Stack gap="sm">
-                    <Text variant="body">You are registered. Set up your team below.</Text>
-                    {teamError ? <Alert variant="error" message={teamError} /> : null}
-
-                    {/* Step 1: select team size (skip if only one option) */}
-                    {teamSizeOptions.length > 1 ? (
-                      <Stack gap="xs">
-                        <Text variant="label">Team size</Text>
-                        <Select
-                          options={teamSizeOptions}
-                          value={teamSize}
-                          onChange={(v) => {
-                            setTeamSize(v);
-                            setPartners([]);
-                            setPartnerSearch('');
-                          }}
-                          placeholder="Select team size…"
-                        />
-                      </Stack>
-                    ) : teamSizeOptions.length === 1 && !teamSize ? (
-                      /* Auto-select the only size */
-                      (() => {
-                        setTeamSize(teamSizeOptions[0].value);
-                        return null;
-                      })()
-                    ) : null}
-
-                    {/* Step 2: partner search (only if team size > 1 and size selected) */}
-                    {selectedTeamSize && selectedTeamSize > 1 ? (
-                      <Stack gap="xs">
-                        <Text variant="label">
-                          Invite partner{partnersNeeded > 1 ? 's' : ''} ({partners.length}/
-                          {partnersNeeded} selected)
-                        </Text>
-                        <SearchSelect
-                          value={partnerSearch}
-                          onChange={setPartnerSearch}
-                          suggestions={partnerSuggestions}
-                          onSelect={(u) => {
-                            setPartners((prev) => [...prev, u]);
-                            setPartnerSearch('');
-                          }}
-                          blurOnSelect
-                          maxSelections={partnersNeeded}
-                          selectedCount={partners.length}
-                          placeholder="Search by name…"
-                          tokens={partners.map((p) => (
-                            <UserPill
-                              key={p.id}
-                              name={p.display_name}
-                              color={p.color_hex}
-                              textColor={p.text_color}
-                              trailingIcon={<span>×</span>}
-                              onClick={() =>
-                                setPartners((prev) => prev.filter((x) => x.id !== p.id))
-                              }
-                            />
-                          ))}
-                        />
-                      </Stack>
-                    ) : null}
-
-                    {/* Submit */}
-                    {selectedTeamSize ? (
-                      <Button
-                        size="sm"
-                        onClick={() => void handleCreateTeam()}
-                        disabled={
-                          teamBusy || (selectedTeamSize > 1 && partners.length < partnersNeeded)
-                        }
-                      >
-                        {teamBusy
-                          ? 'Creating team…'
-                          : selectedTeamSize === 1
-                            ? 'Enter as Solo'
-                            : 'Create Team'}
-                      </Button>
-                    ) : null}
+                    <Heading level={2}>Stages</Heading>
+                    {stages.map((stage) => {
+                      const isExpanded = expandedStages.has(stage.id);
+                      const seeds = stageSeeds.get(stage.id);
+                      const dateRange = stageDateRange(stage);
+                      return (
+                        <Card key={stage.id} variant="outline">
+                          <CardHeader
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => void toggleStage(stage.id)}
+                          >
+                            <Inline gap="xs" justify="space-between" wrap>
+                              <Text>{stage.label}</Text>
+                              <Inline gap="xs">
+                                {dateRange ? (
+                                  <Pill size="sm" variant="default">
+                                    {dateRange}
+                                  </Pill>
+                                ) : null}
+                                <Text variant="muted">{isExpanded ? '▲' : '▼'}</Text>
+                              </Inline>
+                            </Inline>
+                          </CardHeader>
+                          {isExpanded ? (
+                            <CardBody>
+                              {seeds === undefined ? (
+                                <Text variant="muted">Loading seeds…</Text>
+                              ) : seeds.length === 0 ? (
+                                <Text variant="muted">No seeds available.</Text>
+                              ) : (
+                                <Stack gap="xs">
+                                  {seeds.map((s) => (
+                                    <Text key={s.id} variant="caption">
+                                      {s.game_index + 1}. {s.nickname ?? s.effective_seed ?? '—'}
+                                    </Text>
+                                  ))}
+                                </Stack>
+                              )}
+                            </CardBody>
+                          ) : null}
+                        </Card>
+                      );
+                    })}
                   </Stack>
-                )
-              ) : registration?.status === 'PENDING' ? (
-                <Text variant="muted">Your registration is pending confirmation.</Text>
-              ) : regOpen ? (
-                <Stack gap="xs">
-                  <Text variant="body">Registration is open for this event.</Text>
-                  <Button size="sm" onClick={() => void handleRegister()} disabled={registerBusy}>
-                    {registerBusy ? 'Registering…' : 'Register'}
-                  </Button>
-                </Stack>
-              ) : (
-                <Text variant="muted">Registration is not currently open for this event.</Text>
-              )}
-            </Stack>
-          ) : null}
+                ) : null}
+              </Stack>
+            ) : null}
 
-          {activeTab === 'stages' ? (
-            <Stack gap="sm">
-              <Heading level={3}>Stages</Heading>
-              {stages.length === 0 ? (
-                <Text variant="muted">No stages yet.</Text>
-              ) : (
-                <Stack gap="xs">
-                  {stages.map((stage) => (
-                    <Card key={stage.id} variant="outline">
-                      <CardHeader>
-                        <Inline gap="xs" justify="space-between" wrap>
-                          <Link to={`/events/${slug ?? ''}/stages/${stage.id}`}>
-                            <Heading level={4}>{stage.label}</Heading>
-                          </Link>
-                          <Inline gap="xs">
-                            <Pill size="sm" variant="default">
-                              {mechanismLabel(stage.mechanism)}
-                            </Pill>
-                            <Pill size="sm" variant="default">
-                              {stage.status}
-                            </Pill>
-                          </Inline>
-                        </Inline>
-                      </CardHeader>
-                      {stageDateRange(stage) ? (
-                        <CardBody>
-                          <Text variant="caption">{stageDateRange(stage)}</Text>
-                        </CardBody>
-                      ) : null}
-                    </Card>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          ) : null}
-
-          {activeTab === 'awards' && awards ? (
-            <Stack gap="md">
-              <Heading level={3}>Awards</Heading>
-              {awards.event_awards.length === 0 && awards.stage_awards.length === 0 ? (
-                <Text variant="muted">No awards for this event.</Text>
-              ) : null}
-              {awards.event_awards.length > 0 ? (
-                <Stack gap="xs">
-                  <Text variant="label">Event Awards</Text>
-                  {awards.event_awards.map((award) => {
-                    const grants = grantsByAward.get(award.id) ?? [];
-                    return (
-                      <Card key={award.id} variant="outline">
-                        <CardHeader>
-                          <Inline gap="xs">
-                            {award.icon ? (
-                              <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
-                            ) : null}
-                            <Heading level={4}>{award.name}</Heading>
-                          </Inline>
-                        </CardHeader>
-                        {award.description ? (
-                          <CardBody>
-                            <Text variant="caption">{award.description}</Text>
-                          </CardBody>
-                        ) : null}
-                        {grants.length > 0 ? (
-                          <CardBody>
-                            <Inline gap="xs" wrap>
-                              {grants.map((g) => {
-                                const u = allUsers.find((x) => x.id === g.user_id);
-                                const name = u?.display_name ?? `User ${g.user_id}`;
-                                const isMe = g.user_id === user?.id;
-                                return (
-                                  <Pill key={g.id} size="sm" variant={isMe ? 'accent' : 'default'}>
-                                    {name}
-                                  </Pill>
-                                );
-                              })}
+            {activeTab === 'awards' && awards ? (
+              <Stack gap="md">
+                <Heading level={3}>Awards</Heading>
+                {awards.event_awards.length === 0 && awards.stage_awards.length === 0 ? (
+                  <Text variant="muted">No awards for this event.</Text>
+                ) : null}
+                {awards.event_awards.length > 0 ? (
+                  <Stack gap="xs">
+                    <Text variant="label">Event Awards</Text>
+                    {awards.event_awards.map((award) => {
+                      const grants = grantsByAward.get(award.id) ?? [];
+                      return (
+                        <Card key={award.id} variant="outline">
+                          <CardHeader>
+                            <Inline gap="xs">
+                              {award.icon ? (
+                                <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
+                              ) : null}
+                              <Heading level={4}>{award.name}</Heading>
                             </Inline>
-                          </CardBody>
-                        ) : null}
-                      </Card>
-                    );
-                  })}
-                </Stack>
-              ) : null}
-              {awards.stage_awards.map((sg) => (
-                <Stack key={sg.stage_id} gap="xs">
-                  <Text variant="label">{sg.stage_label}</Text>
-                  {sg.awards.map((award) => {
-                    const grants = grantsByAward.get(award.id) ?? [];
-                    return (
-                      <Card key={award.id} variant="outline">
-                        <CardHeader>
-                          <Inline gap="xs">
-                            {award.icon ? (
-                              <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
-                            ) : null}
-                            <Heading level={4}>{award.name}</Heading>
-                          </Inline>
-                        </CardHeader>
-                        {award.description ? (
-                          <CardBody>
-                            <Text variant="caption">{award.description}</Text>
-                          </CardBody>
-                        ) : null}
-                        {grants.length > 0 ? (
-                          <CardBody>
-                            <Inline gap="xs" wrap>
-                              {grants.map((g) => {
-                                const u = allUsers.find((x) => x.id === g.user_id);
-                                const name = u?.display_name ?? `User ${g.user_id}`;
-                                const isMe = g.user_id === user?.id;
-                                return (
-                                  <Pill key={g.id} size="sm" variant={isMe ? 'accent' : 'default'}>
-                                    {name}
-                                  </Pill>
-                                );
-                              })}
+                          </CardHeader>
+                          {award.description ? (
+                            <CardBody>
+                              <Text variant="caption">{award.description}</Text>
+                            </CardBody>
+                          ) : null}
+                          {grants.length > 0 ? (
+                            <CardBody>
+                              <Inline gap="xs" wrap>
+                                {grants.map((g) => {
+                                  const u = allUsers.find((x) => x.id === g.user_id);
+                                  const name = u?.display_name ?? `User ${g.user_id}`;
+                                  const isMe = g.user_id === user?.id;
+                                  return (
+                                    <Pill
+                                      key={g.id}
+                                      size="sm"
+                                      variant={isMe ? 'accent' : 'default'}
+                                    >
+                                      {name}
+                                    </Pill>
+                                  );
+                                })}
+                              </Inline>
+                            </CardBody>
+                          ) : null}
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                ) : null}
+                {awards.stage_awards.map((sg) => (
+                  <Stack key={sg.stage_id} gap="xs">
+                    <Text variant="label">{sg.stage_label}</Text>
+                    {sg.awards.map((award) => {
+                      const grants = grantsByAward.get(award.id) ?? [];
+                      return (
+                        <Card key={award.id} variant="outline">
+                          <CardHeader>
+                            <Inline gap="xs">
+                              {award.icon ? (
+                                <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
+                              ) : null}
+                              <Heading level={4}>{award.name}</Heading>
                             </Inline>
-                          </CardBody>
-                        ) : null}
-                      </Card>
-                    );
-                  })}
-                </Stack>
-              ))}
-            </Stack>
-          ) : null}
+                          </CardHeader>
+                          {award.description ? (
+                            <CardBody>
+                              <Text variant="caption">{award.description}</Text>
+                            </CardBody>
+                          ) : null}
+                          {grants.length > 0 ? (
+                            <CardBody>
+                              <Inline gap="xs" wrap>
+                                {grants.map((g) => {
+                                  const u = allUsers.find((x) => x.id === g.user_id);
+                                  const name = u?.display_name ?? `User ${g.user_id}`;
+                                  const isMe = g.user_id === user?.id;
+                                  return (
+                                    <Pill
+                                      key={g.id}
+                                      size="sm"
+                                      variant={isMe ? 'accent' : 'default'}
+                                    >
+                                      {name}
+                                    </Pill>
+                                  );
+                                })}
+                              </Inline>
+                            </CardBody>
+                          ) : null}
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                ))}
+              </Stack>
+            ) : null}
 
-          {activeTab === 'leaderboard' && showLeaderboard ? (
-            <Stack gap="sm">
-              <Heading level={3}>Leaderboard</Heading>
-              {leaderboard.length === 0 ? (
-                <Text variant="muted">No results yet.</Text>
-              ) : (
-                (() => {
-                  // Collect stage columns from first entry
-                  const stageColumns = leaderboard[0]?.stage_scores ?? [];
-                  return (
-                    <Table>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>#</Table.Th>
-                          <Table.Th>Player</Table.Th>
-                          {stageColumns.map((ss) => (
-                            <Table.Th key={ss.stage_id} style={{ textAlign: 'right' }}>
-                              {ss.stage_label}
-                            </Table.Th>
+            {activeTab === 'leaderboard' && showLeaderboard ? (
+              <Stack gap="sm">
+                <Heading level={3}>Leaderboard</Heading>
+                {lbTracks.length > 1 ? (
+                  <Tabs
+                    items={lbTracks.map((t) => ({
+                      key: String(t.team_size),
+                      label: t.team_size === null ? 'Combined' : `${t.team_size}p`,
+                      active: t.team_size === activeLbSize,
+                      onSelect: () => setActiveLbSize(t.team_size),
+                    }))}
+                  />
+                ) : null}
+                {leaderboard.length === 0 ? (
+                  <Text variant="muted">No results yet.</Text>
+                ) : (
+                  <Table style={{ width: 'auto' }}>
+                    <colgroup>
+                      <col style={{ width: '2.5rem' }} />
+                      <col />
+                      <col style={{ width: '5rem' }} />
+                    </colgroup>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>#</Table.Th>
+                        <Table.Th>Team</Table.Th>
+                        <Table.Th style={{ textAlign: 'right' }}>Score</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {leaderboard.map((entry) => {
+                        const isMe = entry.team.members.some((m) => m.user_id === user?.id);
+                        return (
+                          <Table.Tr key={entry.team.id} style={isMe ? { fontWeight: 'bold' } : {}}>
+                            <Table.Td>{entry.rank}</Table.Td>
+                            <Table.Td>
+                              <Link to={`/events/${slug}/event-teams/${entry.team.id}`}>
+                                {entry.team.display_name}
+                              </Link>
+                            </Table.Td>
+                            <Table.Td style={{ textAlign: 'right' }}>{entry.total_score}</Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                )}
+              </Stack>
+            ) : null}
+
+            {activeTab === 'my-teams' && myTeams.length > 1 ? (
+              <Stack gap="sm">
+                <Heading level={2}>My Teams</Heading>
+                {myTeams.map((team) => (
+                  <Card key={team.id} variant="outline">
+                    <CardHeader>
+                      <Inline gap="xs" justify="space-between" wrap>
+                        <Link to={`/events/${slug}/event-teams/${team.id}`}>
+                          <Text style={{ fontWeight: 500 }}>{team.display_name}</Text>
+                        </Link>
+                        <Inline gap="xs" wrap>
+                          {team.members.map((m) => (
+                            <UserPill key={m.user_id} name={m.display_name} size="sm" />
                           ))}
-                          <Table.Th style={{ textAlign: 'right' }}>Total</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {leaderboard.map((entry) => {
-                          const isMe = entry.user.id === user?.id;
-                          return (
-                            <Table.Tr
-                              key={entry.user.id}
-                              style={isMe ? { fontWeight: 'bold' } : {}}
-                            >
-                              <Table.Td>{entry.rank}</Table.Td>
-                              <Table.Td>{entry.user.display_name}</Table.Td>
-                              {stageColumns.map((col) => {
-                                const ss = entry.stage_scores.find(
-                                  (s) => s.stage_id === col.stage_id,
-                                );
-                                return (
-                                  <Table.Td key={col.stage_id} style={{ textAlign: 'right' }}>
-                                    {ss != null ? ss.score : '—'}
-                                  </Table.Td>
-                                );
-                              })}
-                              <Table.Td style={{ textAlign: 'right' }}>
-                                {entry.total_score}
-                              </Table.Td>
-                            </Table.Tr>
-                          );
-                        })}
-                      </Table.Tbody>
-                    </Table>
-                  );
-                })()
-              )}
-            </Stack>
-          ) : null}
+                        </Inline>
+                      </Inline>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </Stack>
+            ) : null}
+          </Stack>
         </Section>
       </PageContainer>
     </Main>

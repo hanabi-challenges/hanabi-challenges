@@ -86,6 +86,10 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
     req.user!.userId,
     inviteUserIds,
     ctx.event!.allowed_team_sizes,
+    {
+      registration_cutoff: ctx.event!.registration_cutoff,
+      allow_late_registration: ctx.event!.allow_late_registration,
+    },
   );
 
   if (result.ok === false) {
@@ -95,10 +99,8 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
         error: `Team size must be one of: ${ctx.event!.allowed_team_sizes.join(', ')}`,
       });
     }
-    if (reason === 'not_registered') {
-      return res
-        .status(409)
-        .json({ error: 'All team members must have an active event registration' });
+    if (reason === 'registration_closed') {
+      return res.status(409).json({ error: 'Registration has closed for this event' });
     }
     return res
       .status(409)

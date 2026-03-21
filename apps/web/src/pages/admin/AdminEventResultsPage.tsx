@@ -59,14 +59,14 @@ type ResultEntry = {
   score: number;
   zero_reason: string | null;
   bottom_deck_risk: number | null;
+  strikes: number | null;
+  clues_remaining: number | null;
   hanabi_live_game_id: number | null;
   participants: Array<{ user_id: number; display_name: string }>;
 };
 
 type EditFormState = {
-  score: string;
   zero_reason: string;
-  bdr: string;
   hanabi_live_game_id: string;
 };
 
@@ -145,8 +145,6 @@ function ResultRowEntry({
   deleteBusy,
 }: ResultRowProps) {
   const isEditing = activeEditKey === editKey;
-  const scoreNum = Number(editForm.score);
-  const isZero = editForm.score === '0' || scoreNum === 0;
 
   return (
     <Group justify="space-between" align="flex-start" gap="xs">
@@ -177,14 +175,24 @@ function ResultRowEntry({
                 {result.zero_reason}
               </Badge>
             ) : null}
+            {result.hanabi_live_game_id !== null ? (
+              <Text size="xs" c="dimmed">
+                HL #{result.hanabi_live_game_id}
+              </Text>
+            ) : null}
             {result.bottom_deck_risk !== null ? (
               <Text size="xs" c="dimmed">
                 BDR: {result.bottom_deck_risk}
               </Text>
             ) : null}
-            {result.hanabi_live_game_id !== null ? (
+            {result.strikes !== null ? (
               <Text size="xs" c="dimmed">
-                HL #{result.hanabi_live_game_id}
+                Strikes: {result.strikes}
+              </Text>
+            ) : null}
+            {result.clues_remaining !== null ? (
+              <Text size="xs" c="dimmed">
+                Clues: {result.clues_remaining}
               </Text>
             ) : null}
           </Group>
@@ -204,40 +212,6 @@ function ResultRowEntry({
               </Alert>
             ) : null}
             <Group gap="xs" align="flex-end">
-              <div style={{ width: 80 }}>
-                <TextInput
-                  label="Score"
-                  size="xs"
-                  value={editForm.score}
-                  onChange={(e) =>
-                    onFormChange({ ...editForm, score: e.currentTarget.value.replace(/\D/g, '') })
-                  }
-                  placeholder="0"
-                />
-              </div>
-              {isZero ? (
-                <div style={{ width: 140 }}>
-                  <CoreSelect
-                    label="Zero reason"
-                    size="xs"
-                    value={editForm.zero_reason}
-                    onChange={(v) => onFormChange({ ...editForm, zero_reason: v ?? '' })}
-                    data={ZERO_REASONS}
-                    placeholder="Select reason"
-                  />
-                </div>
-              ) : null}
-              <div style={{ width: 70 }}>
-                <TextInput
-                  label="BDR"
-                  size="xs"
-                  value={editForm.bdr}
-                  onChange={(e) =>
-                    onFormChange({ ...editForm, bdr: e.currentTarget.value.replace(/\D/g, '') })
-                  }
-                  placeholder="—"
-                />
-              </div>
               <div style={{ width: 110 }}>
                 <TextInput
                   label="HL Game ID"
@@ -252,6 +226,18 @@ function ResultRowEntry({
                   placeholder="—"
                 />
               </div>
+              {result?.score === 0 ? (
+                <div style={{ width: 140 }}>
+                  <CoreSelect
+                    label="Zero reason"
+                    size="xs"
+                    value={editForm.zero_reason}
+                    onChange={(v) => onFormChange({ ...editForm, zero_reason: v ?? '' })}
+                    data={ZERO_REASONS}
+                    placeholder="Select reason"
+                  />
+                </div>
+              ) : null}
             </Group>
             <Group gap="xs">
               <Button size="xs" loading={editBusy} onClick={() => onSave(gameSlot, team, result)}>
@@ -274,10 +260,7 @@ function ResultRowEntry({
             disabled={activeEditKey !== null}
             onClick={() =>
               onStartEdit(editKey, {
-                score: result ? String(result.score) : '',
                 zero_reason: result?.zero_reason ?? '',
-                bdr:
-                  result?.bottom_deck_risk !== null ? String(result?.bottom_deck_risk ?? '') : '',
                 hanabi_live_game_id:
                   result?.hanabi_live_game_id !== null
                     ? String(result?.hanabi_live_game_id ?? '')
@@ -910,9 +893,7 @@ export function AdminEventResultsPage() {
   // Edit state (game-slot mode)
   const [activeEditKey, setActiveEditKey] = useState<EditKey | null>(null);
   const [editForm, setEditForm] = useState<EditFormState>({
-    score: '',
     zero_reason: '',
-    bdr: '',
     hanabi_live_game_id: '',
   });
   const [editBusy, setEditBusy] = useState(false);
@@ -994,7 +975,7 @@ export function AdminEventResultsPage() {
   function teamsForSlot(slot: GameSlot): TeamRow[] {
     if (!stage) return [];
     const stageTeams =
-      stage.team_scope === 'STAGE' || stage.team_policy === 'QUEUED'
+      stage.team_scope === 'STAGE' || stage.participation_type === 'INDIVIDUAL'
         ? teams.filter((t) => t.stage_id === Number(selectedStageId))
         : teams.filter((t) => t.stage_id === null);
     if (slot.team_size !== null) {
@@ -1013,31 +994,16 @@ export function AdminEventResultsPage() {
     setEditBusy(true);
     setEditError(null);
 
-    const scoreNum = editForm.score === '' ? NaN : Number(editForm.score);
-    if (isNaN(scoreNum) || scoreNum < 0) {
-      setEditError('Score must be a non-negative integer.');
-      setEditBusy(false);
-      return;
-    }
-    if (scoreNum === 0 && !editForm.zero_reason) {
-      setEditError('Zero reason is required when score is 0.');
-      setEditBusy(false);
-      return;
-    }
-    if (gameSlot.max_score !== null && scoreNum > gameSlot.max_score) {
-      setEditError(`Score exceeds max score of ${gameSlot.max_score}.`);
-      setEditBusy(false);
-      return;
-    }
-
-    const body = {
-      score: scoreNum,
-      zero_reason: scoreNum === 0 ? editForm.zero_reason || null : null,
-      bottom_deck_risk: editForm.bdr ? Number(editForm.bdr) : null,
+    const body: Record<string, unknown> = {
       hanabi_live_game_id: editForm.hanabi_live_game_id
         ? Number(editForm.hanabi_live_game_id)
         : null,
     };
+
+    // zero_reason is only editable when the existing result has score = 0
+    if (existing?.score === 0) {
+      body.zero_reason = editForm.zero_reason || null;
+    }
 
     try {
       if (existing) {

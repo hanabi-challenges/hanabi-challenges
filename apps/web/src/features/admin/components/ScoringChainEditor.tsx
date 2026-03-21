@@ -34,6 +34,9 @@ import {
 export type ObservableType =
   | 'score'
   | 'max_score'
+  | 'bdr'
+  | 'strikes'
+  | 'clues_remaining'
   | 'turns'
   | 'start_time'
   | 'end_time'
@@ -77,6 +80,9 @@ export const DEFAULT_SCORING_CHAIN: ScoringChainEntry[] = [
 const BOOLEAN_OBSERVABLE_TYPES: ObservableType[] = ['max_score'];
 const NUMERIC_OBSERVABLE_TYPES: ObservableType[] = [
   'score',
+  'bdr',
+  'strikes',
+  'clues_remaining',
   'turns',
   'start_time',
   'end_time',
@@ -90,6 +96,9 @@ const OBSERVABLE_META: Record<
 > = {
   max_score: { label: 'Max Score', defaultDir: 'desc', boolean: true },
   score: { label: 'Score', defaultDir: 'desc' },
+  bdr: { label: 'BDR', defaultDir: 'desc' },
+  strikes: { label: 'Strikes', defaultDir: 'asc' },
+  clues_remaining: { label: 'Clues Remaining', defaultDir: 'desc' },
   turns: { label: 'Turns', defaultDir: 'asc' },
   start_time: { label: 'Start Time', defaultDir: 'asc' },
   end_time: { label: 'End Time', defaultDir: 'asc' },
@@ -97,19 +106,27 @@ const OBSERVABLE_META: Record<
   end_condition: { label: 'End Condition', defaultDir: 'desc' },
 };
 
-const STANDARD_INPUT_TYPES = ['bdr', 'strikes', 'clues_remaining'] as const;
-type StandardInputType = (typeof STANDARD_INPUT_TYPES)[number];
-
-const USER_INPUT_META: Record<StandardInputType, { label: string; defaultDir: 'asc' | 'desc' }> = {
-  bdr: { label: 'BDR', defaultDir: 'desc' },
-  strikes: { label: 'Strikes', defaultDir: 'asc' },
-  clues_remaining: { label: 'Clues Remaining', defaultDir: 'desc' },
-};
+// ---------------------------------------------------------------------------
+// User Input (preserved — uncomment if unobservable measures are needed)
+// ---------------------------------------------------------------------------
+// const STANDARD_INPUT_TYPES = ['bdr', 'strikes', 'clues_remaining'] as const;
+// type StandardInputType = (typeof STANDARD_INPUT_TYPES)[number];
+// const USER_INPUT_META: Record<StandardInputType, { label: string; defaultDir: 'asc' | 'desc' }> = {
+//   bdr: { label: 'BDR', defaultDir: 'desc' },
+//   strikes: { label: 'Strikes', defaultDir: 'asc' },
+//   clues_remaining: { label: 'Clues Remaining', defaultDir: 'desc' },
+// };
 
 function entryLabel(entry: ObservableItem | UserInputItem): string {
   if (entry.kind === 'observable') return OBSERVABLE_META[entry.type].label;
   if (entry.type === 'custom') return entry.label || 'Custom';
-  return USER_INPUT_META[entry.type].label;
+  // Fallback for legacy user_input entries stored before BDR/Strikes/Clues became observable
+  const legacyLabels: Record<string, string> = {
+    bdr: 'BDR',
+    strikes: 'Strikes',
+    clues_remaining: 'Clues Remaining',
+  };
+  return legacyLabels[entry.type] ?? entry.type;
 }
 
 let _idCounter = 0;
@@ -314,30 +331,31 @@ export function ScoringChainEditor({ value, onChange }: Props) {
     emit(next, resolution);
   }
 
-  function addStandardInput(type: StandardInputType) {
-    const entry: InternalChainEntry = {
-      id: nextId(),
-      kind: 'user_input',
-      type,
-      direction: USER_INPUT_META[type].defaultDir,
-    };
-    const next = [...chain, entry];
-    setChain(next);
-    emit(next, resolution);
-  }
+  // Preserved for future unobservable measures — uncomment alongside the User Input palette section
+  // function addStandardInput(type: StandardInputType) {
+  //   const entry: InternalChainEntry = {
+  //     id: nextId(),
+  //     kind: 'user_input',
+  //     type,
+  //     direction: USER_INPUT_META[type].defaultDir,
+  //   };
+  //   const next = [...chain, entry];
+  //   setChain(next);
+  //   emit(next, resolution);
+  // }
 
-  function addCustom() {
-    const entry: InternalChainEntry = {
-      id: nextId(),
-      kind: 'user_input',
-      type: 'custom',
-      direction: 'desc',
-      label: 'Custom',
-    };
-    const next = [...chain, entry];
-    setChain(next);
-    emit(next, resolution);
-  }
+  // function addCustom() {
+  //   const entry: InternalChainEntry = {
+  //     id: nextId(),
+  //     kind: 'user_input',
+  //     type: 'custom',
+  //     direction: 'desc',
+  //     label: 'Custom',
+  //   };
+  //   const next = [...chain, entry];
+  //   setChain(next);
+  //   emit(next, resolution);
+  // }
 
   function removeItem(id: string) {
     const next = chain.filter((e) => e.id !== id);
@@ -368,11 +386,12 @@ export function ScoringChainEditor({ value, onChange }: Props) {
   const inChainObservable = new Set(
     chain.filter((e) => e.kind === 'observable').map((e) => (e as ObservableItem).type),
   );
-  const inChainStandardInput = new Set(
-    chain
-      .filter((e) => e.kind === 'user_input' && e.type !== 'custom')
-      .map((e) => (e as UserInputItem).type),
-  );
+  // Preserved for future unobservable measures — uncomment alongside the User Input palette section
+  // const inChainStandardInput = new Set(
+  //   chain
+  //     .filter((e) => e.kind === 'user_input' && e.type !== 'custom')
+  //     .map((e) => (e as UserInputItem).type),
+  // );
 
   // max_score is mutually exclusive with all other chain entries
   const hasMaxScore = inChainObservable.has('max_score');
@@ -436,6 +455,7 @@ export function ScoringChainEditor({ value, onChange }: Props) {
           </Group>
         </Group>
 
+        {/* User Input palette — preserved for future use if non-observable measures are needed
         <Group gap="xs" align="flex-start" wrap="nowrap">
           <Text
             size="xs"
@@ -471,6 +491,7 @@ export function ScoringChainEditor({ value, onChange }: Props) {
             </Button>
           </Group>
         </Group>
+        */}
       </Stack>
 
       {/* Chain */}

@@ -3,6 +3,7 @@ import {
   getSeededLeaderboard,
   getGauntletLeaderboard,
   getMatchPlayStandings,
+  getGroupLeaderboard,
 } from '../leaderboards/leaderboards.service';
 
 // ---------------------------------------------------------------------------
@@ -145,16 +146,24 @@ export async function deleteBracketEntry(
 }
 
 // ---------------------------------------------------------------------------
-// Qualify — auto-populate from stage relationships
+// Qualify — auto-populate bracket entries from a stage transition
 // ---------------------------------------------------------------------------
 
 export type QualifyResult =
   | { ok: true; entries_created: number; entries: BracketEntryRow[] }
-  | { ok: false; reason: 'no_relationship' | 'already_has_entries' };
+  | { ok: false; reason: 'no_transition' | 'already_has_entries' };
 
+/**
+ * Populate bracket entries for `stageId` by executing the transition
+ * configured on the given source stage or group.
+ *
+ * Exactly one of `sourceStageId` or `sourceGroupId` must be provided.
+ */
 export async function qualifyBracketEntries(
   stageId: number,
   eventId: number,
+  sourceStageId?: number,
+  sourceGroupId?: number,
 ): Promise<QualifyResult> {
   // Block if entries already exist
   const existingCheck = await pool.query<{ count: string }>(
@@ -165,56 +174,62 @@ export async function qualifyBracketEntries(
     return { ok: false, reason: 'already_has_entries' };
   }
 
-  // Load relationships targeting this stage
-  const relResult = await pool.query<{
-    id: number;
-    source_stage_id: number;
+  // Load the transition from event_stage_transitions
+  type TransitionRow = {
     filter_type: string;
     filter_value: number | null;
     seeding_method: string;
-  }>(
-    `SELECT esr.id, esr.source_stage_id, esr.filter_type, esr.filter_value, esr.seeding_method
-     FROM event_stage_relationships esr
-     JOIN event_stages es ON es.id = esr.source_stage_id
-     WHERE esr.target_stage_id = $1 AND es.event_id = $2`,
-    [stageId, eventId],
-  );
+  };
 
-  if (relResult.rows.length === 0) return { ok: false, reason: 'no_relationship' };
+  let transitionRow: TransitionRow | null = null;
 
-  // Collect qualifying teams from all relationships (deduped)
-  // Each { teamId, rank } — rank determines seed for RANKED seeding
-  const qualifiedMap = new Map<number, number>(); // teamId → rank
-
-  for (const rel of relResult.rows) {
-    const ranked = await getQualifyingTeams(rel.source_stage_id, rel.filter_type, rel.filter_value);
-
-    for (const { teamId, rank } of ranked) {
-      if (!qualifiedMap.has(teamId)) {
-        qualifiedMap.set(teamId, rank);
-      }
-    }
+  if (sourceStageId !== undefined) {
+    const res = await pool.query<TransitionRow>(
+      `SELECT filter_type, filter_value, seeding_method
+       FROM event_stage_transitions
+       WHERE event_id = $1 AND after_stage_id = $2`,
+      [eventId, sourceStageId],
+    );
+    transitionRow = res.rows[0] ?? null;
+  } else if (sourceGroupId !== undefined) {
+    const res = await pool.query<TransitionRow>(
+      `SELECT filter_type, filter_value, seeding_method
+       FROM event_stage_transitions
+       WHERE event_id = $1 AND after_group_id = $2`,
+      [eventId, sourceGroupId],
+    );
+    transitionRow = res.rows[0] ?? null;
   }
 
-  if (qualifiedMap.size === 0) {
+  if (!transitionRow) return { ok: false, reason: 'no_transition' };
+
+  const { filter_type, filter_value, seeding_method } = transitionRow;
+
+  // Get ranked teams from the source
+  const ranked =
+    sourceStageId !== undefined
+      ? await getStageQualifyingTeams(sourceStageId, filter_type, filter_value)
+      : await getGroupQualifyingTeams(sourceGroupId!, filter_type, filter_value);
+
+  if (ranked.length === 0) {
     return { ok: true, entries_created: 0, entries: [] };
   }
 
-  // Sort by rank for RANKED seeding (use first relationship's seeding_method)
-  const seedingMethod = relResult.rows[0].seeding_method;
-  const teams = Array.from(qualifiedMap.entries()); // [teamId, rank]
-
+  // Apply seeding method
   let seededTeams: { teamId: number; seed: number | null }[];
 
-  if (seedingMethod === 'RANKED') {
-    const sorted = teams.sort((a, b) => a[1] - b[1]);
-    seededTeams = sorted.map(([teamId], i) => ({ teamId, seed: i + 1 }));
-  } else if (seedingMethod === 'RANDOM') {
-    const shuffled = teams.sort(() => Math.random() - 0.5);
-    seededTeams = shuffled.map(([teamId], i) => ({ teamId, seed: i + 1 }));
+  if (seeding_method === 'RANKED') {
+    const sorted = [...ranked].sort((a, b) => a.rank - b.rank);
+    seededTeams = sorted.map(({ teamId }, i) => ({ teamId, seed: i + 1 }));
+  } else if (seeding_method === 'RANDOM') {
+    const shuffled = [...ranked].sort(() => Math.random() - 0.5);
+    seededTeams = shuffled.map(({ teamId }, i) => ({ teamId, seed: i + 1 }));
   } else {
-    // MANUAL: no auto-seed
-    seededTeams = teams.map(([teamId]) => ({ teamId, seed: null }));
+    // PRESERVE or MANUAL: keep source rank as seed, no re-numbering
+    seededTeams = ranked.map(({ teamId, rank }) => ({
+      teamId,
+      seed: seeding_method === 'PRESERVE' ? rank : null,
+    }));
   }
 
   const newEntries: BracketEntryRow[] = [];
@@ -233,15 +248,14 @@ export async function qualifyBracketEntries(
 }
 
 // ---------------------------------------------------------------------------
-// Internal: get qualifying teams from a source stage
+// Internal: get qualifying teams from a single source stage
 // ---------------------------------------------------------------------------
 
-async function getQualifyingTeams(
+async function getStageQualifyingTeams(
   sourceStageId: number,
   filterType: string,
   filterValue: number | null,
-): Promise<{ teamId: number; rank: number }[]> {
-  // Determine mechanism
+): Promise<{ teamId: number; rank: number; score: number }[]> {
   const stageRes = await pool.query<{ mechanism: string }>(
     `SELECT mechanism FROM event_stages WHERE id = $1`,
     [sourceStageId],
@@ -249,7 +263,6 @@ async function getQualifyingTeams(
   if (stageRes.rowCount === 0) return [];
   const { mechanism } = stageRes.rows[0];
 
-  // Get ranked teams from the appropriate leaderboard
   const allRanked: { teamId: number; rank: number; score: number }[] = [];
 
   if (mechanism === 'SEEDED_LEADERBOARD') {
@@ -276,16 +289,46 @@ async function getQualifyingTeams(
     }
   }
 
-  if (filterType === 'ALL') return allRanked;
+  return applyFilter(allRanked, filterType, filterValue);
+}
 
+// ---------------------------------------------------------------------------
+// Internal: get qualifying teams from a stage group aggregate leaderboard
+// ---------------------------------------------------------------------------
+
+async function getGroupQualifyingTeams(
+  groupId: number,
+  filterType: string,
+  filterValue: number | null,
+): Promise<{ teamId: number; rank: number; score: number }[]> {
+  const lb = await getGroupLeaderboard(groupId);
+  if (!lb) return [];
+
+  const allRanked = lb.entries.map((e) => ({
+    teamId: e.team.id,
+    rank: e.rank,
+    score: e.group_score,
+  }));
+
+  return applyFilter(allRanked, filterType, filterValue);
+}
+
+// ---------------------------------------------------------------------------
+// Internal: apply filter (TOP_N / THRESHOLD / ALL / MANUAL)
+// ---------------------------------------------------------------------------
+
+function applyFilter(
+  allRanked: { teamId: number; rank: number; score: number }[],
+  filterType: string,
+  filterValue: number | null,
+): { teamId: number; rank: number; score: number }[] {
+  if (filterType === 'ALL') return allRanked;
   if (filterType === 'TOP_N' && filterValue !== null) {
     return allRanked.filter((t) => t.rank <= filterValue);
   }
-
   if (filterType === 'THRESHOLD' && filterValue !== null) {
     return allRanked.filter((t) => t.score >= filterValue);
   }
-
-  // MANUAL — return empty (admin adds manually)
+  // MANUAL — admin adds entries manually; return nothing from automation
   return [];
 }

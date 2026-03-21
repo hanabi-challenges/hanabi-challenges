@@ -92,12 +92,22 @@ router.post('/entries/qualify', authRequired, async (req: AuthenticatedRequest, 
   const ctx = await resolveEventAndAdminCheck(req, res);
   if (!ctx) return;
 
-  const result = await qualifyBracketEntries(ctx.stageId, ctx.eventId);
+  const sourceStageId =
+    req.body?.source_stage_id != null ? Number(req.body.source_stage_id) : undefined;
+  const sourceGroupId =
+    req.body?.source_group_id != null ? Number(req.body.source_group_id) : undefined;
+
+  const result = await qualifyBracketEntries(
+    ctx.stageId,
+    ctx.eventId,
+    sourceStageId,
+    sourceGroupId,
+  );
 
   if (result.ok) return res.status(201).json(result);
   const reason1 = (result as { ok: false; reason: string }).reason;
-  if (reason1 === 'no_relationship') {
-    return res.status(400).json({ error: 'No stage relationship found for this stage' });
+  if (reason1 === 'no_transition') {
+    return res.status(400).json({ error: 'No stage transition found for this stage' });
   }
   if (reason1 === 'already_has_entries') {
     return res.status(409).json({ error: 'Stage already has bracket entries' });

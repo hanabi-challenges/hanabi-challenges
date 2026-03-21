@@ -191,13 +191,18 @@ async function persistGameExport(exp: {
   datetimeFinished: string | null;
   actions: unknown[];
   deck: unknown[];
+  tags: string[];
 }): Promise<void> {
   await pool.query(
     `INSERT INTO hanabi_live_game_exports
        (game_id, seed, players, score, end_condition, variant_id, options_json,
-        datetime_started, datetime_finished, actions, deck, fetched_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10, $11, NOW())
-     ON CONFLICT (game_id) DO NOTHING`,
+        datetime_started, datetime_finished, actions, deck, tags, fetched_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10, $11, $12, NOW())
+     ON CONFLICT (game_id) DO UPDATE SET
+       tags = CASE
+         WHEN EXCLUDED.tags = '{}' THEN hanabi_live_game_exports.tags
+         ELSE EXCLUDED.tags
+       END`,
     [
       exp.gameId,
       exp.seed,
@@ -210,6 +215,7 @@ async function persistGameExport(exp: {
       exp.datetimeFinished,
       JSON.stringify(exp.actions),
       JSON.stringify(exp.deck),
+      exp.tags,
     ],
   );
 }
@@ -322,6 +328,7 @@ export async function ingestGameSlot(params: {
     score: number; // from the seed-list API; used as score fallback when engine can't run
     datetimeStarted: string | null;
     datetimeFinished: string | null;
+    tags: string[];
   };
 
   const candidates: CandidateGame[] = [];
@@ -336,6 +343,7 @@ export async function ingestGameSlot(params: {
           score: g.score,
           datetimeStarted: g.datetimeStarted,
           datetimeFinished: g.datetimeFinished,
+          tags: g.tags,
         });
       }
     } catch (err) {
@@ -432,6 +440,7 @@ export async function ingestGameSlot(params: {
         datetimeFinished: exp.datetimeFinished,
         actions: exp.actions,
         deck: exp.deck,
+        tags: candidate.tags,
       });
     } catch {
       // Non-fatal: the result can still be ingested; we just won't be able to reprocess offline.

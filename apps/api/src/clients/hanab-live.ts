@@ -158,6 +158,9 @@ export type SeedGame = {
   // ISO timestamp strings — may be under various key names
   datetimeStarted: string | null;
   datetimeFinished: string | null;
+  // Comma-separated tag string from hanab.live game_tags table, already split into array.
+  // e.g. ["convention:h-group", "convention:rs"]
+  tags: string[];
 };
 
 export type ExportAction = {
@@ -246,6 +249,16 @@ function coerceBool(
 // Row parsers
 // ---------------------------------------------------------------------------
 
+function parseTags(obj: Record<string, unknown>): string[] {
+  // hanab.live returns tags as a comma-separated string (e.g. "convention:h-group, convention:rs")
+  const raw = obj.tags ?? obj.tag ?? '';
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  return raw
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
 function parseSeedRows(rows: unknown[]): SeedGame[] {
   const games: SeedGame[] = [];
   for (const row of rows) {
@@ -264,6 +277,7 @@ function parseSeedRows(rows: unknown[]): SeedGame[] {
         'played_at',
         'ended_at',
       ]),
+      tags: parseTags(obj),
     });
   }
   return games;

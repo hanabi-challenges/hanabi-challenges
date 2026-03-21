@@ -32,6 +32,7 @@ DROP TABLE IF EXISTS admin_access_requests CASCADE;
 DROP TABLE IF EXISTS hanabi_live_game_exports CASCADE;
 DROP TABLE IF EXISTS hanabi_variant_sync_state CASCADE;
 DROP TABLE IF EXISTS hanabi_variants CASCADE;
+DROP TABLE IF EXISTS discord_role_grants CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS schema_migrations CASCADE;
 DROP FUNCTION IF EXISTS notify_badge_award_insert() CASCADE;
@@ -49,7 +50,28 @@ CREATE TABLE users (
   color_hex    TEXT NOT NULL DEFAULT '#777777',
   text_color   TEXT NOT NULL DEFAULT '#ffffff'
                  CHECK (text_color IN ('#000000', '#ffffff')),
+  discord_id   TEXT,
   created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id
+  ON users (discord_id) WHERE discord_id IS NOT NULL;
+
+------------------------------------------------------------
+-- DISCORD ROLE GRANTS
+-- Maps (Discord guild_id, role_id) → app role ('ADMIN').
+-- When a linked user holds a matching Discord role their app
+-- role is promoted to ADMIN during the periodic sync.
+------------------------------------------------------------
+
+CREATE TABLE discord_role_grants (
+  id          SERIAL      NOT NULL PRIMARY KEY,
+  guild_id    TEXT        NOT NULL,
+  role_id     TEXT        NOT NULL,
+  app_role    TEXT        NOT NULL DEFAULT 'ADMIN'
+                CHECK (app_role IN ('ADMIN')),
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (guild_id, role_id)
 );
 
 ------------------------------------------------------------
@@ -91,8 +113,11 @@ CREATE TABLE hanabi_live_game_exports (
   datetime_finished TIMESTAMPTZ,
   actions           JSONB       NOT NULL DEFAULT '[]',
   deck              JSONB       NOT NULL DEFAULT '[]',
+  tags              TEXT[]      NOT NULL DEFAULT '{}',
   fetched_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_hanabi_live_game_exports_tags
+  ON hanabi_live_game_exports USING GIN (tags);
 
 ------------------------------------------------------------
 -- EVENTS

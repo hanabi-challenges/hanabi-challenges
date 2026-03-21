@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRouter from '../modules/auth/auth.routes';
+import discordRouter from '../modules/auth/discord.routes';
 import eventsRouter from '../modules/events/events.routes';
 import registrationsRouter from '../modules/registrations/registrations.routes';
 import resultsRouter from '../modules/results/results.routes';
@@ -15,6 +16,7 @@ import adminAccessRouter from '../modules/admin-access/admin-access.routes';
 const router = Router();
 
 router.use('/api', authRouter);
+router.use('/api/auth', discordRouter);
 router.use('/api/events', eventsRouter);
 router.use('/api', registrationsRouter);
 router.use('/api/results', resultsRouter);

@@ -1,4 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
+
+// ---------------------------------------------------------------------------
+// End-condition enum constants
+// ---------------------------------------------------------------------------
+
+export type EndConditionDef = { code: number; label: string };
+
+/** Canonical hanab.live end-condition codes and their display labels. */
+export const END_CONDITIONS: EndConditionDef[] = [
+  { code: 1, label: 'Normal' },
+  { code: 10, label: 'VTK' },
+  { code: 4, label: 'VTK (legacy)' },
+  { code: 2, label: 'Strikeout' },
+  { code: 3, label: 'Timeout' },
+  { code: 5, label: 'Speedrun fail' },
+  { code: 6, label: 'Idle timeout' },
+  { code: 7, label: 'Character softlock' },
+  { code: 8, label: 'All or nothing fail' },
+  { code: 9, label: 'All or nothing softlock' },
+  { code: 0, label: 'In progress' },
+];
+
+/** Global default rank order for end_condition: index 0 = ranked first/best.
+ *  Stored per-chain-entry as `order` and can be overridden at the point of use. */
+export const DEFAULT_END_CONDITION_ORDER: number[] = END_CONDITIONS.map((e) => e.code);
 import {
   DndContext,
   closestCenter,
@@ -47,6 +72,9 @@ export type ObservableItem = {
   kind: 'observable';
   type: ObservableType;
   direction: 'asc' | 'desc';
+  /** For enum-typed observables (e.g., end_condition): codes ranked best-first.
+   *  If absent, DEFAULT_END_CONDITION_ORDER is used at evaluation time. */
+  order?: number[];
 };
 
 export type UserInputItem = {
@@ -87,12 +115,14 @@ const NUMERIC_OBSERVABLE_TYPES: ObservableType[] = [
   'start_time',
   'end_time',
   'elapsed_time',
-  'end_condition',
 ];
+// Enum observables sort by a custom ordering of named values rather than raw number comparison.
+// The ranking order is stored as an ordered list of codes in the chain entry (order?: number[]).
+const ENUM_OBSERVABLE_TYPES: ObservableType[] = ['end_condition'];
 
 const OBSERVABLE_META: Record<
   ObservableType,
-  { label: string; defaultDir: 'asc' | 'desc'; boolean?: true }
+  { label: string; defaultDir: 'asc' | 'desc'; boolean?: true; enum?: true }
 > = {
   max_score: { label: 'Max Score', defaultDir: 'desc', boolean: true },
   score: { label: 'Score', defaultDir: 'desc' },
@@ -103,7 +133,7 @@ const OBSERVABLE_META: Record<
   start_time: { label: 'Start Time', defaultDir: 'asc' },
   end_time: { label: 'End Time', defaultDir: 'asc' },
   elapsed_time: { label: 'Elapsed Time', defaultDir: 'asc' },
-  end_condition: { label: 'End Condition', defaultDir: 'desc' },
+  end_condition: { label: 'End Condition', defaultDir: 'desc', enum: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -152,20 +182,27 @@ function toStorable(entries: InternalChainEntry[]): (ObservableItem | UserInputI
 // Sortable row
 // ---------------------------------------------------------------------------
 
+function endConditionLabel(code: number): string {
+  return END_CONDITIONS.find((e) => e.code === code)?.label ?? `Code ${code}`;
+}
+
 function SortableRow({
   entry,
   onRemove,
   onSetDirection,
+  onSetOrder,
   onLabelChange,
 }: {
   entry: InternalChainEntry;
   onRemove: () => void;
   onSetDirection: (dir: 'asc' | 'desc') => void;
+  onSetOrder: (order: number[]) => void;
   onLabelChange: (label: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: entry.id,
   });
+  const [orderExpanded, setOrderExpanded] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -176,8 +213,22 @@ function SortableRow({
   const isCustom = entry.kind === 'user_input' && entry.type === 'custom';
   const isBoolean =
     entry.kind === 'observable' && OBSERVABLE_META[entry.type as ObservableType]?.boolean === true;
-  const badgeColor = entry.kind === 'observable' ? 'blue' : 'orange';
-  const badgeLabel = entry.kind === 'observable' ? 'Obs' : 'Input';
+  const isEnum =
+    entry.kind === 'observable' && OBSERVABLE_META[entry.type as ObservableType]?.enum === true;
+  const badgeColor = entry.kind === 'observable' ? (isEnum ? 'violet' : 'blue') : 'orange';
+  const badgeLabel = entry.kind === 'observable' ? (isEnum ? 'Enum' : 'Obs') : 'Input';
+
+  const currentOrder: number[] =
+    isEnum && entry.kind === 'observable' && (entry as ObservableItem).order
+      ? (entry as ObservableItem).order!
+      : DEFAULT_END_CONDITION_ORDER;
+
+  function moveCode(index: number, direction: -1 | 1) {
+    const next = [...currentOrder];
+    const swapIdx = index + direction;
+    [next[index], next[swapIdx]] = [next[swapIdx], next[index]];
+    onSetOrder(next);
+  }
 
   return (
     <div ref={setNodeRef} style={style}>
@@ -231,8 +282,8 @@ function SortableRow({
           )}
         </div>
 
-        {/* Direction toggle — hidden for boolean observables (always desc) */}
-        {!isBoolean ? (
+        {/* Direction toggle — hidden for boolean and enum observables */}
+        {!isBoolean && !isEnum ? (
           <Group gap={2} wrap="nowrap">
             <Button
               size="xs"
@@ -249,10 +300,27 @@ function SortableRow({
               ↓ Desc
             </Button>
           </Group>
-        ) : (
+        ) : isBoolean ? (
           <Text size="xs" c="dimmed" style={{ paddingRight: 4 }}>
             achieved &gt; not
           </Text>
+        ) : (
+          /* Enum: show compact order summary + expand toggle */
+          <Group gap={4} wrap="nowrap" align="center">
+            <Text size="xs" c="dimmed">
+              {currentOrder.slice(0, 3).map(endConditionLabel).join(' > ')}
+              {currentOrder.length > 3 ? '…' : ''}
+            </Text>
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="violet"
+              onClick={() => setOrderExpanded((v) => !v)}
+              aria-label="Edit order"
+            >
+              <MaterialIcon name={orderExpanded ? 'expand_less' : 'sort'} />
+            </ActionIcon>
+          </Group>
         )}
 
         {/* Remove */}
@@ -260,6 +328,61 @@ function SortableRow({
           <MaterialIcon name="close" />
         </ActionIcon>
       </Group>
+
+      {/* Enum order editor — inline expansion */}
+      {isEnum && orderExpanded && (
+        <Stack
+          gap={2}
+          style={{
+            marginTop: 4,
+            padding: '6px 8px',
+            border: '1px solid var(--mantine-color-violet-2)',
+            borderRadius: 6,
+            background: 'var(--mantine-color-violet-0)',
+          }}
+        >
+          <Text size="xs" c="dimmed" fw={600} mb={2}>
+            Rank order (best → worst)
+          </Text>
+          {currentOrder.map((code, index) => (
+            <Group key={code} gap={4} wrap="nowrap" align="center">
+              <Text size="xs" c="dimmed" style={{ minWidth: 20, textAlign: 'right' }}>
+                {index + 1}.
+              </Text>
+              <Text size="xs" style={{ flex: 1 }}>
+                {endConditionLabel(code)}
+              </Text>
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                disabled={index === 0}
+                onClick={() => moveCode(index, -1)}
+                aria-label="Move up"
+              >
+                <MaterialIcon name="arrow_upward" />
+              </ActionIcon>
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                disabled={index === currentOrder.length - 1}
+                onClick={() => moveCode(index, 1)}
+                aria-label="Move down"
+              >
+                <MaterialIcon name="arrow_downward" />
+              </ActionIcon>
+            </Group>
+          ))}
+          <Button
+            size="xs"
+            variant="subtle"
+            color="violet"
+            mt={4}
+            onClick={() => setOrderExpanded(false)}
+          >
+            Done
+          </Button>
+        </Stack>
+      )}
     </div>
   );
 }
@@ -320,11 +443,13 @@ export function ScoringChainEditor({ value, onChange }: Props) {
   }
 
   function addObservable(type: ObservableType) {
+    const isEnum = OBSERVABLE_META[type].enum === true;
     const entry: InternalChainEntry = {
       id: nextId(),
       kind: 'observable',
       type,
       direction: OBSERVABLE_META[type].defaultDir,
+      ...(isEnum ? { order: [...DEFAULT_END_CONDITION_ORDER] } : {}),
     };
     const next = [...chain, entry];
     setChain(next);
@@ -365,6 +490,12 @@ export function ScoringChainEditor({ value, onChange }: Props) {
 
   function setDirection(id: string, dir: 'asc' | 'desc') {
     const next = chain.map((e) => (e.id === id ? { ...e, direction: dir } : e));
+    setChain(next);
+    emit(next, resolution);
+  }
+
+  function setOrder(id: string, order: number[]) {
+    const next = chain.map((e) => (e.id === id && e.kind === 'observable' ? { ...e, order } : e));
     setChain(next);
     emit(next, resolution);
   }
@@ -455,6 +586,33 @@ export function ScoringChainEditor({ value, onChange }: Props) {
           </Group>
         </Group>
 
+        {/* Enum observable measures */}
+        <Group gap="xs" align="flex-start" wrap="nowrap">
+          <Text
+            size="xs"
+            c="dimmed"
+            fw={600}
+            style={{ minWidth: 72, paddingTop: 4, flexShrink: 0 }}
+          >
+            Enum
+          </Text>
+          <Group gap={4} wrap="wrap">
+            {ENUM_OBSERVABLE_TYPES.map((type) => (
+              <Button
+                key={type}
+                size="xs"
+                variant="light"
+                color="violet"
+                disabled={inChainObservable.has(type) || hasMaxScore}
+                title={hasMaxScore ? 'Cannot combine with Max Score' : undefined}
+                onClick={() => addObservable(type)}
+              >
+                {OBSERVABLE_META[type].label}
+              </Button>
+            ))}
+          </Group>
+        </Group>
+
         {/* User Input palette — preserved for future use if non-observable measures are needed
         <Group gap="xs" align="flex-start" wrap="nowrap">
           <Text
@@ -509,6 +667,7 @@ export function ScoringChainEditor({ value, onChange }: Props) {
                 entry={entry}
                 onRemove={() => removeItem(entry.id)}
                 onSetDirection={(dir) => setDirection(entry.id, dir)}
+                onSetOrder={(order) => setOrder(entry.id, order)}
                 onLabelChange={(label) => setLabel(entry.id, label)}
               />
             ))}

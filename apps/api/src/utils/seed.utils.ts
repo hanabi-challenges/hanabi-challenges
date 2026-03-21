@@ -3,15 +3,20 @@
 // seed_payload is stored as-is (pattern or literal) and resolved lazily at
 // read/play time — no inheritance is eagerly evaluated or stored.
 // Supported tokens:
-//   {eID}   — event id (integer)
-//   {sID}   — stage id (integer)
-//   {gID}   — game number (1-based integer)
-//   {mID}   — match id (integer; empty string when not in context)
-//   {aID}   — attempt id (integer; empty string when not in context)
-//   {tID}   — team id (integer; empty string when not in context)
+//   {eID}       — event id (integer)
+//   {sID}       — stage id (integer)
+//   {gID}       — game number (1-based integer)
+//   {mID}       — match id (integer; empty string when not in context)
+//   {aID}       — attempt id (integer; empty string when not in context)
+//   {tID}       — team id (integer; empty string when not in context)
+//
+// All tokens optionally accept an arithmetic offset suffix:
+//   {gID+2}     — game number + 2 (e.g., game 1 → "3")
+//   {gID-1}     — game number - 1 (e.g., game 1 → "0")
+//   {sID+10}    — stage id + 10
 //
 // Recommended usage: include a letter prefix in the formula itself so tokens
-// are self-labelling in the resolved seed, e.g. e{eID}s{sID}g{gID} → e1s3g0
+// are self-labelling in the resolved seed, e.g. e{eID}s{sID}g{gID} → e1s3g1
 
 export type SeedContext = {
   eventId: number;
@@ -22,14 +27,28 @@ export type SeedContext = {
   teamId?: number | null;
 };
 
+// Matches {TOKEN} or {TOKEN+N} or {TOKEN-N}
+const TOKEN_RE = /\{(eID|sID|gID|mID|aID|tID)([+-]\d+)?\}/g;
+
+function applyOffset(value: number | null, offsetStr: string | undefined): string {
+  if (value === null) return '';
+  const offset = offsetStr ? parseInt(offsetStr, 10) : 0;
+  return String(value + offset);
+}
+
 export function resolveSeedPayload(formula: string, context: SeedContext): string {
-  return formula
-    .replace(/\{eID\}/g, String(context.eventId))
-    .replace(/\{sID\}/g, String(context.stageId))
-    .replace(/\{gID\}/g, String(context.gameIndex + 1))
-    .replace(/\{mID\}/g, context.matchId != null ? String(context.matchId) : '')
-    .replace(/\{aID\}/g, context.attemptId != null ? String(context.attemptId) : '')
-    .replace(/\{tID\}/g, context.teamId != null ? String(context.teamId) : '');
+  const baseValues: Record<string, number | null> = {
+    eID: context.eventId,
+    sID: context.stageId,
+    gID: context.gameIndex + 1,
+    mID: context.matchId ?? null,
+    aID: context.attemptId ?? null,
+    tID: context.teamId ?? null,
+  };
+
+  return formula.replace(TOKEN_RE, (_match, token: string, offset?: string) => {
+    return applyOffset(baseValues[token], offset);
+  });
 }
 
 // A VariantRule stored in variant_rule_json on events or stages.

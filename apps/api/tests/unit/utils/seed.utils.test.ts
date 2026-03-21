@@ -81,6 +81,57 @@ describe('resolveSeedPayload', () => {
       }),
     ).toBe('static-seed');
   });
+
+  it('applies positive offset to {gID+N}', () => {
+    expect(
+      resolveSeedPayload('g{gID+2}', {
+        eventId: 1,
+        stageId: 1,
+        gameIndex: 0, // gID base = 1, +2 → 3
+      }),
+    ).toBe('g3');
+  });
+
+  it('applies negative offset to {gID-N}', () => {
+    expect(
+      resolveSeedPayload('g{gID-1}', {
+        eventId: 1,
+        stageId: 1,
+        gameIndex: 1, // gID base = 2, -1 → 1
+      }),
+    ).toBe('g1');
+  });
+
+  it('applies offset to {eID} and {sID}', () => {
+    expect(
+      resolveSeedPayload('e{eID+10}s{sID-1}', {
+        eventId: 5,
+        stageId: 3,
+        gameIndex: 0,
+      }),
+    ).toBe('e15s2');
+  });
+
+  it('mixes offset and plain tokens in the same formula', () => {
+    expect(
+      resolveSeedPayload('{eID}:{gID}:{gID+5}', {
+        eventId: 2,
+        stageId: 1,
+        gameIndex: 2, // gID base = 3, +5 → 8
+      }),
+    ).toBe('2:3:8');
+  });
+
+  it('optional token with offset returns empty string when null', () => {
+    expect(
+      resolveSeedPayload('{mID+10}', {
+        eventId: 1,
+        stageId: 1,
+        gameIndex: 0,
+        matchId: null,
+      }),
+    ).toBe('');
+  });
 });
 
 describe('resolveVariantId', () => {

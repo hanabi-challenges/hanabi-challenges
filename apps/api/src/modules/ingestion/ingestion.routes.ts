@@ -68,6 +68,7 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
 
   // Collect all game slots across all stages for this event
   const stages = await listStages(ctx.eventId);
+  const stageById = new Map(stages.map((s) => [s.id, s]));
   const allSlots = (await Promise.all(stages.map((stage) => listGameSlots(stage.id)))).flat();
   const seedSlots = allSlots.filter((s) => s.effective_seed !== null);
 
@@ -93,6 +94,7 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
   for (const slot of seedSlots) {
     let slotResult;
     try {
+      const stage = stageById.get(slot.stage_id);
       slotResult = await ingestGameSlot({
         slotId: slot.id,
         eventId: ctx.eventId,
@@ -103,6 +105,10 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
           registration_cutoff: ctx.registrationCutoff,
           allow_late_registration: ctx.allowLateRegistration,
           multi_registration: ctx.multiRegistration,
+        },
+        stageWindow: {
+          starts_at: stage?.starts_at ?? null,
+          ends_at: stage?.ends_at ?? null,
         },
       });
     } catch (err) {

@@ -34,6 +34,11 @@ type EventMeta = {
   multi_registration: string;
 };
 
+type StageWindow = {
+  starts_at: Date | null;
+  ends_at: Date | null;
+};
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -302,9 +307,17 @@ export async function ingestGameSlot(params: {
   effectiveSeed: string;
   effectiveVariantId: number;
   eventMeta: EventMeta;
+  stageWindow?: StageWindow;
 }): Promise<IngestSlotResult> {
-  const { slotId, eventId, allowedTeamSizes, effectiveSeed, effectiveVariantId, eventMeta } =
-    params;
+  const {
+    slotId,
+    eventId,
+    allowedTeamSizes,
+    effectiveSeed,
+    effectiveVariantId,
+    eventMeta,
+    stageWindow,
+  } = params;
   const result: IngestSlotResult = { ingested: 0, skipped: 0, errors: [] };
 
   // Check registration cutoff
@@ -424,6 +437,29 @@ export async function ingestGameSlot(params: {
     if (!exp || exp.players.length === 0) {
       result.skipped++;
       continue;
+    }
+
+    // Stage window enforcement: skip games played outside starts_at / ends_at.
+    // Uses datetimeFinished (when the game ended) as the authoritative timestamp.
+    if (stageWindow) {
+      const finishedStr = exp.datetimeFinished ?? exp.datetimeStarted;
+      if (!finishedStr) {
+        // Cannot determine play time — skip if any window boundary is set.
+        if (stageWindow.starts_at !== null || stageWindow.ends_at !== null) {
+          result.skipped++;
+          continue;
+        }
+      } else {
+        const playedAt = new Date(finishedStr);
+        if (stageWindow.starts_at !== null && playedAt < stageWindow.starts_at) {
+          result.skipped++;
+          continue;
+        }
+        if (stageWindow.ends_at !== null && playedAt > stageWindow.ends_at) {
+          result.skipped++;
+          continue;
+        }
+      }
     }
 
     // Persist the raw export so KPIs can be recomputed locally without re-fetching.

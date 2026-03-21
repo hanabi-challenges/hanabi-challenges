@@ -28,6 +28,8 @@ type PendingSlot = {
   event_auto_pull: unknown;
   stage_auto_pull: unknown;
   multi_registration: string;
+  stage_starts_at: Date | null;
+  stage_ends_at: Date | null;
 };
 
 async function fetchPendingSlots(): Promise<PendingSlot[]> {
@@ -60,7 +62,9 @@ async function fetchPendingSlots(): Promise<PendingSlot[]> {
       e.allow_late_registration,
       e.auto_pull_json               AS event_auto_pull,
       s.auto_pull_json               AS stage_auto_pull,
-      e.multi_registration
+      e.multi_registration,
+      s.starts_at                    AS stage_starts_at,
+      s.ends_at                      AS stage_ends_at
     FROM event_stage_games g
     JOIN event_stages s ON s.id = g.stage_id
     JOIN events e ON e.id = s.event_id
@@ -127,6 +131,10 @@ async function tick() {
           registration_cutoff: slot.registration_cutoff,
           allow_late_registration: slot.allow_late_registration,
           multi_registration: slot.multi_registration,
+        },
+        stageWindow: {
+          starts_at: slot.stage_starts_at,
+          ends_at: slot.stage_ends_at,
         },
       });
 

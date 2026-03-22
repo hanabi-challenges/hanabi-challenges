@@ -801,10 +801,10 @@ export async function ingestFromExport(params: {
     return { ok: false, reason: `team_resolution: ${String(err)}` };
   }
 
-  // Score and KPIs
-  let score = exp.score;
-  if (exp.endCondition !== 1) score = 0;
-
+  // Score and KPIs: use the game engine as the authoritative source for both
+  // score and KPIs. For simulation the engine score is exact; exp.score is
+  // only a fallback when the engine cannot run (no deck/actions).
+  let score = exp.endCondition !== 1 ? 0 : exp.score;
   let bottomDeckRisk: number | null = null;
   let strikes: number | null = null;
   let cluesRemaining: number | null = null;
@@ -818,11 +818,12 @@ export async function ingestFromExport(params: {
         exp.actions,
         exp.deck,
       );
+      score = kpis.score;
       bottomDeckRisk = kpis.bottomDeckRisk;
       strikes = kpis.strikes;
       cluesRemaining = kpis.cluesRemaining;
     } catch {
-      // non-fatal: KPIs remain null
+      // non-fatal: KPIs remain null, score falls back to exp.score
     }
   }
 

@@ -77,9 +77,13 @@ async function main() {
           continue;
         }
 
+        // Score comes from the seed-list API (games[0].score), not the export
+        // endpoint — the export JSON does not include a score field.
+        const score = games[0].score;
+
         templates.push({
           playerCount: n,
-          score: exp.score,
+          score,
           endCondition: exp.endCondition,
           options: {
             variantID: exp.options.variantID,
@@ -97,7 +101,7 @@ async function main() {
 
         collected++;
         console.log(
-          `score=${exp.score} endCondition=${exp.endCondition} actions=${exp.actions.length} ✓`,
+          `score=${score} endCondition=${exp.endCondition} actions=${exp.actions.length} ✓`,
         );
       } catch (err) {
         console.log(`error: ${String(err)}`);

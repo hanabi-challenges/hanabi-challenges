@@ -16,6 +16,7 @@
 import { pool } from '../../config/db';
 import { findOrCreateShadowUser } from '../auth/auth.service';
 import { fetchGamesBySeed, fetchGameExport, buildFullSeed } from '../../clients/hanab-live';
+import type { GameExport } from '../../clients/hanab-live';
 import { extractGameKPIs } from '../replay/game-engine.service';
 
 // ---------------------------------------------------------------------------
@@ -708,4 +709,141 @@ export function resolveAutoPullPolicy(
       ? merged.interval_minutes
       : 60;
   return { enabled: true, interval_minutes: interval };
+}
+
+// ---------------------------------------------------------------------------
+// Offline ingestion — inject a pre-built GameExport, bypass hanab.live fetch.
+//
+// Used by simulation scripts that compose a GameExport from a stored template
+// (see src/utils/game-template.ts) rather than pulling from the live API.
+// The full ingestion pipeline runs as normal: shadow-user resolution, team
+// finding / creation, KPI extraction via the game engine, result insert.
+// ---------------------------------------------------------------------------
+
+export type IngestFromExportResult = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Ingest a single pre-built GameExport into a game slot.
+ *
+ * Unlike ingestGameSlot this function:
+ *  - Accepts a GameExport directly (no HTTP call to hanab.live).
+ *  - Does not perform first-play-per-player deduplication across games.
+ *  - Does not cache the export in hanabi_live_game_exports (game ID is fake).
+ *  - Does not update last_replays_pulled_at.
+ */
+export async function ingestFromExport(params: {
+  slotId: number;
+  eventId: number;
+  effectiveVariantId: number;
+  eventMeta: EventMeta;
+  stageWindow?: StageWindow;
+  gameExport: GameExport;
+}): Promise<IngestFromExportResult> {
+  const { slotId, eventId, effectiveVariantId, eventMeta, stageWindow, gameExport: exp } = params;
+
+  // Registration cutoff
+  const now = new Date();
+  if (
+    eventMeta.registration_cutoff !== null &&
+    now > eventMeta.registration_cutoff &&
+    !eventMeta.allow_late_registration
+  ) {
+    return { ok: false, reason: 'registration_closed' };
+  }
+
+  // Stage window
+  if (stageWindow) {
+    const finishedStr = exp.datetimeFinished ?? exp.datetimeStarted;
+    if (!finishedStr) {
+      if (stageWindow.starts_at !== null || stageWindow.ends_at !== null) {
+        return { ok: false, reason: 'no_timestamp_window_enforced' };
+      }
+    } else {
+      const playedAt = new Date(finishedStr);
+      if (stageWindow.starts_at !== null && playedAt < stageWindow.starts_at) {
+        return { ok: false, reason: 'before_window' };
+      }
+      if (stageWindow.ends_at !== null && playedAt > stageWindow.ends_at) {
+        return { ok: false, reason: 'after_window' };
+      }
+    }
+  }
+
+  // Resolve shadow users from player names
+  let userIds: number[];
+  try {
+    userIds = await Promise.all(exp.players.map((name) => findOrCreateShadowUser(name)));
+  } catch (err) {
+    return { ok: false, reason: `user_resolution: ${String(err)}` };
+  }
+
+  // Find or create team
+  let teamId: number;
+  try {
+    const { open, alreadyPlayed } = await findMatchingTeams(eventId, slotId, userIds);
+    if (open.length === 1) {
+      teamId = open[0];
+    } else if (open.length > 1) {
+      return { ok: false, reason: 'ambiguous_team' };
+    } else if (alreadyPlayed.length > 0) {
+      return { ok: false, reason: 'already_played' };
+    } else {
+      const violates = await wouldViolateMultiRegistration(
+        eventId,
+        userIds,
+        userIds.length,
+        eventMeta.multi_registration,
+      );
+      if (violates) return { ok: false, reason: 'multi_registration_violation' };
+      teamId = await createIngestedEventTeam(eventId, userIds);
+    }
+  } catch (err) {
+    return { ok: false, reason: `team_resolution: ${String(err)}` };
+  }
+
+  // Score and KPIs
+  let score = exp.score;
+  if (exp.endCondition !== 1) score = 0;
+
+  let bottomDeckRisk: number | null = null;
+  let strikes: number | null = null;
+  let cluesRemaining: number | null = null;
+  const variantIdForEngine = exp.options.variantID ?? effectiveVariantId;
+  if (exp.actions.length > 0 && exp.deck.length > 0) {
+    try {
+      const kpis = extractGameKPIs(
+        variantIdForEngine,
+        exp.players.length,
+        exp.players,
+        exp.actions,
+        exp.deck,
+      );
+      bottomDeckRisk = kpis.bottomDeckRisk;
+      strikes = kpis.strikes;
+      cluesRemaining = kpis.cluesRemaining;
+    } catch {
+      // non-fatal: KPIs remain null
+    }
+  }
+
+  // Insert result
+  try {
+    const inserted = await insertIngestedResult(
+      teamId,
+      slotId,
+      exp.gameId,
+      score,
+      bottomDeckRisk,
+      strikes,
+      cluesRemaining,
+      exp.datetimeStarted,
+      exp.datetimeFinished,
+      userIds,
+    );
+    if (!inserted) return { ok: false, reason: 'already_played' };
+  } catch (err) {
+    return { ok: false, reason: `result_insert: ${String(err)}` };
+  }
+
+  return { ok: true };
 }

@@ -330,7 +330,7 @@ export function extractGameKPIs(
           originalCounts,
         );
 
-        const strikeNum = state.strikes.length as 1 | 2 | 3;
+        const strikeNum = (state.strikes.length + 1) as 1 | 2 | 3;
         const strikeAction: GameAction = {
           type: 'strike',
           num: strikeNum,

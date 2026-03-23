@@ -26,6 +26,7 @@ import eventLeaderboardRouter from '../leaderboards/leaderboards.routes';
 import awardsRouter from '../awards/awards.routes';
 import ingestionRouter from '../ingestion/ingestion.routes';
 import eventTeamResultsRouter from './event-team-results.routes';
+import eventSimulationRouter from '../simulation/event-simulation.routes';
 
 const router = Router();
 
@@ -38,7 +39,84 @@ router.use('/:slug/results', resultAdminRouter);
 router.use('/:slug/awards', awardsRouter);
 router.use('/:slug/pull-replays', ingestionRouter);
 router.use('/:slug/teams', eventTeamResultsRouter);
+router.use('/:slug', eventSimulationRouter);
 router.use('/:slug', eventLeaderboardRouter);
+
+// GET /api/events/:slug/eligibility/me — per-team-size spoiler eligibility for the current user
+router.get(
+  '/:slug/eligibility/me',
+  authRequired,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const slug = String(req.params.slug);
+    const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+    const event = await getEventBySlug(slug, isAdmin);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const userId = req.user!.userId;
+
+    const result = await pool.query<{ team_size: number; status: string }>(
+      `WITH
+         forfeited AS (
+           SELECT EXISTS (
+             SELECT 1 FROM event_forfeitures WHERE event_id = $1 AND user_id = $2
+           ) AS yes
+         ),
+         user_teams AS (
+           SELECT DISTINCT et.id AS team_id, et.team_size
+           FROM event_teams et
+           JOIN event_team_members etm ON etm.event_team_id = et.id
+           WHERE et.event_id = $1
+             AND etm.user_id = $2
+             AND etm.confirmed = TRUE
+         ),
+         active_slots AS (
+           SELECT esg.id AS slot_id
+           FROM event_stage_games esg
+           JOIN event_stages es ON es.id = esg.stage_id
+           WHERE es.event_id = $1
+             AND (es.starts_at IS NULL OR es.starts_at <= NOW())
+         ),
+         total_active AS (SELECT COUNT(*)::int AS cnt FROM active_slots)
+       SELECT
+         ut.team_size,
+         CASE
+           WHEN (SELECT yes FROM forfeited) THEN 'INELIGIBLE'
+           WHEN (SELECT cnt FROM total_active) = 0 THEN 'COMPLETED'
+           WHEN (
+             SELECT COUNT(DISTINCT egr.stage_game_id)
+             FROM event_game_results egr
+             WHERE egr.event_team_id = ut.team_id
+               AND egr.attempt_id IS NULL
+               AND egr.stage_game_id IN (SELECT slot_id FROM active_slots)
+           ) >= (SELECT cnt FROM total_active) THEN 'COMPLETED'
+           ELSE 'ENROLLED'
+         END AS status
+       FROM user_teams ut
+       ORDER BY ut.team_size`,
+      [event.id, userId],
+    );
+
+    res.json(result.rows);
+  },
+);
+
+// POST /api/events/:slug/eligibility/spoilers — forfeit eligibility to view spoilers
+router.post(
+  '/:slug/eligibility/spoilers',
+  authRequired,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const slug = String(req.params.slug);
+    const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+    const event = await getEventBySlug(slug, isAdmin);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    await pool.query(
+      `INSERT INTO event_forfeitures (event_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [event.id, req.user!.userId],
+    );
+    res.json({ ok: true });
+  },
+);
 
 // POST /api/events/:slug/forfeit — player forfeits eligibility to view spoilers
 router.post('/:slug/forfeit', authRequired, async (req: AuthenticatedRequest, res: Response) => {

@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Alert,
+  Button,
   Card,
   CardBody,
   CardHeader,
   Heading,
   Inline,
   Main,
+  MaterialIcon,
   PageContainer,
   Pill,
   Section,
@@ -17,7 +19,7 @@ import {
   CoreTable as Table,
 } from '../design-system';
 import { useAuth } from '../context/AuthContext';
-import { ApiError, getJson, getJsonAuth } from '../lib/api';
+import { ApiError, getJson, getJsonAuth, postJsonAuth } from '../lib/api';
 import { MarkdownRenderer } from '../ui/MarkdownRenderer';
 import type { EventSummary } from '../hooks/useEvents';
 import { useUserDirectory } from '../hooks/useUserDirectory';
@@ -143,6 +145,20 @@ function stageDateRange(stage: StageSummary): string | null {
   return null;
 }
 
+function isStageActive(stage: StageSummary): boolean {
+  const now = Date.now();
+  const start = stage.starts_at ? new Date(stage.starts_at).getTime() : null;
+  const end = stage.ends_at ? new Date(stage.ends_at).getTime() : null;
+  if (start !== null && start > now) return false;
+  if (end !== null && end < now) return false;
+  return true;
+}
+
+function isStageBeforeWindow(stage: StageSummary): boolean {
+  if (!stage.starts_at) return false;
+  return new Date(stage.starts_at).getTime() > Date.now();
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -166,6 +182,20 @@ export function EventDetailPage() {
 
   // My teams (auth)
   const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
+
+  // Leaderboard sort — default: total_score descending
+  type LbSortCol = 'total' | 'team' | number; // number = stage_id
+  const [lbSort, setLbSort] = useState<{ col: LbSortCol; dir: 'asc' | 'desc' }>({
+    col: 'total',
+    dir: 'desc',
+  });
+
+  // Leaderboard spoiler gate
+  const [lbGateMode, setLbGateMode] = useState<
+    'loading' | 'allow' | 'login' | 'blocked' | 'prompt' | 'error'
+  >('loading');
+  const [lbGateError, setLbGateError] = useState<string | null>(null);
+  const [lbForfeitLoading, setLbForfeitLoading] = useState(false);
 
   // Stage seed accordion
   const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
@@ -201,6 +231,7 @@ export function EventDetailPage() {
         if (!cancelled) {
           setEvent(eventData);
           setStages(stagesData);
+          setExpandedStages(new Set(stagesData.filter(isStageActive).map((s) => s.id)));
           setLbTracks(lbData.tracks);
           setActiveLbSize(lbData.tracks[0]?.team_size ?? undefined);
           setAwards(awardsData);
@@ -272,6 +303,87 @@ export function EventDetailPage() {
     };
   }, [slug, activeTab, awards]);
 
+  // Reset leaderboard sort to default when switching team-size tracks
+  useEffect(() => {
+    setLbSort({ col: 'total', dir: 'desc' });
+  }, [activeLbSize]);
+
+  // Leaderboard spoiler gate
+  useEffect(() => {
+    if (!slug || event === null) return;
+
+    const now = Date.now();
+    const endedAt = event.ends_at ? new Date(event.ends_at).getTime() : null;
+    const cutoff = event.registration_cutoff
+      ? new Date(event.registration_cutoff).getTime()
+      : endedAt;
+    const registrationClosed = cutoff != null && !event.allow_late_registration && cutoff < now;
+    if ((endedAt && endedAt < now) || registrationClosed) {
+      setLbGateMode('allow');
+      return;
+    }
+
+    if (!user || !token) {
+      setLbGateMode('login');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLbGateMode('loading');
+      setLbGateError(null);
+      try {
+        const statuses = await getJsonAuth<{ status: string; team_size: number }[]>(
+          `/events/${encodeURIComponent(slug)}/eligibility/me`,
+          token,
+        );
+        if (cancelled) return;
+        const entries = Array.isArray(statuses) ? statuses : [];
+        const hasEnrolled = entries.some((e) => e.status === 'ENROLLED');
+        if (hasEnrolled) {
+          setLbGateMode('blocked');
+          return;
+        }
+        const allowedStatuses = ['INELIGIBLE', 'COMPLETED'];
+        const allAllowed =
+          entries.length > 0 && entries.every((e) => allowedStatuses.includes(e.status));
+        setLbGateMode(allAllowed ? 'allow' : 'prompt');
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          setLbGateMode('login');
+          return;
+        }
+        console.error('Failed to check leaderboard eligibility', err);
+        setLbGateError('Failed to check eligibility. Please try again.');
+        setLbGateMode('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, event, user, token]);
+
+  // Load seeds for any expanded stage that hasn't been fetched yet
+  useEffect(() => {
+    if (!slug) return;
+    for (const stageId of expandedStages) {
+      if (!stageSeeds.has(stageId)) {
+        getJson<
+          {
+            id: number;
+            game_index: number;
+            nickname: string | null;
+            effective_seed: string | null;
+          }[]
+        >(`/events/${encodeURIComponent(slug)}/stages/${stageId}/games`)
+          .then((seeds) => setStageSeeds((prev) => new Map(prev).set(stageId, seeds)))
+          .catch(() => setStageSeeds((prev) => new Map(prev).set(stageId, [])));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedStages, slug]);
+
   if (loading) {
     return (
       <Main>
@@ -298,31 +410,13 @@ export function EventDetailPage() {
 
   // Derived state
   const bannerText = statusBannerText(event);
-  async function toggleStage(stageId: number) {
-    if (expandedStages.has(stageId)) {
-      setExpandedStages((prev) => {
-        const next = new Set(prev);
-        next.delete(stageId);
-        return next;
-      });
-      return;
-    }
-    setExpandedStages((prev) => new Set(prev).add(stageId));
-    if (!stageSeeds.has(stageId)) {
-      try {
-        const seeds = await getJson<
-          {
-            id: number;
-            game_index: number;
-            nickname: string | null;
-            effective_seed: string | null;
-          }[]
-        >(`/events/${encodeURIComponent(slug!)}/stages/${stageId}/games`);
-        setStageSeeds((prev) => new Map(prev).set(stageId, seeds));
-      } catch {
-        setStageSeeds((prev) => new Map(prev).set(stageId, []));
-      }
-    }
+  function toggleStage(stageId: number) {
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
   }
 
   const showLeaderboard = lbTracks.length > 0 && lbTracks.some((t) => t.entries.length > 0);
@@ -416,21 +510,31 @@ export function EventDetailPage() {
                       const isExpanded = expandedStages.has(stage.id);
                       const seeds = stageSeeds.get(stage.id);
                       const dateRange = stageDateRange(stage);
+                      const locked = isStageBeforeWindow(stage);
+                      const active = isStageActive(stage);
                       return (
                         <Card key={stage.id} variant="outline">
                           <CardHeader
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => void toggleStage(stage.id)}
+                            style={{ cursor: locked ? 'default' : 'pointer' }}
+                            onClick={locked ? undefined : () => toggleStage(stage.id)}
                           >
                             <Inline gap="xs" justify="space-between" wrap>
-                              <Text>{stage.label}</Text>
-                              <Inline gap="xs">
+                              <Inline gap="xs" align="center">
+                                {locked ? <MaterialIcon name="lock" size={14} /> : null}
+                                <Text style={{ fontWeight: 500 }}>{stage.label}</Text>
+                              </Inline>
+                              <Inline gap="xs" align="center">
                                 {dateRange ? (
-                                  <Pill size="sm" variant="default">
+                                  <Pill size="sm" variant={active ? 'accent' : 'default'}>
                                     {dateRange}
                                   </Pill>
                                 ) : null}
-                                <Text variant="muted">{isExpanded ? '▲' : '▼'}</Text>
+                                {!locked ? (
+                                  <MaterialIcon
+                                    name={isExpanded ? 'expand_less' : 'expand_more'}
+                                    size={20}
+                                  />
+                                ) : null}
                               </Inline>
                             </Inline>
                           </CardHeader>
@@ -561,49 +665,202 @@ export function EventDetailPage() {
             {activeTab === 'leaderboard' && showLeaderboard ? (
               <Stack gap="sm">
                 <Heading level={3}>Leaderboard</Heading>
-                {lbTracks.length > 1 ? (
-                  <Tabs
-                    items={lbTracks.map((t) => ({
-                      key: String(t.team_size),
-                      label: t.team_size === null ? 'Combined' : `${t.team_size}p`,
-                      active: t.team_size === activeLbSize,
-                      onSelect: () => setActiveLbSize(t.team_size),
-                    }))}
-                  />
-                ) : null}
-                {leaderboard.length === 0 ? (
-                  <Text variant="muted">No results yet.</Text>
+                {lbGateMode !== 'allow' ? (
+                  <Stack gap="sm">
+                    {lbGateMode === 'loading' && <Text variant="muted">Checking eligibility…</Text>}
+                    {lbGateMode === 'login' && (
+                      <Stack gap="sm">
+                        <Text>
+                          The leaderboard contains spoilers. Log in so we can check your eligibility
+                          before you decide whether to peek.
+                        </Text>
+                        <Inline>
+                          <Button as={Link} to="/login" variant="primary" size="sm">
+                            Log in
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    )}
+                    {lbGateMode === 'blocked' && (
+                      <Text>
+                        You&apos;re enrolled for this event, so the leaderboard is hidden to protect
+                        fairness. Finish playing before peeking.
+                      </Text>
+                    )}
+                    {lbGateMode === 'prompt' && (
+                      <Stack gap="sm">
+                        <Text>
+                          The leaderboard contains spoilers. Viewing it will forfeit your
+                          eligibility to participate. If you still plan to play, hold off &mdash; no
+                          hard feelings either way.
+                        </Text>
+                        <Inline gap="sm">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={lbForfeitLoading}
+                            onClick={async () => {
+                              if (!token) return;
+                              setLbForfeitLoading(true);
+                              setLbGateError(null);
+                              try {
+                                await postJsonAuth(
+                                  `/events/${encodeURIComponent(slug!)}/eligibility/spoilers`,
+                                  token,
+                                  { all_team_sizes: true, reason: 'leaderboard_spoiler' },
+                                );
+                                setLbGateMode('allow');
+                              } catch (err) {
+                                console.error('Failed to update eligibility', err);
+                                setLbGateError('Failed to update eligibility. Please try again.');
+                              } finally {
+                                setLbForfeitLoading(false);
+                              }
+                            }}
+                          >
+                            {lbForfeitLoading ? 'Continuing…' : 'View leaderboard'}
+                          </Button>
+                        </Inline>
+                        {lbGateError && <Alert variant="error" message={lbGateError} />}
+                      </Stack>
+                    )}
+                    {lbGateMode === 'error' && (
+                      <Alert
+                        variant="error"
+                        message={lbGateError ?? 'Unable to check eligibility.'}
+                      />
+                    )}
+                  </Stack>
                 ) : (
-                  <Table style={{ width: 'auto' }}>
-                    <colgroup>
-                      <col style={{ width: '2.5rem' }} />
-                      <col />
-                      <col style={{ width: '5rem' }} />
-                    </colgroup>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>#</Table.Th>
-                        <Table.Th>Team</Table.Th>
-                        <Table.Th style={{ textAlign: 'right' }}>Score</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {leaderboard.map((entry) => {
-                        const isMe = entry.team.members.some((m) => m.user_id === user?.id);
+                  <>
+                    {lbTracks.length > 1 ? (
+                      <Tabs
+                        items={lbTracks.map((t) => ({
+                          key: String(t.team_size),
+                          label: t.team_size === null ? 'Combined' : `${t.team_size}p`,
+                          active: t.team_size === activeLbSize,
+                          onSelect: () => setActiveLbSize(t.team_size),
+                        }))}
+                      />
+                    ) : null}
+                    {leaderboard.length === 0 ? (
+                      <Text variant="muted">No results yet.</Text>
+                    ) : (
+                      (() => {
+                        const stageColumns = activeLbTrack?.entries[0]?.stage_scores ?? [];
+
+                        function handleSort(col: LbSortCol) {
+                          setLbSort((prev) => {
+                            if (prev.col === col) {
+                              return { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' };
+                            }
+                            return { col, dir: col === 'team' ? 'asc' : 'desc' };
+                          });
+                        }
+
+                        function sortIndicator(col: LbSortCol) {
+                          if (lbSort.col !== col) return null;
+                          return lbSort.dir === 'desc' ? ' ↓' : ' ↑';
+                        }
+
+                        const sorted = [...leaderboard].sort((a, b) => {
+                          let cmp = 0;
+                          if (lbSort.col === 'total') {
+                            cmp = a.total_score - b.total_score;
+                          } else if (lbSort.col === 'team') {
+                            cmp = a.team.display_name.localeCompare(b.team.display_name);
+                          } else {
+                            const aScore =
+                              a.stage_scores.find((s) => s.stage_id === lbSort.col)?.score ??
+                              -Infinity;
+                            const bScore =
+                              b.stage_scores.find((s) => s.stage_id === lbSort.col)?.score ??
+                              -Infinity;
+                            cmp = aScore - bScore;
+                          }
+                          return lbSort.dir === 'desc' ? -cmp : cmp;
+                        });
+
+                        const thStyle = (col: LbSortCol, align: 'left' | 'right' = 'left') => ({
+                          textAlign: align,
+                          cursor: 'pointer',
+                          userSelect: 'none' as const,
+                          whiteSpace: 'nowrap' as const,
+                          opacity: lbSort.col === col ? 1 : 0.75,
+                        });
+
                         return (
-                          <Table.Tr key={entry.team.id} style={isMe ? { fontWeight: 'bold' } : {}}>
-                            <Table.Td>{entry.rank}</Table.Td>
-                            <Table.Td>
-                              <Link to={`/events/${slug}/event-teams/${entry.team.id}`}>
-                                {entry.team.display_name}
-                              </Link>
-                            </Table.Td>
-                            <Table.Td style={{ textAlign: 'right' }}>{entry.total_score}</Table.Td>
-                          </Table.Tr>
+                          <div style={{ overflowX: 'auto' }}>
+                            <Table style={{ width: 'auto' }}>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th
+                                    style={thStyle('total')}
+                                    onClick={() => handleSort('total')}
+                                  >
+                                    #{sortIndicator('total')}
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={thStyle('team')}
+                                    onClick={() => handleSort('team')}
+                                  >
+                                    Team{sortIndicator('team')}
+                                  </Table.Th>
+                                  {stageColumns.map((s) => (
+                                    <Table.Th
+                                      key={s.stage_id}
+                                      style={thStyle(s.stage_id, 'right')}
+                                      onClick={() => handleSort(s.stage_id)}
+                                    >
+                                      {s.stage_label}
+                                      {sortIndicator(s.stage_id)}
+                                    </Table.Th>
+                                  ))}
+                                  <Table.Th
+                                    style={thStyle('total', 'right')}
+                                    onClick={() => handleSort('total')}
+                                  >
+                                    Total{sortIndicator('total')}
+                                  </Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {sorted.map((entry) => {
+                                  const isMe = entry.team.members.some(
+                                    (m) => m.user_id === user?.id,
+                                  );
+                                  const scoreByStage = new Map(
+                                    entry.stage_scores.map((s) => [s.stage_id, s.score]),
+                                  );
+                                  return (
+                                    <Table.Tr
+                                      key={entry.team.id}
+                                      style={isMe ? { fontWeight: 'bold' } : {}}
+                                    >
+                                      <Table.Td>{entry.rank}</Table.Td>
+                                      <Table.Td>
+                                        <Link to={`/events/${slug}/event-teams/${entry.team.id}`}>
+                                          {entry.team.display_name}
+                                        </Link>
+                                      </Table.Td>
+                                      {stageColumns.map((s) => (
+                                        <Table.Td key={s.stage_id} style={{ textAlign: 'right' }}>
+                                          {scoreByStage.get(s.stage_id) ?? '—'}
+                                        </Table.Td>
+                                      ))}
+                                      <Table.Td style={{ textAlign: 'right' }}>
+                                        {entry.total_score}
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  );
+                                })}
+                              </Table.Tbody>
+                            </Table>
+                          </div>
                         );
-                      })}
-                    </Table.Tbody>
-                  </Table>
+                      })()
+                    )}
+                  </>
                 )}
               </Stack>
             ) : null}

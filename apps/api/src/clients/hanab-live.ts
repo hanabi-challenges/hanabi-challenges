@@ -34,7 +34,15 @@
 //   - Short-lived in-memory cache for game exports (TTL = 10 min) so that
 //     repeated ingestion runs don't re-fetch the same completed game
 
-const BASE = 'https://hanab.live';
+// In simulation mode the mock hanab-live routes are mounted on this same
+// server, so requests loop back to localhost.  The port is whatever Render (or
+// the dev environment) assigns via $PORT / $BACKEND_PORT.  An explicit
+// HANAB_LIVE_BASE_URL overrides both defaults (useful for local dev).
+const _defaultBase =
+  process.env.SIMULATION_MODE === 'true'
+    ? `http://localhost:${process.env.PORT ?? process.env.BACKEND_PORT ?? 4000}`
+    : 'https://hanab.live';
+const BASE = process.env.HANAB_LIVE_BASE_URL ?? _defaultBase;
 const SEED_TIMEOUT_MS = 15_000;
 const EXPORT_TIMEOUT_MS = 30_000;
 

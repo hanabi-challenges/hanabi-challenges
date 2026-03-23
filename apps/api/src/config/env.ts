@@ -14,8 +14,13 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not set');
 }
 
+// When true, the mock hanab-live routes are mounted on the API server and
+// simulation scripts can write games via simulateGame().  Never set in prod.
+const SIMULATION_MODE = process.env.SIMULATION_MODE === 'true';
+
 export const env = {
   BACKEND_PORT,
   DATABASE_URL,
   JWT_SECRET,
+  SIMULATION_MODE,
 };

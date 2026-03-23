@@ -5,6 +5,7 @@ import { getEventAdminRole } from '../events/event-admins.service';
 import { getStage } from './stages.service';
 import { getGameSlot } from './games.service';
 import { submitResult, listResultsForGame } from '../results/results.service';
+import { completeAttempt } from './attempts.service';
 import {
   runReplayValidation,
   type ReplayValidationError,
@@ -28,6 +29,7 @@ async function resolveContext(
   eventId: number;
   stageId: number;
   gameId: number;
+  stageMechanism: string;
   stageGameTeamSize: number | null;
   stageGameMaxScore: number | null;
   stageGameVariantId: number | null;
@@ -91,6 +93,7 @@ async function resolveContext(
     eventId: event.id,
     stageId,
     gameId,
+    stageMechanism: stage.mechanism,
     stageGameTeamSize: null,
     stageGameMaxScore: game.effective_max_score,
     stageGameVariantId: game.variant_id ?? null,
@@ -195,6 +198,12 @@ router.post('/results', authRequired, async (req: AuthenticatedRequest, res: Res
       attemptId: body.attempt_id ?? null,
     },
   );
+
+  // Auto-complete GAUNTLET attempt after each result — completeAttempt returns
+  // 'missing_results' if games remain, which is a no-op here.
+  if (result.ok === true && ctx.stageMechanism === 'GAUNTLET' && body.attempt_id != null) {
+    await completeAttempt(Number(body.attempt_id), ctx.stageId, req.user!.userId, true);
+  }
 
   if (result.ok === false) {
     const reason = (result as { ok: false; reason: string }).reason;

@@ -3,6 +3,7 @@ export type ParticipationType = 'INDIVIDUAL' | 'TEAM';
 export type TeamScope = 'EVENT' | 'STAGE';
 export type AttemptPolicy = 'SINGLE' | 'REQUIRED_ALL' | 'BEST_OF_N' | 'UNLIMITED_BEST';
 export type TimePolicy = 'WINDOW' | 'ROLLING' | 'SCHEDULED';
+export type GameMetric = 'SCORE' | 'MAX_SCORE';
 
 export type StageRow = {
   id: number;
@@ -15,6 +16,7 @@ export type StageRow = {
   team_scope: TeamScope;
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
+  game_metric: GameMetric;
   game_scoring_config_json: Record<string, unknown>;
   stage_scoring_config_json: Record<string, unknown>;
   variant_rule_json: Record<string, unknown> | null;
@@ -40,6 +42,7 @@ export type CreateStageBody = {
   team_scope: TeamScope;
   attempt_policy: AttemptPolicy;
   time_policy: TimePolicy;
+  game_metric?: GameMetric;
   game_scoring_config_json?: Record<string, unknown>;
   stage_scoring_config_json?: Record<string, unknown>;
   variant_rule_json?: Record<string, unknown> | null;

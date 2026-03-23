@@ -60,10 +60,10 @@ export async function createStage(eventId: number, body: CreateStageBody): Promi
   const result = await pool.query<StageRow>(
     `INSERT INTO event_stages (
        event_id, label, stage_index, mechanism, participation_type, team_scope,
-       attempt_policy, time_policy, game_scoring_config_json,
+       attempt_policy, time_policy, game_metric, game_scoring_config_json,
        stage_scoring_config_json, variant_rule_json, seed_rule_json,
        config_json, auto_pull_json, starts_at, ends_at, visible
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      RETURNING *`,
     [
       eventId,
@@ -74,6 +74,7 @@ export async function createStage(eventId: number, body: CreateStageBody): Promi
       body.team_scope,
       body.attempt_policy,
       body.time_policy,
+      body.game_metric ?? 'SCORE',
       body.game_scoring_config_json ?? {},
       body.stage_scoring_config_json ?? {},
       body.variant_rule_json ?? null,
@@ -95,6 +96,7 @@ const UPDATABLE_FIELDS = [
   'team_scope',
   'attempt_policy',
   'time_policy',
+  'game_metric',
   'game_scoring_config_json',
   'stage_scoring_config_json',
   'variant_rule_json',
@@ -253,6 +255,7 @@ export async function cloneStage(eventId: number, stageId: number): Promise<Stag
     team_scope: source.team_scope,
     attempt_policy: source.attempt_policy,
     time_policy: source.time_policy,
+    game_metric: source.game_metric,
     game_scoring_config_json: source.game_scoring_config_json,
     stage_scoring_config_json: source.stage_scoring_config_json,
     variant_rule_json: source.variant_rule_json,

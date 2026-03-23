@@ -21,6 +21,7 @@ export type GroupTemplate = {
   team_scope?: string;
   attempt_policy?: string;
   time_policy?: string;
+  game_metric?: string;
   game_count?: number;
   variant_rule_json?: Record<string, unknown> | null;
   seed_rule_json?: Record<string, unknown> | null;
@@ -309,6 +310,7 @@ export async function scaffoldGroupStages(
       team_scope: (template.team_scope as TeamScope) ?? 'EVENT',
       attempt_policy: (template.attempt_policy as AttemptPolicy) ?? 'SINGLE',
       time_policy: (template.time_policy as TimePolicy) ?? 'WINDOW',
+      game_metric: (template.game_metric as 'SCORE' | 'MAX_SCORE') ?? 'SCORE',
       variant_rule_json: template.variant_rule_json ?? null,
       seed_rule_json: template.seed_rule_json ?? null,
       starts_at: startsAt,

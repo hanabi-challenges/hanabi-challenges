@@ -35,6 +35,7 @@ const VALID_PARTICIPATION_TYPES = ['INDIVIDUAL', 'TEAM'] as const;
 const VALID_TEAM_SCOPES = ['EVENT', 'STAGE'] as const;
 const VALID_ATTEMPT_POLICIES = ['SINGLE', 'REQUIRED_ALL', 'BEST_OF_N', 'UNLIMITED_BEST'] as const;
 const VALID_TIME_POLICIES = ['WINDOW', 'ROLLING', 'SCHEDULED'] as const;
+const VALID_GAME_METRICS = ['SCORE', 'MAX_SCORE'] as const;
 
 // Mounted at /api/events/:slug/stages via events.routes.ts (mergeParams: true)
 const router = Router({ mergeParams: true });
@@ -183,6 +184,14 @@ router.post('/', authRequired, async (req: AuthenticatedRequest, res: Response) 
       .status(400)
       .json({ error: `time_policy must be one of: ${VALID_TIME_POLICIES.join(', ')}` });
   }
+  if (
+    body.game_metric !== undefined &&
+    !VALID_GAME_METRICS.includes(body.game_metric as (typeof VALID_GAME_METRICS)[number])
+  ) {
+    return res
+      .status(400)
+      .json({ error: `game_metric must be one of: ${VALID_GAME_METRICS.join(', ')}` });
+  }
 
   const stage = await createStage(ctx.eventId, body);
   res.status(201).json(stage);
@@ -233,6 +242,14 @@ router.put('/:stageId', authRequired, async (req: AuthenticatedRequest, res: Res
     return res
       .status(400)
       .json({ error: `time_policy must be one of: ${VALID_TIME_POLICIES.join(', ')}` });
+  }
+  if (
+    body.game_metric !== undefined &&
+    !VALID_GAME_METRICS.includes(body.game_metric as (typeof VALID_GAME_METRICS)[number])
+  ) {
+    return res
+      .status(400)
+      .json({ error: `game_metric must be one of: ${VALID_GAME_METRICS.join(', ')}` });
   }
 
   const stage = await updateStage(ctx.eventId, stageId, body);

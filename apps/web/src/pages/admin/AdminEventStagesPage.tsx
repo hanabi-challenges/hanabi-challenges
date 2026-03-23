@@ -1081,6 +1081,11 @@ const ATTEMPT_POLICY_OPTIONS = [
   { value: 'BEST_OF_N', label: 'Best of N' },
   { value: 'UNLIMITED_BEST', label: 'Unlimited Best' },
 ];
+const GAME_METRIC_OPTIONS = [
+  { value: '', label: 'Not specified' },
+  { value: 'SCORE', label: 'Score (sum of scores)' },
+  { value: 'MAX_SCORE', label: 'Max Score (count of perfect games)' },
+];
 
 function GroupTemplateModal({
   group,
@@ -1104,6 +1109,7 @@ function GroupTemplateModal({
   const [teamScope, setTeamScope] = useState(tpl.team_scope ?? '');
   const [attemptPolicy, setAttemptPolicy] = useState(tpl.attempt_policy ?? '');
   const [timePolicy, setTimePolicy] = useState(tpl.time_policy ?? '');
+  const [gameMetric, setGameMetric] = useState(tpl.game_metric ?? '');
   const [gameCount, setGameCount] = useState(tpl.game_count != null ? String(tpl.game_count) : '');
   const [variantCode, setVariantCode] = useState<string>(() => {
     if (!tpl.variant_rule_json) return '';
@@ -1135,6 +1141,7 @@ function GroupTemplateModal({
         if (teamScope) t.team_scope = teamScope;
         if (attemptPolicy) t.attempt_policy = attemptPolicy;
         if (timePolicy) t.time_policy = timePolicy;
+        if (gameMetric) t.game_metric = gameMetric;
         const gc = parseInt(gameCount, 10);
         if (Number.isFinite(gc) && gc > 0) t.game_count = gc;
         if (variantCode === '0') {
@@ -1219,6 +1226,12 @@ function GroupTemplateModal({
               value={attemptPolicy}
               onChange={(v) => setAttemptPolicy(v ?? '')}
               data={ATTEMPT_POLICY_OPTIONS}
+            />
+            <CoreSelect
+              label="Game metric"
+              value={gameMetric}
+              onChange={(v) => setGameMetric(v ?? '')}
+              data={GAME_METRIC_OPTIONS}
             />
           </Group>
           <Group grow>

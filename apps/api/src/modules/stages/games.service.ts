@@ -182,17 +182,62 @@ export async function checkSeedConflicts(eventId: number, seeds: string[]): Prom
   return result.rows.map((r) => r.seed_payload);
 }
 
+// Compute the max score for a game slot given its resolved variant_id.
+// Mirrors the application-layer logic in formatGameSlot so the stored value
+// is always consistent with what the API returns as effective_max_score.
+async function computeMaxScore(
+  slotVariantId: number | null | undefined,
+  stageId: number,
+): Promise<number> {
+  // Resolve the effective variant: slot → stage → event (mirrors resolveVariantId)
+  const row = await pool.query<{
+    num_suits: number | null;
+    is_sudoku: boolean | null;
+  }>(
+    `SELECT hv.num_suits, hv.is_sudoku
+     FROM (
+       SELECT COALESCE(
+         CASE WHEN $2::int IS NOT NULL THEN $2::int END,
+         CASE WHEN s.variant_rule_json->>'type' = 'none' THEN 0
+              WHEN s.variant_rule_json->>'type' = 'specific'
+                THEN (s.variant_rule_json->>'variantId')::int END,
+         CASE WHEN e.variant_rule_json->>'type' = 'none' THEN 0
+              WHEN e.variant_rule_json->>'type' = 'specific'
+                THEN (e.variant_rule_json->>'variantId')::int END,
+         0
+       ) AS effective_variant_id
+       FROM event_stages s
+       JOIN events e ON e.id = s.event_id
+       WHERE s.id = $1
+     ) v
+     LEFT JOIN hanabi_variants hv ON hv.code = v.effective_variant_id`,
+    [stageId, slotVariantId ?? null],
+  );
+  const numSuits = row.rows[0]?.num_suits ?? 5;
+  const isSudoku = row.rows[0]?.is_sudoku ?? false;
+  const stackSize = isSudoku ? numSuits : 5;
+  return numSuits * stackSize;
+}
+
 export async function createGameSlot(stageId: number, body: CreateGameSlotBody): Promise<GameSlot> {
   const indexResult = await pool.query<{ next_index: number }>(
     `SELECT COALESCE(MAX(game_index), -1) + 1 AS next_index FROM event_stage_games WHERE stage_id = $1`,
     [stageId],
   );
   const gameIndex = indexResult.rows[0].next_index;
+  const maxScore = await computeMaxScore(body.variant_id, stageId);
 
   const inserted = await pool.query<{ id: number }>(
-    `INSERT INTO event_stage_games (stage_id, game_index, variant_id, seed_payload, nickname)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [stageId, gameIndex, body.variant_id ?? null, body.seed_payload ?? null, body.nickname ?? null],
+    `INSERT INTO event_stage_games (stage_id, game_index, variant_id, seed_payload, nickname, max_score)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      stageId,
+      gameIndex,
+      body.variant_id ?? null,
+      body.seed_payload ?? null,
+      body.nickname ?? null,
+      maxScore,
+    ],
   );
   return (await getGameSlot(stageId, inserted.rows[0].id))!;
 }
@@ -207,15 +252,17 @@ export async function bulkAddGameSlots(
     [stageId],
   );
   const startIndex = indexResult.rows[0].next_index;
+  // max_score is the same for all slots in a bulk add (no per-slot variant override)
+  const maxScore = await computeMaxScore(null, stageId);
 
   const created: GameSlot[] = [];
   for (let i = 0; i < count; i++) {
     const gameIndex = startIndex + i;
     const seedPayload = seeds ? (seeds[i] ?? null) : null;
     const inserted = await pool.query<{ id: number }>(
-      `INSERT INTO event_stage_games (stage_id, game_index, seed_payload)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [stageId, gameIndex, seedPayload],
+      `INSERT INTO event_stage_games (stage_id, game_index, seed_payload, max_score)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [stageId, gameIndex, seedPayload, maxScore],
     );
     const slot = await getGameSlot(stageId, inserted.rows[0].id);
     if (slot) created.push(slot);
@@ -234,6 +281,10 @@ export async function updateGameSlot(
   if (Object.prototype.hasOwnProperty.call(body, 'variant_id')) {
     fields.push(`variant_id = $${values.length + 1}`);
     values.push(body.variant_id ?? null);
+    // Recompute max_score when variant changes
+    const newMaxScore = await computeMaxScore(body.variant_id, stageId);
+    fields.push(`max_score = $${values.length + 1}`);
+    values.push(newMaxScore);
   }
   if (Object.prototype.hasOwnProperty.call(body, 'seed_payload')) {
     fields.push(`seed_payload = $${values.length + 1}`);

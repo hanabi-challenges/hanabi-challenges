@@ -9,6 +9,7 @@ export type GroupTemplate = {
   team_scope?: string;
   attempt_policy?: string;
   time_policy?: string;
+  game_metric?: string;
   game_count?: number;
   variant_rule_json?: { type: 'specific'; variantId: number } | { type: 'none' } | null;
   seed_rule_json?: { formula: string } | null;

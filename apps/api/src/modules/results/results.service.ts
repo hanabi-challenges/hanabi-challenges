@@ -230,7 +230,7 @@ export async function submitResult(
     );
     if (currentGameRow.rowCount !== null && currentGameRow.rowCount > 0) {
       const { game_index, stage_id } = currentGameRow.rows[0];
-      if (game_index > 1) {
+      if (game_index > 0) {
         const prevGamesCheck = await pool.query<{ count: string }>(
           `SELECT COUNT(*) AS count
            FROM event_stage_games esg

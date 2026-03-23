@@ -21,7 +21,39 @@ export type AttemptRow = {
 
 export type AttemptDetail = AttemptRow & {
   results: ResultResponse[];
+  running_score: number;
 };
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+async function computeAttemptScore(attemptId: number, stageId: number): Promise<number> {
+  const stageRow = await pool.query<{ game_metric: string }>(
+    `SELECT game_metric FROM event_stages WHERE id = $1`,
+    [stageId],
+  );
+  const gameMetric = stageRow.rows[0]?.game_metric ?? 'SCORE';
+
+  if (gameMetric === 'MAX_SCORE') {
+    const result = await pool.query<{ total: string }>(
+      `SELECT COUNT(*) AS total
+       FROM event_game_results egr
+       JOIN event_stage_games esg ON esg.id = egr.stage_game_id
+       WHERE egr.attempt_id = $1 AND egr.score = esg.max_score`,
+      [attemptId],
+    );
+    return parseInt(result.rows[0].total, 10);
+  }
+
+  const result = await pool.query<{ total: string }>(
+    `SELECT COALESCE(SUM(egr.score), 0) AS total
+     FROM event_game_results egr
+     WHERE egr.attempt_id = $1`,
+    [attemptId],
+  );
+  return parseInt(result.rows[0].total, 10);
+}
 
 // ---------------------------------------------------------------------------
 // Read
@@ -79,7 +111,9 @@ export async function getAttemptDetail(
     }
   }
 
-  return { ...attempt, results: allResults };
+  const runningScore = await computeAttemptScore(attemptId, stageId);
+
+  return { ...attempt, results: allResults, running_score: runningScore };
 }
 
 // ---------------------------------------------------------------------------
@@ -262,14 +296,8 @@ export async function completeAttempt(
     return { ok: false, reason: 'missing_results' };
   }
 
-  // Compute total_score
-  const scoreResult = await pool.query<{ total: string }>(
-    `SELECT COALESCE(SUM(egr.score), 0) AS total
-     FROM event_game_results egr
-     WHERE egr.attempt_id = $1`,
-    [attemptId],
-  );
-  const totalScore = parseInt(scoreResult.rows[0].total, 10);
+  // Compute total_score respecting game_metric
+  const totalScore = await computeAttemptScore(attemptId, stageId);
 
   const updatedResult = await pool.query<AttemptRow>(
     `UPDATE event_gauntlet_attempts

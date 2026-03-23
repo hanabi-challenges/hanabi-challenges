@@ -162,12 +162,8 @@ function startMockServer(): Promise<{ server: Server; port: number }> {
 
   app.get('/api/v1/seed/:fullSeed', async (req, res) => {
     const fullSeed = String(req.params.fullSeed);
-    const sizeParam = Array.isArray(req.query.size)
-      ? req.query.size[0]
-      : (req.query.size ?? '100');
-    const pageParam = Array.isArray(req.query.page)
-      ? req.query.page[0]
-      : (req.query.page ?? '0');
+    const sizeParam = Array.isArray(req.query.size) ? req.query.size[0] : (req.query.size ?? '100');
+    const pageParam = Array.isArray(req.query.page) ? req.query.page[0] : (req.query.page ?? '0');
     const size = Math.min(Math.max(parseInt(String(sizeParam), 10) || 100, 1), 100);
     const page = Math.max(parseInt(String(pageParam), 10) || 0, 0);
 
@@ -377,17 +373,19 @@ async function main() {
   const canTestMultiReg = hasMultiRegRestriction && primarySize >= 2;
 
   const bestOfN =
-    stage.attempt_policy === 'BEST_OF_N'
-      ? ((stage.config_json?.best_of as number) ?? null)
-      : null;
+    stage.attempt_policy === 'BEST_OF_N' ? ((stage.config_json?.best_of as number) ?? null) : null;
 
   console.log(`\nStage ${stageId} (${stage.stage_mechanism}), event ${stage.event_id}`);
   console.log(
     `  window      : ${stage.starts_at?.toISOString() ?? 'none'} → ${stage.ends_at?.toISOString() ?? 'none'}`,
   );
   console.log(`  sizes       : [${sizes.join(', ')}]`);
-  console.log(`  slots       : ${slotsWithSeed.length} (${slots.length - slotsWithSeed.length} without seed)`);
-  console.log(`  policy      : ${stage.attempt_policy}${bestOfN !== null ? ` (best ${bestOfN} of ${slotsWithSeed.length})` : ''}`);
+  console.log(
+    `  slots       : ${slotsWithSeed.length} (${slots.length - slotsWithSeed.length} without seed)`,
+  );
+  console.log(
+    `  policy      : ${stage.attempt_policy}${bestOfN !== null ? ` (best ${bestOfN} of ${slotsWithSeed.length})` : ''}`,
+  );
   console.log(`  multi_reg   : ${stage.multi_registration}`);
   console.log(`  teams       : ${teamsPerSize} compliant per size\n`);
 
@@ -474,7 +472,15 @@ async function main() {
       for (let ti = 0; ti < teamsPerSize; ti++) {
         const players = compliantTeams.get(`${si}:${ti}`)!;
         const { playedAt, startedAt } = nextTimestamp();
-        gamePlan.push({ slot, fullSeed, players, playedAt, startedAt, expected: 'INGEST', reason: 'compliant' });
+        gamePlan.push({
+          slot,
+          fullSeed,
+          players,
+          playedAt,
+          startedAt,
+          expected: 'INGEST',
+          reason: 'compliant',
+        });
       }
     }
   }
@@ -490,13 +496,29 @@ async function main() {
     const players = [anchorTeam[0], ...freshRest];
     // Timestamp after all compliant games to ensure anchor is processed first
     const { playedAt, startedAt } = nextTimestamp();
-    gamePlan.push({ slot: slot0, fullSeed: fullSeed0, players, playedAt, startedAt, expected: 'SKIP', reason: 'repeat_player' });
+    gamePlan.push({
+      slot: slot0,
+      fullSeed: fullSeed0,
+      players,
+      playedAt,
+      startedAt,
+      expected: 'SKIP',
+      reason: 'repeat_player',
+    });
   }
 
   // Duplicate play: anchorTeam replays slot0 at a later time → first-play dedup
   {
     const { playedAt, startedAt } = nextTimestamp();
-    gamePlan.push({ slot: slot0, fullSeed: fullSeed0, players: anchorTeam, playedAt, startedAt, expected: 'SKIP', reason: 'duplicate_play' });
+    gamePlan.push({
+      slot: slot0,
+      fullSeed: fullSeed0,
+      players: anchorTeam,
+      playedAt,
+      startedAt,
+      expected: 'SKIP',
+      reason: 'duplicate_play',
+    });
   }
 
   // Before-window: game timestamped before starts_at → window check
@@ -504,7 +526,15 @@ async function main() {
     const players = makePlayers(stageId, primarySize, true);
     const playedAt = new Date(stage.starts_at!.getTime() - 60 * 60 * 1000).toISOString();
     const startedAt = new Date(new Date(playedAt).getTime() - GAME_DURATION_MS).toISOString();
-    gamePlan.push({ slot: slot0, fullSeed: fullSeed0, players, playedAt, startedAt, expected: 'SKIP', reason: 'before_window' });
+    gamePlan.push({
+      slot: slot0,
+      fullSeed: fullSeed0,
+      players,
+      playedAt,
+      startedAt,
+      expected: 'SKIP',
+      reason: 'before_window',
+    });
   }
 
   // After-window: game timestamped after ends_at → window check
@@ -512,7 +542,15 @@ async function main() {
     const players = makePlayers(stageId, primarySize, true);
     const playedAt = new Date(stage.ends_at!.getTime() + 60 * 60 * 1000).toISOString();
     const startedAt = new Date(new Date(playedAt).getTime() - GAME_DURATION_MS).toISOString();
-    gamePlan.push({ slot: slot0, fullSeed: fullSeed0, players, playedAt, startedAt, expected: 'SKIP', reason: 'after_window' });
+    gamePlan.push({
+      slot: slot0,
+      fullSeed: fullSeed0,
+      players,
+      playedAt,
+      startedAt,
+      expected: 'SKIP',
+      reason: 'after_window',
+    });
   }
 
   // Multi-reg violation: intruder shares ghost[0] (pre-registered player) → multi_reg check
@@ -520,7 +558,15 @@ async function main() {
     const freshRest = makePlayers(stageId, primarySize - 1, true);
     const players = [ghostPlayers[0], ...freshRest];
     const { playedAt, startedAt } = nextTimestamp();
-    gamePlan.push({ slot: slot0, fullSeed: fullSeed0, players, playedAt, startedAt, expected: 'SKIP', reason: 'multi_reg_violation' });
+    gamePlan.push({
+      slot: slot0,
+      fullSeed: fullSeed0,
+      players,
+      playedAt,
+      startedAt,
+      expected: 'SKIP',
+      reason: 'multi_reg_violation',
+    });
   }
 
   // ── 6. Print plan ───────────────────────────────────────────────────────
@@ -534,7 +580,9 @@ async function main() {
       `  ${tag} [${reason.padEnd(18)}] slot=${slot.slot_id} seed=${fullSeed} players=[${players.join(', ')}]`,
     );
   }
-  console.log(`\n  Total: ${gamePlan.length} games → expect ${expectedIngest} INGEST, ${expectedSkip} SKIP\n`);
+  console.log(
+    `\n  Total: ${gamePlan.length} games → expect ${expectedIngest} INGEST, ${expectedSkip} SKIP\n`,
+  );
 
   if (dryRun) {
     console.log('Dry-run complete.');
@@ -557,7 +605,9 @@ async function main() {
 
   // ── 8. Ingest ───────────────────────────────────────────────────────────
   const uniqueSlots = [
-    ...new Map(resolvedSlots.map(({ slot, effectiveSeed }) => [slot.slot_id, { slot, effectiveSeed }])).values(),
+    ...new Map(
+      resolvedSlots.map(({ slot, effectiveSeed }) => [slot.slot_id, { slot, effectiveSeed }]),
+    ).values(),
   ];
 
   console.log('Ingesting...\n');

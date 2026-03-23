@@ -273,7 +273,10 @@ async function addAdversarialGamesForSlot(
   const rp2Ms = windowEnd.getTime() - 6 * 60_000;
   const rpPlayers1 = Array.from({ length: teamSize }, (_, i) => advName('rp', i));
   // rp-0 repeats; the rest are unique new players
-  const rpPlayers2 = [advName('rp', 0), ...Array.from({ length: teamSize - 1 }, (_, i) => advName('rp', teamSize + i))];
+  const rpPlayers2 = [
+    advName('rp', 0),
+    ...Array.from({ length: teamSize - 1 }, (_, i) => advName('rp', teamSize + i)),
+  ];
 
   await simulateGame({ fullSeed, players: rpPlayers1, ...ts(rp1Ms), slotId });
   await simulateGame({ fullSeed, players: rpPlayers2, ...ts(rp2Ms), slotId });
@@ -324,9 +327,7 @@ async function simulateTeamStage(
     buildPersonaTeams(teamSize, teamsPerSize),
   );
 
-  await Promise.all(
-    teamsBySize.flat(2).map((name) => findOrCreateShadowUser(name)),
-  );
+  await Promise.all(teamsBySize.flat(2).map((name) => findOrCreateShadowUser(name)));
 
   // Per-team completion rates — each team has a consistent participation level
   // across all slots (70% high, 20% moderate, 10% low).
@@ -514,7 +515,13 @@ export async function simulateQueuedGames(stageId: number): Promise<SimulationSu
       const teamSize = team.display_names.length;
       const fullSeed = buildFullSeed(teamSize, slot.effective_variant_id, effectiveSeed);
       const { playedAt, startedAt } = timestamps[ti];
-      await simulateGame({ fullSeed, players: team.display_names, playedAt, startedAt, slotId: slot.slot_id });
+      await simulateGame({
+        fullSeed,
+        players: team.display_names,
+        playedAt,
+        startedAt,
+        slotId: slot.slot_id,
+      });
     }
   }
 
@@ -743,9 +750,7 @@ export async function getStageSimulationResults(stageId: number): Promise<Simula
  *
  * Allows a clean re-run from phase 1.
  */
-export async function clearStageSimulationResults(
-  stageId: number,
-): Promise<{ deleted: number }> {
+export async function clearStageSimulationResults(stageId: number): Promise<{ deleted: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -770,10 +775,9 @@ export async function clearStageSimulationResults(
     }
 
     // Remove QUEUED teams created for this stage by simulation (INDIVIDUAL stages)
-    await client.query(
-      `DELETE FROM event_teams WHERE stage_id = $1 AND source = 'QUEUED'`,
-      [stageId],
-    );
+    await client.query(`DELETE FROM event_teams WHERE stage_id = $1 AND source = 'QUEUED'`, [
+      stageId,
+    ]);
 
     // Remove all-shadow-user teams for this stage (covers persona teams and sim-adv-* teams).
     // Shadow users have password_hash IS NULL; real users always have a password.

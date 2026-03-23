@@ -85,22 +85,18 @@ router.post('/simulate', authRequired, async (req: AuthenticatedRequest, res: Re
 // GET /simulate/results — fetch ingested simulation results for all stages
 // ---------------------------------------------------------------------------
 
-router.get(
-  '/simulate/results',
-  authRequired,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const ctx = await resolveEventSimContext(req, res);
-    if (!ctx) return;
+router.get('/simulate/results', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveEventSimContext(req, res);
+  if (!ctx) return;
 
-    try {
-      const results = await getEventSimulationResults(ctx.slug);
-      res.json(results);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: message });
-    }
-  },
-);
+  try {
+    const results = await getEventSimulationResults(ctx.slug);
+    res.json(results);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // DELETE /simulate/results — clear all event simulation data

@@ -135,7 +135,10 @@ async function addAdversarialGamesForSlot(
   const rp1Ms = windowEnd.getTime() - 12 * 60_000;
   const rp2Ms = windowEnd.getTime() - 6 * 60_000;
   const rpPlayers1 = Array.from({ length: teamSize }, (_, i) => advName('rp', i));
-  const rpPlayers2 = [advName('rp', 0), ...Array.from({ length: teamSize - 1 }, (_, i) => advName('rp', teamSize + i))];
+  const rpPlayers2 = [
+    advName('rp', 0),
+    ...Array.from({ length: teamSize - 1 }, (_, i) => advName('rp', teamSize + i)),
+  ];
 
   await simulateGame({ fullSeed, players: rpPlayers1, ...ts(rp1Ms), slotId });
   await simulateGame({ fullSeed, players: rpPlayers2, ...ts(rp2Ms), slotId });
@@ -314,9 +317,7 @@ export async function runEventSimulation(
   );
 
   // Create shadow users (idempotent)
-  await Promise.all(
-    teamsBySize.flat(2).map((name) => findOrCreateShadowUser(name)),
-  );
+  await Promise.all(teamsBySize.flat(2).map((name) => findOrCreateShadowUser(name)));
 
   // Per-team completion rates assigned once — same team participates (or not)
   // consistently across all stages, mimicking real-world attendance patterns.
@@ -515,9 +516,7 @@ export async function getEventSimulationResults(
  *  - Event teams whose ALL members have sim-e{eventId}-* display names
  *  - Opt-in records for sim-e{eventId}-* users
  */
-export async function clearEventSimulationResults(
-  eventSlug: string,
-): Promise<{ deleted: number }> {
+export async function clearEventSimulationResults(eventSlug: string): Promise<{ deleted: number }> {
   const event = await fetchEventBySlug(eventSlug);
   if (!event) throw new Error(`Event "${eventSlug}" not found`);
 

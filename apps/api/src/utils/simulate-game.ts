@@ -69,7 +69,14 @@ export async function simulateGame(params: SimulateGameParams): Promise<Simulate
   const { fullSeed, players, playedAt, startedAt, slotId } = params;
   const template = pickTemplate(players.length);
 
-  const gameId = await insertSimulatedGame({ fullSeed, players, template, playedAt, startedAt, slotId });
+  const gameId = await insertSimulatedGame({
+    fullSeed,
+    players,
+    template,
+    playedAt,
+    startedAt,
+    slotId,
+  });
 
   return { gameId, fullSeed, players, score: template.score, playedAt };
 }

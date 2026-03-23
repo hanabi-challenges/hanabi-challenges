@@ -104,52 +104,48 @@ router.post('/simulate', authRequired, async (req: AuthenticatedRequest, res: Re
 // POST /simulate/opt-ins — phase 1: populate INDIVIDUAL stage opt-ins
 // ---------------------------------------------------------------------------
 
-router.post(
-  '/simulate/opt-ins',
-  authRequired,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const ctx = await resolveSimContext(req, res);
-    if (!ctx) return;
+router.post('/simulate/opt-ins', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveSimContext(req, res);
+  if (!ctx) return;
 
-    const body = req.body as { playerCount?: unknown; sleepFraction?: unknown };
-    const options: OptInOptions = {};
-    if (typeof body.playerCount === 'number' && body.playerCount >= 2) {
-      options.playerCount = Math.floor(body.playerCount);
-    }
-    if (typeof body.sleepFraction === 'number' && body.sleepFraction >= 0 && body.sleepFraction <= 1) {
-      options.sleepFraction = body.sleepFraction;
-    }
+  const body = req.body as { playerCount?: unknown; sleepFraction?: unknown };
+  const options: OptInOptions = {};
+  if (typeof body.playerCount === 'number' && body.playerCount >= 2) {
+    options.playerCount = Math.floor(body.playerCount);
+  }
+  if (
+    typeof body.sleepFraction === 'number' &&
+    body.sleepFraction >= 0 &&
+    body.sleepFraction <= 1
+  ) {
+    options.sleepFraction = body.sleepFraction;
+  }
 
-    try {
-      const result = await populateSimulatedOptIns(ctx.stageId, options);
-      res.json(result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: message });
-    }
-  },
-);
+  try {
+    const result = await populateSimulatedOptIns(ctx.stageId, options);
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // POST /simulate/games — phase 2: simulate games for awake QUEUED teams
 // ---------------------------------------------------------------------------
 
-router.post(
-  '/simulate/games',
-  authRequired,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const ctx = await resolveSimContext(req, res);
-    if (!ctx) return;
+router.post('/simulate/games', authRequired, async (req: AuthenticatedRequest, res: Response) => {
+  const ctx = await resolveSimContext(req, res);
+  if (!ctx) return;
 
-    try {
-      const result = await simulateQueuedGames(ctx.stageId);
-      res.json(result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: message });
-    }
-  },
-);
+  try {
+    const result = await simulateQueuedGames(ctx.stageId);
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET /simulate/status — phase status (opt-ins, teams, results counts)

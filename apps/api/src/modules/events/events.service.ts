@@ -247,3 +247,28 @@ export async function cloneEvent(
     client.release();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Challenge badge config schema bootstrap (lazy DDL, idempotent)
+// ---------------------------------------------------------------------------
+
+async function ensureChallengeBadgeConfigTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_challenge_badge_config (
+      event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+      podium_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      completion_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      completion_requires_deadline BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
+
+let challengeBadgeConfigSchemaEnsured = false;
+
+export async function ensureChallengeBadgeConfigSchema(): Promise<void> {
+  if (challengeBadgeConfigSchemaEnsured) return;
+  await ensureChallengeBadgeConfigTable();
+  challengeBadgeConfigSchemaEnsured = true;
+}

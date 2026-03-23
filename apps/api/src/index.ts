@@ -10,6 +10,7 @@ import {
   startNotificationDbListener,
 } from './modules/notifications/notifications.ws';
 import { ensureAdminAccessSchema } from './modules/admin-access/admin-access.service';
+import { ensureChallengeBadgeConfigSchema } from './modules/events/events.service';
 
 runMigrations()
   .then(() => {
@@ -21,7 +22,11 @@ runMigrations()
 
     startVariantSyncScheduler();
     startReplayPullWorker();
-    return Promise.all([ensureNotificationsSchema(), ensureAdminAccessSchema()]);
+    return Promise.all([
+      ensureNotificationsSchema(),
+      ensureAdminAccessSchema(),
+      ensureChallengeBadgeConfigSchema(),
+    ]);
   })
   .then(() => startNotificationDbListener())
   .catch((err: unknown) => {

@@ -1169,62 +1169,14 @@ export async function getEventAggregate(eventId: number): Promise<AggregateTrack
       const lb = await getSeededLeaderboard(stage.id);
       if (!lb) continue;
 
-      // Fetch effective_max_score per game_index — uses the same variant hierarchy
-      // as games.service (explicit override → game variant → stage variant → event variant).
-      const maxScoreResult = await pool.query<{
-        game_index: number;
-        effective_max_score: number | null;
-      }>(
-        `SELECT esg.game_index,
-                COALESCE(
-                  esg.max_score,
-                  CASE
-                    WHEN esg.variant_id IS NOT NULL
-                      THEN hv_g.num_suits * CASE WHEN hv_g.is_sudoku THEN hv_g.num_suits ELSE 5 END
-                    WHEN es.variant_rule_json->>'type' = 'none'     THEN 25
-                    WHEN es.variant_rule_json->>'type' = 'specific'
-                      THEN hv_s.num_suits * CASE WHEN hv_s.is_sudoku THEN hv_s.num_suits ELSE 5 END
-                    WHEN e.variant_rule_json->>'type' = 'none'      THEN 25
-                    WHEN e.variant_rule_json->>'type' = 'specific'
-                      THEN hv_e.num_suits * CASE WHEN hv_e.is_sudoku THEN hv_e.num_suits ELSE 5 END
-                    ELSE 25
-                  END
-                ) AS effective_max_score
-         FROM event_stage_games esg
-         JOIN event_stages es ON es.id = esg.stage_id
-         JOIN events e ON e.id = es.event_id
-         LEFT JOIN hanabi_variants hv_g ON hv_g.code = esg.variant_id
-         LEFT JOIN hanabi_variants hv_s ON hv_s.code = (
-           CASE WHEN es.variant_rule_json->>'type' = 'none'     THEN 0
-                WHEN es.variant_rule_json->>'type' = 'specific' THEN (es.variant_rule_json->>'variantId')::int
-                ELSE NULL END
-         )
-         LEFT JOIN hanabi_variants hv_e ON hv_e.code = (
-           CASE WHEN e.variant_rule_json->>'type' = 'none'      THEN 0
-                WHEN e.variant_rule_json->>'type' = 'specific'  THEN (e.variant_rule_json->>'variantId')::int
-                ELSE NULL END
-         )
-         WHERE esg.stage_id = $1`,
-        [stage.id],
-      );
-      const maxScoreByIndex = new Map<number, number | null>();
-      for (const row of maxScoreResult.rows) {
-        maxScoreByIndex.set(row.game_index, row.effective_max_score);
-      }
-
       for (const entry of lb.entries) {
-        // score = count of games where the team hit the per-game max_score
-        const countMax = entry.game_scores.filter((gs) => {
-          const maxScore = maxScoreByIndex.get(gs.game_index);
-          return maxScore != null && gs.score === maxScore;
-        }).length;
         addTeamContribution(
           entry.team.id,
           entry.team.display_name,
           entry.team.members,
           stage.id,
           stage.label,
-          countMax,
+          entry.stage_score,
           entry.rank,
           entry.team_size,
         );

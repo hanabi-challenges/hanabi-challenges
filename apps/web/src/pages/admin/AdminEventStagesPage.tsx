@@ -25,6 +25,9 @@ import {
 } from '../../design-system';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStages } from '../../hooks/useStages';
+import { useSimulationMode } from '../../hooks/useSimulation';
+import { SimulateStageButton, SimulateEventButton } from '../../features/admin/components';
+import { useEvents } from '../../hooks/useEvents';
 import { useStageGroups, type StageGroup, type GroupTemplate } from '../../hooks/useStageGroups';
 import {
   useStageTransitions,
@@ -832,6 +835,7 @@ function StageCardContent({
   expanded,
   onToggleExpand,
   variants,
+  simulationMode,
 }: {
   stage: StageSummary;
   dragHandleProps?: React.HTMLAttributes<HTMLSpanElement>;
@@ -846,6 +850,7 @@ function StageCardContent({
   expanded?: boolean;
   onToggleExpand?: (stageId: number) => void;
   variants?: HanabiVariant[];
+  simulationMode?: boolean;
 }) {
   const { slug } = useParams<{ slug: string }>();
   const hasSlots = stage.mechanism !== 'MATCH_PLAY';
@@ -903,6 +908,9 @@ function StageCardContent({
 
           {/* Action icon buttons */}
           <Inline gap="xs" wrap={false} style={{ flexShrink: 0 }}>
+            {simulationMode && slug && !overlay ? (
+              <SimulateStageButton stage={stage} eventSlug={slug} />
+            ) : null}
             {stage.participation_type === 'INDIVIDUAL' ? (
               <CoreActionIcon
                 variant="subtle"
@@ -1000,6 +1008,7 @@ function SortableStageCard({
   onNavigate,
   busy,
   variants,
+  simulationMode,
 }: {
   stage: StageSummary;
   onClone: (stageId: number) => void;
@@ -1008,6 +1017,7 @@ function SortableStageCard({
   onNavigate: (path: string) => void;
   busy: number | null;
   variants: HanabiVariant[];
+  simulationMode?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -1033,6 +1043,7 @@ function SortableStageCard({
       expanded={expanded}
       onToggleExpand={() => setExpanded((e) => !e)}
       variants={variants}
+      simulationMode={simulationMode}
     />
   );
 }
@@ -1445,6 +1456,7 @@ function GroupCard({
   onTransitionSaved,
   onTransitionDeleted,
   variants,
+  simulationMode,
 }: {
   group: StageGroup;
   groupStages: StageSummary[];
@@ -1463,6 +1475,7 @@ function GroupCard({
   onTransitionSaved: (t: StageTransition) => void;
   onTransitionDeleted: (id: number) => void;
   variants: HanabiVariant[];
+  simulationMode?: boolean;
 }) {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [scaffoldOpen, setScaffoldOpen] = useState(false);
@@ -1591,6 +1604,7 @@ function GroupCard({
                         onNavigate={onNavigate}
                         busy={busy}
                         variants={variants}
+                        simulationMode={simulationMode}
                       />
                       {!isLast && (
                         <TransitionNode
@@ -1825,6 +1839,10 @@ export function AdminEventStagesPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { token } = useAuth();
+  const simulationMode = useSimulationMode();
+
+  const { events: allEvents } = useEvents({ includeUnpublishedForAdmin: true });
+  const eventName = allEvents.find((e) => e.slug === slug)?.name ?? slug ?? '';
 
   const {
     stages,
@@ -2345,6 +2363,9 @@ export function AdminEventStagesPage() {
             {groups.length > 0 ? ` · ${groups.length} group${groups.length === 1 ? '' : 's'}` : ''}
           </Text>
           <Group gap="xs">
+            {simulationMode && slug && eventName && (
+              <SimulateEventButton eventSlug={slug} eventName={eventName} />
+            )}
             <Button size="sm" variant="default" onClick={openCreateGroup}>
               Add Group
             </Button>
@@ -2473,6 +2494,7 @@ export function AdminEventStagesPage() {
                         onTransitionSaved={upsertTransition}
                         onTransitionDeleted={removeTransition}
                         variants={variants}
+                        simulationMode={simulationMode}
                       />
                     ) : (
                       <SortableStageCard
@@ -2483,6 +2505,7 @@ export function AdminEventStagesPage() {
                         onNavigate={navigate}
                         busy={stageBusy}
                         variants={variants}
+                        simulationMode={simulationMode}
                       />
                     )}
                     {!isLast && (

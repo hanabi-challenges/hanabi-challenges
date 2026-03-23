@@ -28,6 +28,7 @@ import matchesRouter from './matches.routes';
 import leaderboardRouter from './leaderboard.routes';
 import bracketEntriesRouter from './bracket-entries.routes';
 import bracketRouter from './bracket.routes';
+import simulationRouter from '../simulation/simulation.routes';
 
 const VALID_MECHANISMS = ['SEEDED_LEADERBOARD', 'GAUNTLET', 'MATCH_PLAY'] as const;
 const VALID_PARTICIPATION_TYPES = ['INDIVIDUAL', 'TEAM'] as const;
@@ -67,6 +68,7 @@ router.use('/:stageId', matchesRouter);
 router.use('/:stageId', leaderboardRouter);
 router.use('/:stageId', bracketEntriesRouter);
 router.use('/:stageId', bracketRouter);
+router.use('/:stageId', simulationRouter);
 
 // ---------------------------------------------------------------------------
 // Permission helper — resolves event from :slug, checks if caller is an admin

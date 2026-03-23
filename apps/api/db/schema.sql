@@ -32,6 +32,9 @@ DROP TABLE IF EXISTS admin_access_requests CASCADE;
 DROP TABLE IF EXISTS hanabi_live_game_exports CASCADE;
 DROP TABLE IF EXISTS hanabi_variant_sync_state CASCADE;
 DROP TABLE IF EXISTS hanabi_variants CASCADE;
+DROP TABLE IF EXISTS simulation_games CASCADE;
+DROP SEQUENCE IF EXISTS simulation_game_id_seq CASCADE;
+DROP TABLE IF EXISTS event_forfeitures CASCADE;
 DROP TABLE IF EXISTS discord_role_grants CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS schema_migrations CASCADE;
@@ -218,14 +221,16 @@ CREATE TABLE event_stages (
   stage_index               INTEGER NOT NULL,
   mechanism                 TEXT NOT NULL
                               CHECK (mechanism IN ('SEEDED_LEADERBOARD', 'GAUNTLET', 'MATCH_PLAY')),
-  team_policy               TEXT NOT NULL
-                              CHECK (team_policy IN ('SELF_FORMED', 'QUEUED')),
+  participation_type        TEXT NOT NULL DEFAULT 'TEAM'
+                              CHECK (participation_type IN ('INDIVIDUAL', 'TEAM')),
   team_scope                TEXT NOT NULL
                               CHECK (team_scope IN ('EVENT', 'STAGE')),
   attempt_policy            TEXT NOT NULL
                               CHECK (attempt_policy IN ('SINGLE', 'REQUIRED_ALL', 'BEST_OF_N', 'UNLIMITED_BEST')),
   time_policy               TEXT NOT NULL
                               CHECK (time_policy IN ('WINDOW', 'ROLLING', 'SCHEDULED')),
+  game_metric               TEXT NOT NULL DEFAULT 'SCORE'
+                              CHECK (game_metric IN ('SCORE', 'MAX_SCORE')),
   game_scoring_config_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
   stage_scoring_config_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   variant_rule_json         JSONB,
@@ -273,6 +278,7 @@ CREATE TABLE event_stage_transitions (
   filter_value    INTEGER,
   seeding_method  TEXT NOT NULL DEFAULT 'PRESERVE'
                     CHECK (seeding_method IN ('PRESERVE', 'RANKED', 'RANDOM', 'MANUAL')),
+  team_assignment_config JSONB,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_transition_predecessor
     CHECK ((after_stage_id IS NOT NULL)::int + (after_group_id IS NOT NULL)::int = 1),
@@ -393,6 +399,8 @@ CREATE TABLE event_game_results (
   score                INTEGER NOT NULL,
   zero_reason          TEXT CHECK (zero_reason IN ('Strike Out', 'Time Out', 'VTK')),
   bottom_deck_risk     INTEGER,
+  strikes              SMALLINT,
+  clues_remaining      SMALLINT,
   hanabi_live_game_id  BIGINT,
   started_at           TIMESTAMPTZ,
   played_at            TIMESTAMPTZ DEFAULT NOW(),
@@ -635,6 +643,32 @@ CREATE UNIQUE INDEX uq_admin_access_requests_pending_per_user
   WHERE status = 'pending';
 
 ------------------------------------------------------------
+-- SIMULATION GAMES
+-- Backs the mock hanab-live API server (SIMULATION_MODE=true).
+------------------------------------------------------------
+
+CREATE SEQUENCE simulation_game_id_seq START WITH 9000000000;
+
+CREATE TABLE simulation_games (
+  id                BIGINT      NOT NULL DEFAULT nextval('simulation_game_id_seq') PRIMARY KEY,
+  full_seed         TEXT        NOT NULL,
+  players           TEXT[]      NOT NULL,
+  score             INTEGER     NOT NULL DEFAULT 0,
+  end_condition     INTEGER     NOT NULL DEFAULT 1,
+  options_json      JSONB       NOT NULL DEFAULT '{}',
+  datetime_started  TIMESTAMPTZ,
+  datetime_finished TIMESTAMPTZ,
+  actions           JSONB       NOT NULL DEFAULT '[]',
+  deck              JSONB       NOT NULL DEFAULT '[]',
+  slot_id           BIGINT REFERENCES event_stage_games(id) ON DELETE SET NULL,
+  ingest_outcome    TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX simulation_games_full_seed_idx ON simulation_games (full_seed);
+CREATE INDEX simulation_games_slot_id_idx ON simulation_games (slot_id);
+
+------------------------------------------------------------
 -- SCHEMA MIGRATIONS TRACKER
 ------------------------------------------------------------
 
@@ -657,5 +691,23 @@ INSERT INTO schema_migrations (name) VALUES
   ('009_stage_transitions.sql'),
   ('010_stage_visible.sql'),
   ('011_game_slots_redesign.sql'),
-  ('022_event_matches_cascade.sql')
+  ('012_deferrable_index_constraints.sql'),
+  ('013_variant_suits_and_nickname.sql'),
+  ('014_group_template.sql'),
+  ('015_event_team_scope.sql'),
+  ('016_drop_event_name_unique.sql'),
+  ('017_event_multi_registration.sql'),
+  ('018_shadow_users.sql'),
+  ('019_replay_pull_config.sql'),
+  ('020_result_kpis.sql'),
+  ('021_participation_type.sql'),
+  ('022_event_matches_cascade.sql'),
+  ('023_hanabi_live_game_exports.sql'),
+  ('024_elo_group_scope.sql'),
+  ('025_event_forfeitures.sql'),
+  ('026_game_export_tags.sql'),
+  ('027_discord_role_grants.sql'),
+  ('028_simulation_games.sql'),
+  ('029_simulation_ingest_outcome.sql'),
+  ('030_game_metric.sql')
 ON CONFLICT (name) DO NOTHING;

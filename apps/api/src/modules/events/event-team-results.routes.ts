@@ -234,7 +234,6 @@ router.get('/:teamId', authOptional, async (req: AuthenticatedRequest, res: Resp
             ELSE NULL END
      )
      WHERE es.event_id = $2
-       AND (es.starts_at IS NULL OR es.starts_at <= NOW())
      ORDER BY es.stage_index, esg.game_index`,
     [teamId, event.id],
   );

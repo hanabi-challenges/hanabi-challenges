@@ -23,10 +23,16 @@ import { extractGameKPIs } from '../replay/game-engine.service';
 // Types
 // ---------------------------------------------------------------------------
 
+export type GameOutcome = {
+  gameId: number;
+  outcome: string; // 'ingested' | 'skipped:*' | 'error:*'
+};
+
 export type IngestSlotResult = {
   ingested: number;
   skipped: number;
   errors: string[];
+  gameOutcomes: GameOutcome[];
 };
 
 type EventMeta = {
@@ -319,7 +325,7 @@ export async function ingestGameSlot(params: {
     eventMeta,
     stageWindow,
   } = params;
-  const result: IngestSlotResult = { ingested: 0, skipped: 0, errors: [] };
+  const result: IngestSlotResult = { ingested: 0, skipped: 0, errors: [], gameOutcomes: [] };
 
   // Check registration cutoff
   const now = new Date();
@@ -433,10 +439,12 @@ export async function ingestGameSlot(params: {
       exp = await fetchGameExport(candidate.id);
     } catch (err) {
       result.errors.push(`Export fetch error for game ${candidate.id}: ${String(err)}`);
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'error:export_fetch' });
       continue;
     }
     if (!exp || exp.players.length === 0) {
       result.skipped++;
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:empty_export' });
       continue;
     }
 
@@ -448,16 +456,19 @@ export async function ingestGameSlot(params: {
         // Cannot determine play time — skip if any window boundary is set.
         if (stageWindow.starts_at !== null || stageWindow.ends_at !== null) {
           result.skipped++;
+          result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:no_timestamp' });
           continue;
         }
       } else {
         const playedAt = new Date(finishedStr);
         if (stageWindow.starts_at !== null && playedAt < stageWindow.starts_at) {
           result.skipped++;
+          result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:before_window' });
           continue;
         }
         if (stageWindow.ends_at !== null && playedAt > stageWindow.ends_at) {
           result.skipped++;
+          result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:after_window' });
           continue;
         }
       }
@@ -494,6 +505,7 @@ export async function ingestGameSlot(params: {
     for (const n of playerNamesLower) seedSet.add(n);
     if (hasRepeatPlayer) {
       result.skipped++;
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:repeat_player' });
       continue;
     }
 
@@ -503,6 +515,7 @@ export async function ingestGameSlot(params: {
       userIds = await Promise.all(playerNames.map((name) => findOrCreateShadowUser(name)));
     } catch (err) {
       result.errors.push(`User resolution error for game ${candidate.id}: ${String(err)}`);
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'error:user_resolution' });
       continue;
     }
 
@@ -521,9 +534,11 @@ export async function ingestGameSlot(params: {
           `Ambiguous team for game ${candidate.id} — candidates: [${open.join(', ')}]; skipping`,
         );
         result.skipped++;
+        result.gameOutcomes.push({ gameId: candidate.id, outcome: 'error:ambiguous_team' });
         continue;
       } else if (alreadyPlayed.length > 0) {
         result.skipped++;
+        result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:already_played' });
         continue;
       } else {
         const violates = await wouldViolateMultiRegistration(
@@ -534,12 +549,14 @@ export async function ingestGameSlot(params: {
         );
         if (violates) {
           result.skipped++;
+          result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:multi_registration' });
           continue;
         }
         teamId = await createIngestedEventTeam(eventId, userIds);
       }
     } catch (err) {
       result.errors.push(`Team resolution error for game ${candidate.id}: ${String(err)}`);
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'error:team_resolution' });
       continue;
     }
 
@@ -589,11 +606,14 @@ export async function ingestGameSlot(params: {
       );
       if (inserted) {
         result.ingested++;
+        result.gameOutcomes.push({ gameId: candidate.id, outcome: 'ingested' });
       } else {
         result.skipped++;
+        result.gameOutcomes.push({ gameId: candidate.id, outcome: 'skipped:already_played' });
       }
     } catch (err) {
       result.errors.push(`Result insert error for game ${candidate.id}: ${String(err)}`);
+      result.gameOutcomes.push({ gameId: candidate.id, outcome: 'error:result_insert' });
     }
   }
 

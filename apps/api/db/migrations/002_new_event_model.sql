@@ -22,40 +22,42 @@
 BEGIN;
 
 ------------------------------------------------------------
--- STEP 1: DROP OLD TABLES (leaf → root order, no CASCADE needed)
+-- STEP 1: DROP OLD TABLES (CASCADE on each so any unexpected
+-- dependencies introduced by intermediate schema.sql snapshots
+-- or manually-applied patches are also removed cleanly)
 ------------------------------------------------------------
 
 -- Deepest leaves
-DROP TABLE IF EXISTS event_rating_ledger;
-DROP TABLE IF EXISTS event_session_round_team_results;
-DROP TABLE IF EXISTS event_session_round_players;
-DROP TABLE IF EXISTS event_session_presence;
-DROP TABLE IF EXISTS game_participants;
-DROP TABLE IF EXISTS event_stage_team_statuses;
-DROP TABLE IF EXISTS pending_team_members;
-DROP TABLE IF EXISTS team_memberships;
+DROP TABLE IF EXISTS event_rating_ledger CASCADE;
+DROP TABLE IF EXISTS event_session_round_team_results CASCADE;
+DROP TABLE IF EXISTS event_session_round_players CASCADE;
+DROP TABLE IF EXISTS event_session_presence CASCADE;
+DROP TABLE IF EXISTS game_participants CASCADE;
+DROP TABLE IF EXISTS event_stage_team_statuses CASCADE;
+DROP TABLE IF EXISTS pending_team_members CASCADE;
+DROP TABLE IF EXISTS team_memberships CASCADE;
 
 -- Retained badge tables — drop now so events can be dropped cleanly;
 -- recreated below once the new events table exists.
-DROP TABLE IF EXISTS event_badge_awards;
-DROP TABLE IF EXISTS event_badge_set_links;
-DROP TABLE IF EXISTS event_challenge_badge_config;
-DROP TABLE IF EXISTS event_badges;
+DROP TABLE IF EXISTS event_badge_awards CASCADE;
+DROP TABLE IF EXISTS event_badge_set_links CASCADE;
+DROP TABLE IF EXISTS event_challenge_badge_config CASCADE;
+DROP TABLE IF EXISTS event_badges CASCADE;
 
 -- Mid-level old event tables
-DROP TABLE IF EXISTS event_player_eligibilities;
-DROP TABLE IF EXISTS event_games;
-DROP TABLE IF EXISTS event_game_templates;
-DROP TABLE IF EXISTS event_session_rounds;
-DROP TABLE IF EXISTS event_sessions;
-DROP TABLE IF EXISTS event_session_ladder_config;
-DROP TABLE IF EXISTS event_player_ratings;
-DROP TABLE IF EXISTS event_teams;
-DROP TABLE IF EXISTS event_stages;
-DROP TABLE IF EXISTS event_admins;
+DROP TABLE IF EXISTS event_player_eligibilities CASCADE;
+DROP TABLE IF EXISTS event_games CASCADE;
+DROP TABLE IF EXISTS event_game_templates CASCADE;
+DROP TABLE IF EXISTS event_session_rounds CASCADE;
+DROP TABLE IF EXISTS event_sessions CASCADE;
+DROP TABLE IF EXISTS event_session_ladder_config CASCADE;
+DROP TABLE IF EXISTS event_player_ratings CASCADE;
+DROP TABLE IF EXISTS event_teams CASCADE;
+DROP TABLE IF EXISTS event_stages CASCADE;
+DROP TABLE IF EXISTS event_admins CASCADE;
 
 -- Root
-DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS events CASCADE;
 
 ------------------------------------------------------------
 -- STEP 2: CREATE NEW EVENT MODEL TABLES (ADR 0004)

@@ -1,0 +1,1 @@
+{"version":3,"file":"initialGameStateTest.js","sourceRoot":"","sources":["../../../src/reducers/initialStates/initialGameStateTest.ts"],"names":[],"mappings":";;AAKA,0DAQC;AAXD,yDAAyD;AACzD,yDAAyD;AAEzD,SAAgB,uBAAuB,CAAC,QAAsB;IAC5D,OAAO;QACL,GAAG,IAAA,sCAAmB,EAAC,QAAQ,CAAC;QAChC,IAAI,EAAE;YACJ,GAAG,IAAA,sCAAmB,GAAE;YACxB,OAAO,EAAE,CAAC;SACX;KACF,CAAC;AACJ,CAAC"}

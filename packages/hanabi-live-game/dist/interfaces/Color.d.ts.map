@@ -1,0 +1,1 @@
+{"version":3,"file":"Color.d.ts","sourceRoot":"","sources":["../../src/interfaces/Color.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,KAAK;IACpB,QAAQ,CAAC,IAAI,EAAE,MAAM,CAAC;IACtB,QAAQ,CAAC,YAAY,EAAE,MAAM,CAAC;IAC9B,QAAQ,CAAC,IAAI,EAAE,MAAM,CAAC;IACtB,QAAQ,CAAC,cAAc,EAAE,MAAM,CAAC;CACjC"}

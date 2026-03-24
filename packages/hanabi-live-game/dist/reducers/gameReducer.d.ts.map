@@ -1,0 +1,1 @@
+{"version":3,"file":"gameReducer.d.ts","sourceRoot":"","sources":["../../src/reducers/gameReducer.ts"],"names":[],"mappings":"AAWA,OAAO,KAAK,EAAE,QAAQ,EAAE,MAAM,wBAAwB,CAAC;AAEvD,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,4BAA4B,CAAC;AAC/D,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,yBAAyB,CAAC;AAyBzD,OAAO,KAAK,EAGV,UAAU,EACX,MAAM,sBAAsB,CAAC;AAO9B,wDAAwD;AACxD,eAAO,MAAM,WAAW,sNAAgD,CAAC"}

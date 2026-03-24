@@ -1,0 +1,80 @@
+"use strict";
+/* eslint-disable complete/consistent-enum-values */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VARIANT_MODIFIER_SET = exports.VariantModifier = void 0;
+const complete_common_1 = require("complete-common");
+/**
+ * These correspond to values in the database. We want them to be as short as possible in order to
+ * save hard drive space.
+ */
+var VariantModifier;
+(function (VariantModifier) {
+    VariantModifier["RainbowOnes"] = "R1";
+    VariantModifier["RainbowTwos"] = "R2";
+    VariantModifier["RainbowThrees"] = "R3";
+    VariantModifier["RainbowFours"] = "R4";
+    VariantModifier["RainbowFives"] = "R5";
+    VariantModifier["PinkOnes"] = "P1";
+    VariantModifier["PinkTwos"] = "P2";
+    VariantModifier["PinkThrees"] = "P3";
+    VariantModifier["PinkFours"] = "P4";
+    VariantModifier["PinkFives"] = "P5";
+    VariantModifier["WhiteOnes"] = "W1";
+    VariantModifier["WhiteTwos"] = "W2";
+    VariantModifier["WhiteThrees"] = "W3";
+    VariantModifier["WhiteFours"] = "W4";
+    VariantModifier["WhiteFives"] = "W5";
+    VariantModifier["BrownOnes"] = "B1";
+    VariantModifier["BrownTwos"] = "B2";
+    VariantModifier["BrownThrees"] = "B3";
+    VariantModifier["BrownFours"] = "B4";
+    VariantModifier["BrownFives"] = "B5";
+    VariantModifier["OmniOnes"] = "O1";
+    VariantModifier["OmniTwos"] = "O2";
+    VariantModifier["OmniThrees"] = "O3";
+    VariantModifier["OmniFours"] = "O4";
+    VariantModifier["OmniFives"] = "O5";
+    VariantModifier["NullOnes"] = "N1";
+    VariantModifier["NullTwos"] = "N2";
+    VariantModifier["NullThrees"] = "N3";
+    VariantModifier["NullFours"] = "N4";
+    VariantModifier["NullFives"] = "N5";
+    VariantModifier["MuddyRainbowOnes"] = "M1";
+    VariantModifier["MuddyRainbowTwos"] = "M2";
+    VariantModifier["MuddyRainbowThrees"] = "M3";
+    VariantModifier["MuddyRainbowFours"] = "M4";
+    VariantModifier["MuddyRainbowFives"] = "M5";
+    VariantModifier["LightPinkOnes"] = "L1";
+    VariantModifier["LightPinkTwos"] = "L2";
+    VariantModifier["LightPinkThrees"] = "L3";
+    VariantModifier["LightPinkFours"] = "L4";
+    VariantModifier["LightPinkFives"] = "L5";
+    VariantModifier["DeceptiveOnes"] = "D1";
+    VariantModifier["DeceptiveTwos"] = "D2";
+    VariantModifier["DeceptiveThrees"] = "D3";
+    VariantModifier["DeceptiveFours"] = "D4";
+    VariantModifier["DeceptiveFives"] = "D5";
+    VariantModifier["CriticalOnes"] = "C1";
+    VariantModifier["CriticalTwos"] = "C2";
+    VariantModifier["CriticalThrees"] = "C3";
+    VariantModifier["CriticalFours"] = "C4";
+    VariantModifier["CriticalFives"] = "C5";
+    VariantModifier["ClueStarved"] = "CS";
+    VariantModifier["ColorBlind"] = "CB";
+    VariantModifier["NumberBlind"] = "NB";
+    VariantModifier["TotallyBlind"] = "TB";
+    VariantModifier["ColorMute"] = "CM";
+    VariantModifier["NumberMute"] = "NM";
+    VariantModifier["AlternatingClues"] = "AC";
+    VariantModifier["CowAndPig"] = "CP";
+    VariantModifier["Duck"] = "Du";
+    VariantModifier["OddsAndEvens"] = "OE";
+    VariantModifier["Synesthesia"] = "Sy";
+    VariantModifier["UpOrDown"] = "UD";
+    VariantModifier["ThrowItInAHole"] = "TH";
+    VariantModifier["Funnels"] = "Fu";
+    VariantModifier["Chimneys"] = "Ch";
+    VariantModifier["Sudoku"] = "Su";
+})(VariantModifier || (exports.VariantModifier = VariantModifier = {}));
+exports.VARIANT_MODIFIER_SET = new complete_common_1.ReadonlySet(Object.values(VariantModifier));
+//# sourceMappingURL=VariantModifier.js.map

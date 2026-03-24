@@ -69,27 +69,36 @@ async function main(): Promise<void> {
       console.log('[db-bootstrap] Schema initialization complete.');
     }
 
-    // Backfill schema_migrations only when the DB already has the new event model schema
-    // (event_stages.time_policy is the sentinel column introduced by migration 002).
+    // Sentinel: event_stage_games table, created exclusively by migration 002 and never
+    // dropped by any later migration.  This is more reliable than checking a column on
+    // event_stages because some older schema.sql snapshots included event_stages.time_policy
+    // without yet having event_stage_games, causing the previous sentinel to incorrectly
+    // conclude migration 002 had already run.
     //
-    // This prevents incorrectly marking migrations as applied on databases that still have
-    // the pre-migration-002 schema and actually need those migrations to run.  For databases
-    // that already have the new schema (but whose schema_migrations may be missing entries
-    // because an older schema.sql didn't seed them), the backfill prevents the migration
-    // runner from re-applying migration 002, which drops tables without CASCADE and would
-    // otherwise fail against the new schema.
+    // If event_stage_games EXISTS  → new event model is in place; backfill any
+    //   schema_migrations gaps so the runner doesn't re-apply migration 002.
+    // If event_stage_games ABSENT  → migration 002 has not run; purge any falsely
+    //   backfilled schema_migrations entries (PR #60 side-effect) so the runner
+    //   can apply migration 002 and everything after it.
     const schemaVersionCheck = await pool.query<{ exists: boolean }>(`
       SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'event_stages' AND column_name = 'time_policy'
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'event_stage_games'
       ) AS exists
     `);
     if (schemaVersionCheck.rows[0]?.exists) {
       await backfillSchemaMigrations(pool, schemaPath);
     } else {
       console.log(
-        '[db-bootstrap] Pre-migration-002 schema detected; skipping backfill — migration runner will apply outstanding migrations.',
+        '[db-bootstrap] event_stage_games absent — migration 002 not yet applied; purging any false schema_migrations entries so the migration runner can apply outstanding migrations.',
       );
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          name TEXT PRIMARY KEY,
+          applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        DELETE FROM schema_migrations WHERE name >= '002_new_event_model.sql';
+      `);
     }
   } finally {
     await pool.end();

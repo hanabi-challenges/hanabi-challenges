@@ -378,7 +378,7 @@ describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
     expect(res.status).toBe(409);
   });
 
-  it('returns 409 when already completed', async () => {
+  it('is idempotent when already completed — returns 200 with the attempt', async () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
@@ -401,7 +401,9 @@ describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
       `/api/events/test-event/stages/${stage.id}/attempts/${attempt.id}/complete`,
     ).set('Authorization', `Bearer ${aliceToken}`);
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(attempt.id);
+    expect(res.body.completed).toBe(true);
   });
 });
 

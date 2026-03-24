@@ -134,7 +134,7 @@ describe('E2E QUEUED draw — 5 players with pre-arranged pair', () => {
       'Authorization',
       `Bearer ${ownerToken}`,
     );
-    expect(confirmRes.status).toBe(200);
+    expect(confirmRes.status).toBe(201);
 
     // 6. Verify teams created with QUEUED source
     const { rows: teams } = await pool.query<{

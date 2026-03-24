@@ -87,19 +87,19 @@ describe('POST /api/events/:slug/teams', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 409 when an invited user is not registered', async () => {
+  it('auto-registers an invited user who is not yet registered', async () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { userId: bobId } = await createUser('bob');
     await register(aliceToken);
-    // Bob is NOT registered
+    // Bob is NOT registered — team creation auto-registers him
 
     const res = await post('/api/events/test-event/teams')
       .set('Authorization', `Bearer ${aliceToken}`)
       .send({ invite_user_ids: [bobId] });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(201);
   });
 
   it('returns 409 when a member is already on a confirmed team', async () => {
@@ -443,8 +443,8 @@ describe('GET /api/events/:slug/teams/:teamId', () => {
 
     expect(res.status).toBe(200);
     // alice < bob alphabetically → "Team alice"
-    expect(res.body.display_name).toBe('Team alice');
-    expect(res.body.members).toHaveLength(2);
+    expect(res.body.team.display_name).toBe('Team alice');
+    expect(res.body.team.members).toHaveLength(2);
   });
 
   it('returns 404 for unknown team', async () => {

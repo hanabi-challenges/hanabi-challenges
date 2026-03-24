@@ -242,7 +242,7 @@ CREATE TABLE event_stages (
   visible                   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at                TIMESTAMPTZ DEFAULT NOW(),
   group_id                  INTEGER,  -- FK added below after event_stage_groups is created
-  UNIQUE (event_id, stage_index)
+  CONSTRAINT event_stages_event_id_stage_index_key UNIQUE (event_id, stage_index) DEFERRABLE INITIALLY IMMEDIATE
 );
 
 ------------------------------------------------------------
@@ -296,7 +296,7 @@ CREATE TABLE event_stage_games (
   max_score                INTEGER,
   last_replays_pulled_at   TIMESTAMPTZ,
   created_at               TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (stage_id, game_index)
+  CONSTRAINT uq_stage_game_index UNIQUE (stage_id, game_index) DEFERRABLE INITIALLY IMMEDIATE
 );
 
 ------------------------------------------------------------

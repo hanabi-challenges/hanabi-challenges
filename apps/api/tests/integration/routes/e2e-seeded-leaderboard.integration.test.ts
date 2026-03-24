@@ -52,7 +52,7 @@ async function createSeededStage(token: string, label: string) {
       label,
       mechanism: 'SEEDED_LEADERBOARD',
       participation_type: 'TEAM',
-      team_scope: 'STAGE',
+      team_scope: 'EVENT',
       attempt_policy: 'SINGLE',
       time_policy: 'WINDOW',
     });
@@ -70,13 +70,8 @@ async function register(token: string) {
   return post('/api/events/e2e-seeded/register').set('Authorization', `Bearer ${token}`);
 }
 
-async function createAndConfirmTeam(
-  aliceToken: string,
-  bobToken: string,
-  bobId: number,
-  stageId: number,
-) {
-  const res = await post(`/api/events/e2e-seeded/stages/${stageId}/teams`)
+async function createAndConfirmTeam(aliceToken: string, bobToken: string, bobId: number) {
+  const res = await post(`/api/events/e2e-seeded/teams`)
     .set('Authorization', `Bearer ${aliceToken}`)
     .send({ invite_user_ids: [bobId] });
   await post(`/api/events/e2e-seeded/teams/${res.body.id}/confirm`).set(
@@ -137,8 +132,8 @@ describe('E2E SEEDED_LEADERBOARD — two stages with ALL relationship', () => {
     await register(carolToken);
     await register(daveToken);
 
-    const team1 = await createAndConfirmTeam(aliceToken, bobToken, bobId, stage1.id);
-    const team2 = await createAndConfirmTeam(carolToken, daveToken, daveId, stage1.id);
+    const team1 = await createAndConfirmTeam(aliceToken, bobToken, bobId);
+    const team2 = await createAndConfirmTeam(carolToken, daveToken, daveId);
 
     // 4. Submit results for stage 1 — team2 scores higher
     await submitResult(aliceToken, stage1.id, game1.id, team1.id, 18);
@@ -157,17 +152,18 @@ describe('E2E SEEDED_LEADERBOARD — two stages with ALL relationship', () => {
     // 6. Query aggregate leaderboard
     const aggRes = await get('/api/events/e2e-seeded/leaderboard');
     expect(aggRes.status).toBe(200);
-    expect(aggRes.body.entries.length).toBeGreaterThanOrEqual(2);
-    const carolAgg = aggRes.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'carol',
-    );
-    const aliceAgg = aggRes.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'alice',
-    );
-    expect(carolAgg.total_score).toBe(22);
-    expect(carolAgg.rank).toBe(1);
-    expect(aliceAgg.total_score).toBe(18);
-    expect(aliceAgg.rank).toBeGreaterThan(1);
+    const aggEntries = aggRes.body.tracks[0].entries as Array<{
+      rank: number;
+      total_score: number;
+      team: { members: { display_name: string }[] };
+    }>;
+    expect(aggEntries.length).toBeGreaterThanOrEqual(2);
+    const carolAgg = aggEntries.find((e) => e.team.members.some((m) => m.display_name === 'carol'));
+    const aliceAgg = aggEntries.find((e) => e.team.members.some((m) => m.display_name === 'alice'));
+    expect(carolAgg!.total_score).toBe(22);
+    expect(carolAgg!.rank).toBe(1);
+    expect(aliceAgg!.total_score).toBe(18);
+    expect(aliceAgg!.rank).toBeGreaterThan(1);
 
     // 7. Create a RANK_POSITION award (1st place) and evaluate
     const awardRes = await post('/api/events/e2e-seeded/awards')
@@ -193,27 +189,30 @@ describe('E2E SEEDED_LEADERBOARD — two stages with ALL relationship', () => {
     expect(grantsRes.status).toBe(200);
     expect(grantsRes.body).toHaveLength(2);
 
-    // 8. Form teams for stage 2 (all teams from stage 1 qualify via ALL relationship)
-    const team3 = await createAndConfirmTeam(aliceToken, bobToken, bobId, stage2.id);
-    const team4 = await createAndConfirmTeam(carolToken, daveToken, daveId, stage2.id);
+    // 8. Stage 2 uses event-scoped teams — team1 and team2 are reused (ALL relationship)
 
     // 9. Submit results for stage 2 — team1 wins this time
-    await submitResult(aliceToken, stage2.id, game2.id, team3.id, 24);
-    await submitResult(carolToken, stage2.id, game2.id, team4.id, 20);
+    await submitResult(aliceToken, stage2.id, game2.id, team1.id, 24);
+    await submitResult(carolToken, stage2.id, game2.id, team2.id, 20);
 
     // 10. Verify updated aggregate
     const agg2Res = await get('/api/events/e2e-seeded/leaderboard');
     expect(agg2Res.status).toBe(200);
-    const carolAgg2 = agg2Res.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'carol',
+    const agg2Entries = agg2Res.body.tracks[0].entries as Array<{
+      total_score: number;
+      stage_scores: unknown[];
+      team: { members: { display_name: string }[] };
+    }>;
+    const carolAgg2 = agg2Entries.find((e) =>
+      e.team.members.some((m) => m.display_name === 'carol'),
     );
-    const aliceAgg2 = agg2Res.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'alice',
+    const aliceAgg2 = agg2Entries.find((e) =>
+      e.team.members.some((m) => m.display_name === 'alice'),
     );
     // alice: 18 + 24 = 42; carol: 22 + 20 = 42 (tied)
-    expect(aliceAgg2.total_score).toBe(42);
-    expect(carolAgg2.total_score).toBe(42);
+    expect(aliceAgg2!.total_score).toBe(42);
+    expect(carolAgg2!.total_score).toBe(42);
     // stage_scores should have 2 entries per player
-    expect(aliceAgg2.stage_scores).toHaveLength(2);
+    expect(aliceAgg2!.stage_scores).toHaveLength(2);
   });
 });

@@ -524,21 +524,21 @@ describe('GET /api/events/:slug/leaderboard', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns empty entries for event with no stages', async () => {
+  it('returns empty tracks for event with no stages', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/leaderboard');
     expect(res.status).toBe(200);
-    expect(res.body.entries).toEqual([]);
+    expect(res.body.tracks).toEqual([]);
   });
 
-  it('returns empty entries for event with stages but no results', async () => {
+  it('returns empty tracks for event with stages but no results', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(token);
     await createSeededStage(token);
     const res = await get('/api/events/test-event/leaderboard');
     expect(res.status).toBe(200);
-    expect(res.body.entries).toEqual([]);
+    expect(res.body.tracks).toEqual([]);
   });
 
   it('aggregates scores across a single SEEDED_LEADERBOARD stage (sum method)', async () => {
@@ -556,18 +556,19 @@ describe('GET /api/events/:slug/leaderboard', () => {
 
     const res = await get('/api/events/test-event/leaderboard');
     expect(res.status).toBe(200);
-    expect(res.body.entries).toHaveLength(2); // alice and bob both in the team
-    res.body.entries.forEach((e: { rank: number; total_score: number }) => {
-      expect(e.rank).toBe(1);
-      expect(e.total_score).toBe(22);
-    });
+    expect(Array.isArray(res.body.tracks)).toBe(true);
+    const track = res.body.tracks[0];
+    expect(track.entries).toHaveLength(1); // one team
+    expect(track.entries[0].rank).toBe(1);
+    expect(track.entries[0].total_score).toBe(22);
   });
 
-  it('ranks players by total score across multiple stages', async () => {
+  it('ranks teams by total score across multiple stages', async () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(ownerToken);
-    const stage1 = await createSeededStage(ownerToken, 'test-event');
-    const stage2 = await createSeededStage(ownerToken, 'test-event');
+    // Use team_scope: EVENT so the same team ID is used across both stages
+    const stage1 = await createSeededStage(ownerToken, 'test-event', { team_scope: 'EVENT' });
+    const stage2 = await createSeededStage(ownerToken, 'test-event', { team_scope: 'EVENT' });
     const game1 = await createGame(ownerToken, stage1.id, 1);
     const game2 = await createGame(ownerToken, stage2.id, 1);
 
@@ -580,30 +581,47 @@ describe('GET /api/events/:slug/leaderboard', () => {
     await register(carolToken);
     await register(daveToken);
 
-    const team1 = await createAndConfirmTeam(aliceToken, bobToken, bobId, stage1.id);
-    const team2 = await createAndConfirmTeam(carolToken, daveToken, daveId, stage1.id);
-    const team3 = await createAndConfirmTeam(aliceToken, bobToken, bobId, stage2.id);
-    const team4 = await createAndConfirmTeam(carolToken, daveToken, daveId, stage2.id);
+    // Event-scoped teams are shared across both stages
+    const t1Res = await post('/api/events/test-event/teams')
+      .set('Authorization', `Bearer ${aliceToken}`)
+      .send({ invite_user_ids: [bobId] });
+    await post(`/api/events/test-event/teams/${t1Res.body.id}/confirm`).set(
+      'Authorization',
+      `Bearer ${bobToken}`,
+    );
+    const team1 = t1Res.body as { id: number };
+
+    const t2Res = await post('/api/events/test-event/teams')
+      .set('Authorization', `Bearer ${carolToken}`)
+      .send({ invite_user_ids: [daveId] });
+    await post(`/api/events/test-event/teams/${t2Res.body.id}/confirm`).set(
+      'Authorization',
+      `Bearer ${daveToken}`,
+    );
+    const team2 = t2Res.body as { id: number };
 
     await submitResult(aliceToken, stage1.id, game1.id, team1.id, 20);
     await submitResult(carolToken, stage1.id, game1.id, team2.id, 15);
-    await submitResult(aliceToken, stage2.id, game2.id, team3.id, 25);
-    await submitResult(carolToken, stage2.id, game2.id, team4.id, 22);
+    await submitResult(aliceToken, stage2.id, game2.id, team1.id, 25);
+    await submitResult(carolToken, stage2.id, game2.id, team2.id, 22);
 
     const res = await get('/api/events/test-event/leaderboard');
     expect(res.status).toBe(200);
 
-    // alice+bob: 20 + 25 = 45; carol+dave: 15 + 22 = 37
-    const aliceEntry = res.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'alice',
+    // alice+bob team: 20 + 25 = 45; carol+dave team: 15 + 22 = 37
+    const track = res.body.tracks[0];
+    const aliceTeamEntry = track.entries.find(
+      (e: { team: { members: { display_name: string }[] } }) =>
+        e.team.members.some((m) => m.display_name === 'alice'),
     );
-    const carolEntry = res.body.entries.find(
-      (e: { user: { display_name: string } }) => e.user.display_name === 'carol',
+    const carolTeamEntry = track.entries.find(
+      (e: { team: { members: { display_name: string }[] } }) =>
+        e.team.members.some((m) => m.display_name === 'carol'),
     );
-    expect(aliceEntry.total_score).toBe(45);
-    expect(aliceEntry.rank).toBe(1);
-    expect(carolEntry.total_score).toBe(37);
-    expect(carolEntry.rank).toBeGreaterThan(1);
-    expect(aliceEntry.stage_scores).toHaveLength(2);
+    expect(aliceTeamEntry.total_score).toBe(45);
+    expect(aliceTeamEntry.rank).toBe(1);
+    expect(carolTeamEntry.total_score).toBe(37);
+    expect(carolTeamEntry.rank).toBeGreaterThan(1);
+    expect(aliceTeamEntry.stage_scores).toHaveLength(2);
   });
 });

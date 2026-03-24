@@ -149,7 +149,7 @@ describe('POST /stages/:stageId/teams', () => {
     expect(res.status).toBe(409);
   });
 
-  it('returns 409 when an invited member is not registered', async () => {
+  it('auto-registers an invited member who is not yet registered', async () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
@@ -157,13 +157,13 @@ describe('POST /stages/:stageId/teams', () => {
     const { token: aliceToken } = await createUser('alice');
     const { userId: bobId } = await createUser('bob');
     await register(aliceToken);
-    // Bob is NOT registered
+    // Bob is NOT registered — stage team creation auto-registers him
 
     const res = await post(`/api/events/test-event/stages/${stage.id}/teams`)
       .set('Authorization', `Bearer ${aliceToken}`)
       .send({ invite_user_ids: [bobId] });
 
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(201);
   });
 });
 

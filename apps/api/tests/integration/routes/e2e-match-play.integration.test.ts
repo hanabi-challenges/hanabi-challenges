@@ -131,12 +131,19 @@ describe('E2E MATCH_PLAY — single-elimination bracket with award evaluation', 
     const teamC = await createAndConfirmTeam(c1Token, c2Token, c2Id, stage.id);
     const teamD = await createAndConfirmTeam(d1Token, d2Token, d2Id, stage.id);
 
-    // 3. Run the bracket draw (inserts round-1 matches)
+    // 3. Register teams as bracket entries
+    for (const team of [teamA, teamB, teamC, teamD]) {
+      await post(`/api/events/e2e-match/stages/${stage.id}/entries`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ team_id: team.id });
+    }
+
+    // 4. Run the bracket draw (inserts round-1 matches)
     const drawRes = await post(`/api/events/e2e-match/stages/${stage.id}/bracket/draw`).set(
       'Authorization',
       `Bearer ${ownerToken}`,
     );
-    expect(drawRes.status).toBe(200);
+    expect(drawRes.status).toBe(201);
 
     // Verify 2 round-1 matches were created
     const standingsAfterDraw = await get(`/api/events/e2e-match/stages/${stage.id}/leaderboard`);
@@ -145,8 +152,8 @@ describe('E2E MATCH_PLAY — single-elimination bracket with award evaluation', 
 
     const round1Matches = standingsAfterDraw.body.rounds[0].matches as Array<{
       id: number;
-      team1_id: number;
-      team2_id: number;
+      team1: { id: number };
+      team2: { id: number };
     }>;
 
     // 4. Submit both round-1 results
@@ -155,18 +162,18 @@ describe('E2E MATCH_PLAY — single-elimination bracket with award evaluation', 
     const match2 = round1Matches[1];
 
     // Pick winners that include teamA and teamB so we have known finalists
-    const match1Winner = [teamA.id, teamB.id].includes(match1.team1_id)
-      ? match1.team1_id
-      : match1.team2_id;
+    const match1Winner = [teamA.id, teamB.id].includes(match1.team1.id)
+      ? match1.team1.id
+      : match1.team2.id;
     const match2Winner =
       match1Winner === teamA.id
         ? // teamA won match1, so winner of match2 is whoever faces in match2 that we want as finalist
-          [teamB.id].includes(match2.team1_id)
-          ? match2.team1_id
-          : match2.team2_id
-        : [teamA.id].includes(match2.team1_id)
-          ? match2.team1_id
-          : match2.team2_id;
+          [teamB.id].includes(match2.team1.id)
+          ? match2.team1.id
+          : match2.team2.id
+        : [teamA.id].includes(match2.team1.id)
+          ? match2.team1.id
+          : match2.team2.id;
 
     await completeMatchWithWinner(ownerToken, stage.id, match1.id, match1Winner);
     await completeMatchWithWinner(ownerToken, stage.id, match2.id, match2Winner);
@@ -184,11 +191,11 @@ describe('E2E MATCH_PLAY — single-elimination bracket with award evaluation', 
 
     const finalMatch = standingsAfterAdvance.body.rounds[1].matches[0] as {
       id: number;
-      team1_id: number;
-      team2_id: number;
+      team1: { id: number };
+      team2: { id: number };
     };
-    expect([match1Winner, match2Winner]).toContain(finalMatch.team1_id);
-    expect([match1Winner, match2Winner]).toContain(finalMatch.team2_id);
+    expect([match1Winner, match2Winner]).toContain(finalMatch.team1.id);
+    expect([match1Winner, match2Winner]).toContain(finalMatch.team2.id);
 
     // 6. Submit final match — match1Winner wins the final
     await completeMatchWithWinner(ownerToken, stage.id, finalMatch.id, match1Winner);

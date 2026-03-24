@@ -218,8 +218,11 @@ router.post(
     if (result.ok === false) {
       const reason = (result as { ok: false; reason: string }).reason;
       if (reason === 'not_found') return res.status(404).json({ error: 'Attempt not found' });
-      if (reason === 'already_completed')
-        return res.status(409).json({ error: 'Attempt is already completed' });
+      if (reason === 'already_completed') {
+        const existing = await getAttemptDetail(attemptId, ctx.stageId);
+        if (!existing) return res.status(404).json({ error: 'Attempt not found' });
+        return res.json(existing);
+      }
       if (reason === 'missing_results')
         return res
           .status(409)

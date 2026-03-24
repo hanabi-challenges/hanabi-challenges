@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { pool } from '../../../src/config/db';
 import { loginOrCreateUser } from '../../../src/modules/auth/auth.service';
-import { get, post, put, del } from '../../support/api';
+import { get, post, put, del, patch } from '../../support/api';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,38 +73,14 @@ describe('GET /stages/:stageId/games', () => {
     await createEvent(token);
     const stage = await createStage(token);
 
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 1 });
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0 });
+    // Create two slots in sequence — auto-assigned game_index 0 and 1
+    await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
+    await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
 
     const res = await get(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body[0].game_index).toBe(0);
     expect(res.body[1].game_index).toBe(1);
-  });
-
-  it('filters by team_size when query param provided', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const stage = await createStage(token);
-
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 2 });
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 3 });
-
-    const res = await get(`${GAMES_BASE(stage.id)}?team_size=2`).set(
-      'Authorization',
-      `Bearer ${token}`,
-    );
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].team_size).toBe(2);
   });
 
   it('returns 404 for unknown stage', async () => {
@@ -124,127 +100,92 @@ describe('GET /stages/:stageId/games', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /stages/:stageId/games', () => {
-  it('creates a game slot', async () => {
+  it('creates a game slot with auto-assigned game_index', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
     const res = await post(GAMES_BASE(stage.id))
       .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, seed_payload: 'abc123', max_score: 25 });
+      .send({ seed_payload: 'abc123' });
 
     expect(res.status).toBe(201);
     expect(res.body.game_index).toBe(0);
     expect(res.body.seed_payload).toBe('abc123');
-    expect(res.body.max_score).toBe(25);
-    expect(res.body.team_size).toBeNull();
+    expect(res.body.effective_max_score).toBe(25); // No Variant default
   });
 
-  it('creates separate slots for different team_sizes at same game_index', async () => {
+  it('creates multiple slots with sequential game_index', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
-    const r1 = await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 2 });
-    const r2 = await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 3 });
+    const r1 = await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
+    const r2 = await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
 
     expect(r1.status).toBe(201);
     expect(r2.status).toBe(201);
-  });
-
-  it('returns 409 for duplicate (same game_index and team_size)', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const stage = await createStage(token);
-
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 2 });
-
-    const res = await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0, team_size: 2 });
-
-    expect(res.status).toBe(409);
-  });
-
-  it('returns 400 for missing game_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const stage = await createStage(token);
-
-    const res = await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ seed_payload: 'x' });
-
-    expect(res.status).toBe(400);
+    expect(r1.body.game_index).toBe(0);
+    expect(r2.body.game_index).toBe(1);
   });
 
   it('returns 403 for non-admin', async () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createEvent(ownerToken);
     const stage = await createStage(ownerToken);
-    const { token: userToken } = await createUser('other', 'USER');
 
+    const { token: userToken } = await createUser('user');
     const res = await post(GAMES_BASE(stage.id))
       .set('Authorization', `Bearer ${userToken}`)
-      .send({ game_index: 0 });
+      .send({});
 
     expect(res.status).toBe(403);
   });
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/events/:slug/stages/:stageId/games/batch
+// POST /api/events/:slug/stages/:stageId/games/bulk
 // ---------------------------------------------------------------------------
 
-describe('POST /stages/:stageId/games/batch', () => {
+describe('POST /stages/:stageId/games/bulk', () => {
   it('creates multiple slots at once', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
-    const res = await post(`${GAMES_BASE(stage.id)}/batch`)
+    const res = await post(`${GAMES_BASE(stage.id)}/bulk`)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        slots: [{ game_index: 0 }, { game_index: 1 }, { game_index: 2, seed_payload: 'seed3' }],
-      });
+      .send({ count: 3 });
 
     expect(res.status).toBe(201);
-    expect(res.body.created).toHaveLength(3);
-    expect(res.body.duplicates).toBe(0);
+    expect(res.body).toHaveLength(3);
+    expect(res.body[0].game_index).toBe(0);
+    expect(res.body[1].game_index).toBe(1);
+    expect(res.body[2].game_index).toBe(2);
   });
 
-  it('reports duplicates without failing entirely', async () => {
+  it('creates multiple slots with seeds', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
-    await post(GAMES_BASE(stage.id))
+    const res = await post(`${GAMES_BASE(stage.id)}/bulk`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0 });
-
-    const res = await post(`${GAMES_BASE(stage.id)}/batch`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ slots: [{ game_index: 0 }, { game_index: 1 }] });
+      .send({ count: 2, seeds: ['seed-a', 'seed-b'] });
 
     expect(res.status).toBe(201);
-    expect(res.body.created).toHaveLength(1);
-    expect(res.body.duplicates).toBe(1);
+    expect(res.body[0].seed_payload).toBe('seed-a');
+    expect(res.body[1].seed_payload).toBe('seed-b');
   });
 
-  it('returns 400 for empty slots array', async () => {
+  it('returns 400 for invalid count', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
-    const res = await post(`${GAMES_BASE(stage.id)}/batch`)
+    const res = await post(`${GAMES_BASE(stage.id)}/bulk`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ slots: [] });
+      .send({ count: 0 });
 
     expect(res.status).toBe(400);
   });
@@ -255,22 +196,22 @@ describe('POST /stages/:stageId/games/batch', () => {
 // ---------------------------------------------------------------------------
 
 describe('PUT /stages/:stageId/games/:gameId', () => {
-  it('updates variant_id, seed_payload, and max_score', async () => {
+  it('updates seed_payload and nickname', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const stage = await createStage(token);
 
     const created = await post(GAMES_BASE(stage.id))
       .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0 });
+      .send({});
 
     const res = await put(`${GAMES_BASE(stage.id)}/${created.body.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ seed_payload: 'updated-seed', max_score: 30 });
+      .send({ seed_payload: 'updated-seed', nickname: 'Game 1' });
 
     expect(res.status).toBe(200);
     expect(res.body.seed_payload).toBe('updated-seed');
-    expect(res.body.max_score).toBe(30);
+    expect(res.body.nickname).toBe('Game 1');
   });
 
   it('returns 404 for unknown game slot', async () => {
@@ -298,7 +239,7 @@ describe('DELETE /stages/:stageId/games/:gameId', () => {
 
     const created = await post(GAMES_BASE(stage.id))
       .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0 });
+      .send({});
 
     const res = await del(`${GAMES_BASE(stage.id)}/${created.body.id}`).set(
       'Authorization',
@@ -320,11 +261,34 @@ describe('DELETE /stages/:stageId/games/:gameId', () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/events/:slug/stages/:stageId/games/propagate
+// PATCH /api/events/:slug/stages/:stageId/games/:gameId/reorder
 // ---------------------------------------------------------------------------
 
-describe('POST /stages/:stageId/games/propagate', () => {
-  it('applies seed formula to game slots', async () => {
+describe('PATCH /stages/:stageId/games/:gameId/reorder', () => {
+  it('reorders a game slot', async () => {
+    const { token } = await createUser('owner', 'ADMIN');
+    await createEvent(token);
+    const stage = await createStage(token);
+
+    const g1 = await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
+    await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
+
+    // Move game 0 to position 1
+    const res = await patch(`${GAMES_BASE(stage.id)}/${g1.body.id}/reorder`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ game_index: 1 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.game_index).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// effective_seed from stage/event formula
+// ---------------------------------------------------------------------------
+
+describe('effective_seed from stage/event formula', () => {
+  it('resolves seed from event-level formula', async () => {
     const { token } = await createUser('owner', 'ADMIN');
 
     // Create event with a seed formula
@@ -350,24 +314,13 @@ describe('POST /stages/:stageId/games/propagate', () => {
       });
     const stage = stageRes.body as { id: number };
 
-    // Create slots with no seed_payload
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 0 });
-    await post(GAMES_BASE(stage.id))
-      .set('Authorization', `Bearer ${token}`)
-      .send({ game_index: 1 });
+    // Create a slot with no explicit seed_payload
+    await post(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`).send({});
 
-    const res = await post(`${GAMES_BASE(stage.id)}/propagate`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({});
-
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-
-    // Slots should now have seed_payload set
     const listRes = await get(GAMES_BASE(stage.id)).set('Authorization', `Bearer ${token}`);
-    expect(listRes.body[0].seed_payload).not.toBeNull();
-    expect(listRes.body[1].seed_payload).not.toBeNull();
+    expect(listRes.status).toBe(200);
+    // effective_seed is resolved from the formula
+    expect(listRes.body[0].effective_seed).not.toBeNull();
+    expect(listRes.body[0].effective_seed).toMatch(/^\d+-\d+-\d+$/);
   });
 });

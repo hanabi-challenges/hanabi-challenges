@@ -53,15 +53,15 @@ beforeEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/events/:slug/stage-relationships
+// GET /api/events/:slug/transitions
 // ---------------------------------------------------------------------------
 
-describe('GET /api/events/:slug/stage-relationships', () => {
-  it('returns empty array when no relationships exist', async () => {
+describe('GET /api/events/:slug/transitions', () => {
+  it('returns empty array when no transitions exist', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
 
-    const res = await get('/api/events/test-event/stage-relationships').set(
+    const res = await get('/api/events/test-event/transitions').set(
       'Authorization',
       `Bearer ${token}`,
     );
@@ -70,25 +70,24 @@ describe('GET /api/events/:slug/stage-relationships', () => {
     expect(res.body).toEqual([]);
   });
 
-  it('returns existing relationships', async () => {
+  it('returns existing transitions', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Stage 1');
-    const s2 = await createStage(token, 'test-event', 'Stage 2');
 
-    await post('/api/events/test-event/stage-relationships')
+    await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
+      .send({ filter_type: 'ALL' });
 
-    const res = await get('/api/events/test-event/stage-relationships').set(
+    const res = await get('/api/events/test-event/transitions').set(
       'Authorization',
       `Bearer ${token}`,
     );
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
-    expect(res.body[0].source_stage_id).toBe(s1.id);
-    expect(res.body[0].target_stage_id).toBe(s2.id);
+    expect(res.body[0].after_stage_id).toBe(s1.id);
+    expect(res.body[0].filter_type).toBe('ALL');
   });
 
   it('returns 403 for non-admin', async () => {
@@ -96,7 +95,7 @@ describe('GET /api/events/:slug/stage-relationships', () => {
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('other', 'USER');
 
-    const res = await get('/api/events/test-event/stage-relationships').set(
+    const res = await get('/api/events/test-event/transitions').set(
       'Authorization',
       `Bearer ${userToken}`,
     );
@@ -106,47 +105,36 @@ describe('GET /api/events/:slug/stage-relationships', () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/events/:slug/stage-relationships
+// PUT /api/events/:slug/transitions/after-stage/:stageId
 // ---------------------------------------------------------------------------
 
-describe('POST /api/events/:slug/stage-relationships', () => {
-  it('creates a relationship with filter_type ALL', async () => {
+describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
+  it('creates a transition with filter_type ALL', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        source_stage_id: s1.id,
-        target_stage_id: s2.id,
-        filter_type: 'ALL',
-        seeding_method: 'RANKED',
-      });
+      .send({ filter_type: 'ALL', seeding_method: 'RANKED' });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(res.body.filter_type).toBe('ALL');
     expect(res.body.seeding_method).toBe('RANKED');
+    expect(res.body.after_stage_id).toBe(s1.id);
     expect(res.body.filter_value).toBeNull();
   });
 
-  it('creates a relationship with filter_type TOP_N', async () => {
+  it('creates a transition with filter_type TOP_N', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        source_stage_id: s1.id,
-        target_stage_id: s2.id,
-        filter_type: 'TOP_N',
-        filter_value: 8,
-      });
+      .send({ filter_type: 'TOP_N', filter_value: 8 });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(res.body.filter_type).toBe('TOP_N');
     expect(Number(res.body.filter_value)).toBe(8);
   });
@@ -155,11 +143,10 @@ describe('POST /api/events/:slug/stage-relationships', () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'TOP_N' });
+      .send({ filter_type: 'TOP_N' });
 
     expect(res.status).toBe(400);
   });
@@ -168,88 +155,36 @@ describe('POST /api/events/:slug/stage-relationships', () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'THRESHOLD' });
+      .send({ filter_type: 'THRESHOLD' });
 
     expect(res.status).toBe(400);
-  });
-
-  it('returns 400 for cross-event stages', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token, 'event-a');
-    await createEvent(token, 'event-b');
-    const s1 = await createStage(token, 'event-a', 'Stage A');
-    const s2 = await createStage(token, 'event-b', 'Stage B');
-
-    const res = await post('/api/events/event-a/stage-relationships')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 409 for duplicate relationship', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
-
-    await post('/api/events/test-event/stage-relationships')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
-
-    const res = await post('/api/events/test-event/stage-relationships')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
-
-    expect(res.status).toBe(409);
   });
 
   it('returns 400 for invalid filter_type', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'INVALID' });
+      .send({ filter_type: 'INVALID' });
 
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when source and target are the same stage', async () => {
+  it('upserts an existing transition', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
-    const res = await post('/api/events/test-event/stage-relationships')
+    await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s1.id, filter_type: 'ALL' });
+      .send({ filter_type: 'ALL' });
 
-    expect(res.status).toBe(400);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PUT /api/events/:slug/stage-relationships/:id
-// ---------------------------------------------------------------------------
-
-describe('PUT /api/events/:slug/stage-relationships/:id', () => {
-  it('updates filter_type and seeding_method', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
-
-    const created = await post('/api/events/test-event/stage-relationships')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
-
-    const res = await put(`/api/events/test-event/stage-relationships/${created.body.id}`)
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
       .send({ filter_type: 'TOP_N', filter_value: 4, seeding_method: 'RANDOM' });
 
@@ -257,60 +192,61 @@ describe('PUT /api/events/:slug/stage-relationships/:id', () => {
     expect(res.body.filter_type).toBe('TOP_N');
     expect(Number(res.body.filter_value)).toBe(4);
     expect(res.body.seeding_method).toBe('RANDOM');
+
+    const listRes = await get('/api/events/test-event/transitions').set(
+      'Authorization',
+      `Bearer ${token}`,
+    );
+    expect(listRes.body).toHaveLength(1);
   });
 
-  it('returns 400 when changing to TOP_N without filter_value', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
-    await createEvent(token);
-    const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
-
-    const created = await post('/api/events/test-event/stage-relationships')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
-
-    const res = await put(`/api/events/test-event/stage-relationships/${created.body.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({ filter_type: 'TOP_N' });
-
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 404 for unknown id', async () => {
+  it('returns 404 for unknown stage', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
 
-    const res = await put('/api/events/test-event/stage-relationships/9999')
+    const res = await put('/api/events/test-event/transitions/after-stage/9999')
       .set('Authorization', `Bearer ${token}`)
-      .send({ seeding_method: 'RANDOM' });
+      .send({ filter_type: 'ALL' });
 
     expect(res.status).toBe(404);
+  });
+
+  it('returns 403 for non-admin', async () => {
+    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    await createEvent(ownerToken);
+    const s1 = await createStage(ownerToken, 'test-event', 'Qual');
+    const { token: userToken } = await createUser('other', 'USER');
+
+    const res = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ filter_type: 'ALL' });
+
+    expect(res.status).toBe(403);
   });
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /api/events/:slug/stage-relationships/:id
+// DELETE /api/events/:slug/transitions/:id
 // ---------------------------------------------------------------------------
 
-describe('DELETE /api/events/:slug/stage-relationships/:id', () => {
-  it('deletes a relationship', async () => {
+describe('DELETE /api/events/:slug/transitions/:id', () => {
+  it('deletes a transition', async () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
-    const s2 = await createStage(token, 'test-event', 'Finals');
 
-    const created = await post('/api/events/test-event/stage-relationships')
+    const created = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
+      .send({ filter_type: 'ALL' });
 
-    const res = await del(`/api/events/test-event/stage-relationships/${created.body.id}`).set(
+    const res = await del(`/api/events/test-event/transitions/${created.body.id}`).set(
       'Authorization',
       `Bearer ${token}`,
     );
 
     expect(res.status).toBe(204);
 
-    const listRes = await get('/api/events/test-event/stage-relationships').set(
+    const listRes = await get('/api/events/test-event/transitions').set(
       'Authorization',
       `Bearer ${token}`,
     );
@@ -321,7 +257,7 @@ describe('DELETE /api/events/:slug/stage-relationships/:id', () => {
     const { token } = await createUser('owner', 'ADMIN');
     await createEvent(token);
 
-    const res = await del('/api/events/test-event/stage-relationships/9999').set(
+    const res = await del('/api/events/test-event/transitions/9999').set(
       'Authorization',
       `Bearer ${token}`,
     );
@@ -333,14 +269,13 @@ describe('DELETE /api/events/:slug/stage-relationships/:id', () => {
     const { token: ownerToken } = await createUser('owner', 'ADMIN');
     await createEvent(ownerToken);
     const s1 = await createStage(ownerToken, 'test-event', 'Qual');
-    const s2 = await createStage(ownerToken, 'test-event', 'Finals');
 
-    const created = await post('/api/events/test-event/stage-relationships')
+    const created = await put(`/api/events/test-event/transitions/after-stage/${s1.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ source_stage_id: s1.id, target_stage_id: s2.id, filter_type: 'ALL' });
+      .send({ filter_type: 'ALL' });
 
     const { token: userToken } = await createUser('other', 'USER');
-    const res = await del(`/api/events/test-event/stage-relationships/${created.body.id}`).set(
+    const res = await del(`/api/events/test-event/transitions/${created.body.id}`).set(
       'Authorization',
       `Bearer ${userToken}`,
     );

@@ -69,10 +69,28 @@ async function main(): Promise<void> {
       console.log('[db-bootstrap] Schema initialization complete.');
     }
 
-    // Always backfill schema_migrations so that databases initialized with older schema.sql
-    // (which may not have seeded the full migration list) never re-apply already-reflected
-    // migrations (e.g. migration 002 which drops tables without CASCADE).
-    await backfillSchemaMigrations(pool, schemaPath);
+    // Backfill schema_migrations only when the DB already has the new event model schema
+    // (event_stages.time_policy is the sentinel column introduced by migration 002).
+    //
+    // This prevents incorrectly marking migrations as applied on databases that still have
+    // the pre-migration-002 schema and actually need those migrations to run.  For databases
+    // that already have the new schema (but whose schema_migrations may be missing entries
+    // because an older schema.sql didn't seed them), the backfill prevents the migration
+    // runner from re-applying migration 002, which drops tables without CASCADE and would
+    // otherwise fail against the new schema.
+    const schemaVersionCheck = await pool.query<{ exists: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'event_stages' AND column_name = 'time_policy'
+      ) AS exists
+    `);
+    if (schemaVersionCheck.rows[0]?.exists) {
+      await backfillSchemaMigrations(pool, schemaPath);
+    } else {
+      console.log(
+        '[db-bootstrap] Pre-migration-002 schema detected; skipping backfill — migration runner will apply outstanding migrations.',
+      );
+    }
   } finally {
     await pool.end();
   }

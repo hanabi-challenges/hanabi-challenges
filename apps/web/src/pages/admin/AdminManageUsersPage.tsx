@@ -19,7 +19,7 @@ type AdminRole = 'USER' | 'ADMIN' | 'SUPERADMIN';
 
 export function AdminManageUsersPage() {
   const { user, token } = useAuth();
-  const { users, error } = useUsers();
+  const { users, error, refetch } = useUsers();
 
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -63,6 +63,7 @@ export function AdminManageUsersPage() {
       await postJsonAuth(`/users/${targetUser.id}/role`, token, { role: nextRole });
       setStatusMessage(`Updated ${targetUser.display_name} to ${nextRole}.`);
       setRoleOverrides((prev) => ({ ...prev, [targetUser.id]: nextRole }));
+      refetch();
     } catch (err) {
       if (err instanceof ApiError) {
         setStatusError((err.body as { error?: string })?.error ?? 'Failed to update role');
@@ -72,10 +73,6 @@ export function AdminManageUsersPage() {
     } finally {
       setUpdatingById((prev) => ({ ...prev, [targetUser.id]: false }));
     }
-  }
-
-  if (!user || user.role !== 'SUPERADMIN') {
-    return null;
   }
 
   return (

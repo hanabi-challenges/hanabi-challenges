@@ -1,0 +1,3 @@
+[submodule "vendor/hanabi-live"]
+	path = vendor/hanabi-live
+	url = https://github.com/alexvornsand/hanabi-live.git

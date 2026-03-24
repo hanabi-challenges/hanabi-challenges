@@ -132,8 +132,9 @@ export function UserEventsPage() {
               long_description: event.long_description,
               starts_at: event.starts_at,
               ends_at: event.ends_at,
-              event_format: event.event_format,
-              event_status: event.event_status,
+              registration_opens_at: event.registration_opens_at,
+              registration_cutoff: event.registration_cutoff,
+              allow_late_registration: event.allow_late_registration,
             }}
             footer={
               <Stack gap={2}>

@@ -12,6 +12,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -24,6 +26,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build vendor (hanabi-live game engine)
+        run: pnpm run build:vendor
 
       - name: Install Playwright browser
         run: pnpm run test:e2e:install

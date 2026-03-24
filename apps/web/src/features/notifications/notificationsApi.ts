@@ -3,7 +3,7 @@ import { getJsonAuth, postJsonAuth } from '../../lib/api';
 export type UserNotification = {
   id: number;
   user_id: number;
-  kind: 'badge_awarded';
+  kind: 'badge_awarded' | 'award_granted';
   title: string;
   body: string;
   payload_json: {
@@ -13,6 +13,8 @@ export type UserNotification = {
     badge_name?: string;
     badge_icon?: string;
     badge_rank?: string;
+    award_id?: number;
+    award_name?: string;
     [key: string]: unknown;
   };
   read_at: string | null;

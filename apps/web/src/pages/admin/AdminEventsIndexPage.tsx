@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   CoreAlert as Alert,
+  CoreBadge as Badge,
   CoreButton as Button,
   CoreGroup as Group,
   CoreModal as Modal,
@@ -14,9 +15,39 @@ import { Link } from '../../mantine';
 import { useMemo, useState } from 'react';
 import { useEvents } from '../../hooks/useEvents';
 import { useAuth } from '../../context/AuthContext';
-import { ApiError, deleteJsonAuth, putJsonAuth } from '../../lib/api';
+import { ApiError, deleteJsonAuth, postJsonAuth, putJsonAuth } from '../../lib/api';
 import { MaterialIcon } from '../../design-system';
 import { AdminEntityCard } from '../../features/admin/components';
+
+function statusColor(status: string) {
+  switch (status) {
+    case 'REGISTRATION_OPEN':
+      return 'green';
+    case 'IN_PROGRESS':
+      return 'blue';
+    case 'COMPLETE':
+      return 'gray';
+    case 'UPCOMING':
+      return 'yellow';
+    default:
+      return 'gray';
+  }
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case 'REGISTRATION_OPEN':
+      return 'Registration Open';
+    case 'IN_PROGRESS':
+      return 'In Progress';
+    case 'COMPLETE':
+      return 'Complete';
+    case 'UPCOMING':
+      return 'Upcoming';
+    default:
+      return status;
+  }
+}
 
 export function AdminEventsIndexPage() {
   const navigate = useNavigate();
@@ -49,6 +80,29 @@ export function AdminEventsIndexPage() {
         setStatusError((err.body as { error?: string })?.error ?? 'Failed to update publish state');
       } else {
         setStatusError('Failed to update publish state');
+      }
+    } finally {
+      setBusyBySlug((prev) => ({ ...prev, [slug]: false }));
+    }
+  }
+
+  async function cloneEvent(slug: string) {
+    if (!token) return;
+    setStatusError(null);
+    setBusyBySlug((prev) => ({ ...prev, [slug]: true }));
+    try {
+      const clone = await postJsonAuth<{ slug: string }>(
+        `/events/${encodeURIComponent(slug)}/clone`,
+        token,
+        {},
+      );
+      refetch();
+      navigate(`/admin/events/${clone.slug}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setStatusError((err.body as { error?: string })?.error ?? 'Failed to clone event');
+      } else {
+        setStatusError('Failed to clone event');
       }
     } finally {
       setBusyBySlug((prev) => ({ ...prev, [slug]: false }));
@@ -108,11 +162,30 @@ export function AdminEventsIndexPage() {
         <Stack gap="sm">
           {sortedEvents.map((event) => {
             const busy = Boolean(busyBySlug[event.slug]);
+            const teamSizesLabel = event.allowed_team_sizes?.length
+              ? event.allowed_team_sizes.map((s) => `${s}p`).join(', ')
+              : null;
             return (
               <AdminEntityCard
                 key={event.id}
                 title={event.name}
-                subtitle={event.short_description}
+                href={`/admin/events/${event.slug}`}
+                subtitle={
+                  teamSizesLabel
+                    ? `${teamSizesLabel} · ${event.stage_count ?? 0} stage${(event.stage_count ?? 0) === 1 ? '' : 's'}`
+                    : undefined
+                }
+                leftSlot={
+                  event.published ? (
+                    <Badge color={statusColor(event.status)} variant="light" size="sm">
+                      {statusLabel(event.status)}
+                    </Badge>
+                  ) : (
+                    <Badge color="orange" variant="light" size="sm">
+                      Draft
+                    </Badge>
+                  )
+                }
                 actions={
                   <Group gap={4} wrap="nowrap">
                     <Tooltip label={event.published ? 'Unpublish' : 'Publish'}>
@@ -124,6 +197,18 @@ export function AdminEventsIndexPage() {
                         disabled={busy}
                       >
                         <MaterialIcon name={event.published ? 'visibility_off' : 'visibility'} />
+                      </ActionIcon>
+                    </Tooltip>
+
+                    <Tooltip label="Clone">
+                      <ActionIcon
+                        variant="subtle"
+                        color="blue"
+                        aria-label="Clone event"
+                        onClick={() => void cloneEvent(event.slug)}
+                        disabled={busy}
+                      >
+                        <MaterialIcon name="content_copy" />
                       </ActionIcon>
                     </Tooltip>
 

@@ -26,14 +26,23 @@ import { AdminEventsIndexPage } from '../pages/admin/AdminEventsIndexPage';
 import { AdminBadgesIndexPage } from '../pages/admin/AdminBadgesIndexPage';
 import { AdminBadgeDesignerPage } from '../pages/admin/AdminBadgeDesignerPage';
 import { AdminManageUsersPage } from '../pages/admin/AdminManageUsersPage';
+import { AdminEventOverviewPage } from '../pages/admin/AdminEventOverviewPage';
+import { AdminEventStagesPage } from '../pages/admin/AdminEventStagesPage';
+import { AdminEventAwardsPage } from '../pages/admin/AdminEventAwardsPage';
+import { AdminStageEditorPage } from '../pages/admin/AdminStageEditorPage';
+import { AdminStageDrawPage } from '../pages/admin/AdminStageDrawPage';
+import { AdminStageBracketPage } from '../pages/admin/AdminStageBracketPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { EventStatsPage } from '../pages/EventStatsPage';
+import { StageDetailPage } from '../pages/StageDetailPage';
+import { EventTeamResultsPage } from '../pages/EventTeamResultsPage';
 import { SessionLivePage } from '../pages/SessionLivePage';
 import { SessionTeamPage } from '../pages/SessionTeamPage';
 import { RequireAdmin } from '../features/admin/guards/RequireAdmin';
 import { RequireSuperAdmin } from '../features/admin/guards/RequireSuperAdmin';
 import { AdminLayoutScreen } from '../features/admin/screens/AdminLayoutScreen';
 import { AdminEventsLayoutScreen } from '../features/admin/screens/events/AdminEventsLayoutScreen';
+import { AdminEventLayoutScreen } from '../features/admin/screens/events/AdminEventLayoutScreen';
 import { AdminContentLayoutScreen } from '../features/admin/screens/content/AdminContentLayoutScreen';
 import { AdminContentHomeScreen } from '../features/admin/screens/content/AdminContentHomeScreen';
 import { AdminContentEditorScreen } from '../features/admin/screens/content/AdminContentEditorScreen';
@@ -59,7 +68,17 @@ function AdminRoutes() {
       <Route path="events" element={<AdminEventsLayoutScreen />}>
         <Route index element={<AdminEventsIndexPage />} />
         <Route path="create" element={<AdminCreateEventPage />} />
+        <Route path="new" element={<AdminCreateEventPage />} />
         <Route path=":slug/edit" element={<AdminCreateEventPage />} />
+        <Route path=":slug" element={<AdminEventLayoutScreen />}>
+          <Route index element={<AdminEventOverviewPage />} />
+          <Route path="stages" element={<AdminEventStagesPage />} />
+          <Route path="stages/new" element={<AdminStageEditorPage />} />
+          <Route path="stages/:stageId/edit" element={<AdminStageEditorPage />} />
+          <Route path="stages/:stageId/draw" element={<AdminStageDrawPage />} />
+          <Route path="stages/:stageId/bracket" element={<AdminStageBracketPage />} />
+          <Route path="awards" element={<AdminEventAwardsPage />} />
+        </Route>
       </Route>
 
       <Route path="badges">
@@ -125,7 +144,9 @@ export function AppRoutes() {
             <Route path=":slug" element={<EventDetailPage />} />
             <Route path=":slug/:teamSize" element={<EventDetailPage />} />
             <Route path=":slug/teams/:teamId" element={<TeamPage />} />
+            <Route path=":slug/event-teams/:teamId" element={<EventTeamResultsPage />} />
             <Route path=":slug/stats" element={<EventStatsPage />} />
+            <Route path=":slug/stages/:stageId" element={<StageDetailPage />} />
             <Route
               path=":slug/sessions/:sessionId/team/:roundId/:teamNo"
               element={<SessionTeamPage />}

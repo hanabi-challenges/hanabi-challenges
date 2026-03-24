@@ -5,7 +5,7 @@ let notificationsSchemaEnsured = false;
 export type UserNotification = {
   id: number;
   user_id: number;
-  kind: 'badge_awarded';
+  kind: 'badge_awarded' | 'award_granted';
   title: string;
   body: string;
   payload_json: Record<string, unknown>;
@@ -20,7 +20,7 @@ export async function ensureNotificationsSchema(): Promise<void> {
     CREATE TABLE IF NOT EXISTS user_notifications (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN ('badge_awarded')),
+      kind TEXT NOT NULL CHECK (kind IN ('badge_awarded', 'award_granted')),
       title TEXT NOT NULL,
       body TEXT NOT NULL,
       payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -188,4 +188,35 @@ export async function markAllNotificationsRead(userId: number): Promise<number> 
     [userId],
   );
   return result.rowCount ?? 0;
+}
+
+export async function createAwardGrantedNotification(
+  userId: number,
+  awardName: string,
+  eventName: string,
+  eventSlug: string,
+  awardId: number,
+): Promise<void> {
+  await ensureNotificationsSchema();
+  const result = await pool.query<{ id: number }>(
+    `INSERT INTO user_notifications (user_id, kind, title, body, payload_json)
+     VALUES ($1, 'award_granted', 'Award granted', $2, $3)
+     RETURNING id`,
+    [
+      userId,
+      `You earned "${awardName}" in ${eventName}.`,
+      JSON.stringify({
+        award_id: awardId,
+        event_slug: eventSlug,
+        event_name: eventName,
+        award_name: awardName,
+      }),
+    ],
+  );
+  const notificationId = result.rows[0]?.id;
+  if (notificationId) {
+    await pool.query(`SELECT pg_notify('user_notification', $1)`, [
+      JSON.stringify({ user_id: userId, notification_id: notificationId, kind: 'award_granted' }),
+    ]);
+  }
 }

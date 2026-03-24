@@ -17,12 +17,13 @@ type State = {
 
 export function useUsers() {
   const [state, setState] = useState<State>({ users: [], loading: true, error: null });
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchUsers() {
-      setState({ users: [], loading: true, error: null });
+      setState((prev) => ({ ...prev, loading: true, error: null }));
       try {
         const data = await getJson<UserSummary[]>('/users');
         if (!cancelled) {
@@ -31,7 +32,7 @@ export function useUsers() {
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof ApiError ? 'Failed to load users' : 'Unexpected error';
-        setState({ users: [], loading: false, error: msg });
+        setState((prev) => ({ ...prev, users: prev.users, loading: false, error: msg }));
       }
     }
 
@@ -39,7 +40,9 @@ export function useUsers() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
 
-  return state;
+  const refetch = () => setVersion((v) => v + 1);
+
+  return { ...state, refetch };
 }

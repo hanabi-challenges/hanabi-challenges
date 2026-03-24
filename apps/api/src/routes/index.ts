@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import authRouter from '../modules/auth/auth.routes';
-import eventRouter from '../modules/events/event.routes';
-import teamRouter from '../modules/teams/team.routes';
-import resultRouter from '../modules/results/result.routes';
-import userRouter from '../modules/users/user.routes';
-import sessionLadderRouter from '../modules/session-ladder/session-ladder.routes';
+import discordRouter from '../modules/auth/discord.routes';
+import eventsRouter from '../modules/events/events.routes';
+import registrationsRouter from '../modules/registrations/registrations.routes';
+import resultsRouter from '../modules/results/results.routes';
+import leaderboardsRouter from '../modules/leaderboards/leaderboards.routes';
+import awardsRouter from '../modules/awards/awards.routes';
+import ratingsRouter from '../modules/ratings/ratings.routes';
 import variantsRouter from '../modules/variants/variants.routes';
 import siteContentRouter from '../modules/site-content/site-content.routes';
 import badgesRouter from '../modules/badges/badges.routes';
@@ -13,12 +15,14 @@ import adminAccessRouter from '../modules/admin-access/admin-access.routes';
 
 const router = Router();
 
-router.use('/api', authRouter); // /api/login, /api/me
-router.use('/api/events', eventRouter); // /api/events/...
-router.use('/api/event-teams', teamRouter); // /api/event-teams/...
-router.use('/api/results', resultRouter);
-router.use('/api/users', userRouter);
-router.use('/api/session-ladder', sessionLadderRouter);
+router.use('/api', authRouter);
+router.use('/api/auth', discordRouter);
+router.use('/api/events', eventsRouter);
+router.use('/api', registrationsRouter);
+router.use('/api/results', resultsRouter);
+router.use('/api', leaderboardsRouter);
+router.use('/api', awardsRouter);
+router.use('/api', ratingsRouter);
 router.use('/api', variantsRouter);
 router.use('/api', siteContentRouter);
 router.use('/api', badgesRouter);

@@ -8,6 +8,8 @@ export type HanabiVariant = {
   code: number;
   name: string;
   label: string;
+  num_suits: number;
+  is_sudoku: boolean;
 };
 
 let syncInFlight = false;
@@ -23,6 +25,14 @@ export async function ensureVariantTables(): Promise<void> {
     )
   `);
 
+  // Add suit metadata columns if missing (idempotent)
+  await pool.query(
+    `ALTER TABLE hanabi_variants ADD COLUMN IF NOT EXISTS num_suits INTEGER NOT NULL DEFAULT 5`,
+  );
+  await pool.query(
+    `ALTER TABLE hanabi_variants ADD COLUMN IF NOT EXISTS is_sudoku BOOLEAN NOT NULL DEFAULT FALSE`,
+  );
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS hanabi_variant_sync_state (
       id SMALLINT PRIMARY KEY CHECK (id = 1),
@@ -35,6 +45,43 @@ export async function ensureVariantTables(): Promise<void> {
     VALUES (1, NULL)
     ON CONFLICT (id) DO NOTHING
   `);
+}
+
+/**
+ * Ensures the "No Variant" seed row (code = 0) is present in hanabi_variants.
+ * This row is referenced by event_stage_games.variant_id = 0 (the default).
+ * The sync service deletes unknown codes, so this must be called after sync.
+ */
+async function ensureNoVariantRow(): Promise<void> {
+  await pool.query(`
+    INSERT INTO hanabi_variants (code, name, label, num_suits, is_sudoku, updated_at)
+    VALUES (0, 'No Variant', 'No Variant (#0)', 5, FALSE, NOW())
+    ON CONFLICT (code) DO NOTHING
+  `);
+}
+
+// ---------------------------------------------------------------------------
+// Inference helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Infers the number of suits from a variant name.
+ * Hanabi-live uses patterns like "6 Suits", "Black (4 Suits)", etc.
+ * Variants without an explicit suit count default to 5.
+ */
+function inferNumSuits(name: string): number {
+  // "(N Suits)" suffix — e.g. "Black (6 Suits)"
+  const parenMatch = name.match(/\((\d+)\s+Suits\)/);
+  if (parenMatch) return parseInt(parenMatch[1], 10);
+  // Bare "N Suits" — e.g. "6 Suits"
+  const plainMatch = name.match(/^(\d+)\s+Suits$/);
+  if (plainMatch) return parseInt(plainMatch[1], 10);
+  return 5;
+}
+
+/** Returns true if the variant is a Sudoku variant (stack_size = num_suits). */
+function inferIsSudoku(name: string): boolean {
+  return /\bSudoku\b/i.test(name);
 }
 
 function parseVariantsText(raw: string): HanabiVariant[] {
@@ -53,6 +100,8 @@ function parseVariantsText(raw: string): HanabiVariant[] {
       code,
       name,
       label: `${name} (#${code})`,
+      num_suits: inferNumSuits(name),
+      is_sudoku: inferIsSudoku(name),
     });
   }
 
@@ -76,6 +125,7 @@ export async function syncHanabiVariants(): Promise<{
   syncInFlight = true;
   try {
     await ensureVariantTables();
+    await ensureNoVariantRow();
     const response = await fetch(VARIANTS_SOURCE_URL);
     if (!response.ok) {
       throw new Error(`Variant source fetch failed: HTTP ${response.status}`);
@@ -90,15 +140,17 @@ export async function syncHanabiVariants(): Promise<{
       for (const variant of variants) {
         await client.query(
           `
-          INSERT INTO hanabi_variants (code, name, label, updated_at)
-          VALUES ($1, $2, $3, NOW())
+          INSERT INTO hanabi_variants (code, name, label, num_suits, is_sudoku, updated_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())
           ON CONFLICT (code)
           DO UPDATE SET
             name = EXCLUDED.name,
             label = EXCLUDED.label,
+            num_suits = EXCLUDED.num_suits,
+            is_sudoku = EXCLUDED.is_sudoku,
             updated_at = NOW()
           `,
-          [variant.code, variant.name, variant.label],
+          [variant.code, variant.name, variant.label, variant.num_suits, variant.is_sudoku],
         );
       }
 
@@ -126,6 +178,9 @@ export async function syncHanabiVariants(): Promise<{
     } finally {
       client.release();
     }
+
+    // Re-insert No Variant seed row in case it was removed by the sync DELETE.
+    await ensureNoVariantRow();
 
     const { last_synced_at } = await getVariantSyncState();
     const countResult = await pool.query<{ count: string }>(
@@ -156,9 +211,10 @@ export async function getVariantCodeByName(name: string): Promise<number> {
 
 export async function listHanabiVariants(): Promise<HanabiVariant[]> {
   await ensureVariantTables();
+  await ensureNoVariantRow();
   const result = await pool.query<HanabiVariant>(
     `
-    SELECT code, name, label
+    SELECT code, name, label, num_suits, is_sudoku
     FROM hanabi_variants
     ORDER BY code
     `,

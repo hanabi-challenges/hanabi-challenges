@@ -1,7 +1,15 @@
 services:
+  # ---------------------------------------------------------------------------
+  # Production — web (static)
+  #
+  # Rewrites /api/* and /ws/* to the production API.
+  # No preview environments — prod is only deployed from main.
+  # ---------------------------------------------------------------------------
   - type: web
     name: hanabi-challenges
     runtime: static
+    previews:
+      generation: disabled
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
@@ -21,10 +29,18 @@ services:
         source: /*
         destination: /index.html
 
+  # ---------------------------------------------------------------------------
+  # Production — API
+  #
+  # No preview environments — prod is only deployed from main.
+  # ---------------------------------------------------------------------------
   - type: web
     name: hanabi-challenges-api-prod
     runtime: node
     region: virginia
+    branch: main
+    previews:
+      generation: disabled
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
@@ -36,15 +52,98 @@ services:
           property: connectionString
       - key: JWT_SECRET
         sync: false
+      # SIMULATION_MODE intentionally absent — defaults to false
     buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
     startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:
       - api.hanabi-challenges.com
 
+  # ---------------------------------------------------------------------------
+  # Test — web (static, permanent)
+  #
+  # No custom domain — uses Render's auto-assigned URL.
+  # Always points to the permanent test API, not PR previews.
+  # The frontend uses relative /api paths; this rewrite handles the proxying.
+  # No preview environments — the web service is intentionally shared across
+  # all PRs. PR-specific testing is done against the preview API URL directly.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: hanabi-challenges-test
+    runtime: static
+    previews:
+      generation: disabled
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/web... && pnpm -C apps/web run build
+    staticPublishPath: ./apps/web/dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://hanabi-challenges-api-test.onrender.com/api/*
+      - type: rewrite
+        source: /ws/*
+        destination: wss://hanabi-challenges-api-test.onrender.com/ws/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  # ---------------------------------------------------------------------------
+  # Test — API (permanent + PR previews)
+  #
+  # SIMULATION_MODE=true mounts mock hanab-live routes on this server.
+  # The hanab-live client auto-routes to http://localhost:$PORT (same process).
+  #
+  # Preview environments: each open PR automatically gets an isolated instance
+  # at https://hanabi-challenges-api-test-pr-{N}.onrender.com, backed by its
+  # own database copy. The instance is torn down when the PR is closed/merged.
+  # Migrations run automatically via bootstrap-db.js on startup.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: hanabi-challenges-api-test
+    runtime: node
+    region: virginia
+    branch: main
+    previews:
+      generation: automatic
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: NODE_ENV
+        value: test
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hanabi-challenges-db-test
+          property: connectionString
+      - key: JWT_SECRET
+        # generateValue: each service instance (including previews) gets its
+        # own stable secret without requiring manual configuration.
+        generateValue: true
+      - key: SIMULATION_MODE
+        value: true
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
+    startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
+    healthCheckPath: /health
+
 databases:
+  # Production database
   - name: hanabi-challenges-db
     plan: basic-256mb
     region: virginia
     databaseName: hanabi
     user: hanabi
+    previews:
+      generation: disabled
+
+  # Test database — isolated from production; simulation data lives here.
+  # Preview environments: each PR gets its own fresh database instance,
+  # automatically wired to the corresponding preview API service via
+  # fromDatabase in the service definition above.
+  - name: hanabi-challenges-db-test
+    plan: free
+    region: virginia
+    databaseName: hanabi_test
+    user: hanabi_test
+    previews:
+      generation: automatic

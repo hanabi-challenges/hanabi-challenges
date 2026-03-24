@@ -20,8 +20,9 @@ export type UserEventRecord = {
   long_description: string | null;
   starts_at: string | null;
   ends_at: string | null;
-  event_format: 'challenge' | 'tournament' | 'session_ladder';
-  event_status: 'DORMANT' | 'LIVE' | 'COMPLETE';
+  registration_opens_at: string | null;
+  registration_cutoff: string | null;
+  allow_late_registration: boolean;
 };
 
 export type UserBadgeRecord = {
@@ -50,6 +51,25 @@ export async function fetchUserEvents(username: string): Promise<UserEventRecord
 
 export async function fetchUserBadges(username: string): Promise<UserBadgeRecord[]> {
   return getJson<UserBadgeRecord[]>(`/users/${encodeURIComponent(username)}/badges`);
+}
+
+export type UserAwardRecord = {
+  id: number;
+  award_id: number;
+  event_id: number;
+  event_name: string;
+  event_slug: string;
+  stage_id: number | null;
+  stage_label: string | null;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  criteria_type: string;
+  granted_at: string;
+};
+
+export async function fetchUserAwards(username: string): Promise<UserAwardRecord[]> {
+  return getJson<UserAwardRecord[]>(`/users/${encodeURIComponent(username)}/awards`);
 }
 
 export function parseIconHex(icon: string): string {

@@ -214,12 +214,18 @@ export async function loginExistingUser(
   const userRow = result.rows[0] as {
     id: number;
     display_name: string;
-    password_hash: string;
+    password_hash: string | null;
     role: Role;
     color_hex: string | null;
     text_color: string | null;
     created_at: string;
   };
+
+  // Shadow account exists but hasn't been claimed yet — treat as not found so
+  // the frontend can route to the registration flow.
+  if (!userRow.password_hash) {
+    throw new UserNotFoundError('User not found');
+  }
 
   const isMatch = await bcrypt.compare(password, userRow.password_hash);
   if (!isMatch) {
@@ -263,7 +269,10 @@ export async function changeUserPassword(
     throw new UserNotFoundError('User not found');
   }
 
-  const row = result.rows[0] as { password_hash: string };
+  const row = result.rows[0] as { password_hash: string | null };
+  if (!row.password_hash) {
+    throw new InvalidCredentialsError('Invalid current password');
+  }
   const isMatch = await bcrypt.compare(currentPassword, row.password_hash);
   if (!isMatch) {
     throw new InvalidCredentialsError('Invalid current password');
@@ -325,40 +334,79 @@ export async function registerUserWithIdentityToken(input: {
   const identity = await resolveHanabIdentityToken(input.token);
   const canonicalDisplayName = identity.canonical_display_name;
 
-  const existing = await pool.query(
-    `
-    SELECT id
-    FROM users
-    WHERE display_name = $1
-    LIMIT 1;
-    `,
+  const existing = await pool.query<{
+    id: number;
+    display_name: string;
+    password_hash: string | null;
+    role: Role;
+    color_hex: string | null;
+    text_color: string | null;
+    created_at: string;
+  }>(
+    `SELECT id, display_name, password_hash, role, color_hex, text_color, created_at
+     FROM users WHERE display_name = $1 LIMIT 1`,
     [canonicalDisplayName],
   );
-  if (existing.rowCount > 0) {
-    throw new InvalidCredentialsError('User already exists');
-  }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
+
+  if (existing.rowCount > 0) {
+    const row = existing.rows[0];
+    if (row.password_hash !== null) {
+      // Fully registered account already exists — not a shadow
+      throw new InvalidCredentialsError('User already exists');
+    }
+    // Shadow account created by the ingestor — activate it
+    const color_hex = row.color_hex ?? randomHexColor();
+    const text_color = row.text_color ?? pickTextColor(color_hex);
+    await pool.query(
+      `UPDATE users SET password_hash = $1, color_hex = $2, text_color = $3 WHERE id = $4`,
+      [passwordHash, color_hex, text_color, row.id],
+    );
+    const user: AuthUser = {
+      id: row.id,
+      display_name: row.display_name,
+      role: row.role,
+      color_hex,
+      text_color,
+      created_at: row.created_at,
+    };
+    return { mode: 'created', user, token: createToken(user) };
+  }
+
   const color_hex = randomHexColor();
   const text_color = pickTextColor(color_hex);
 
   const insertResult = await pool.query(
-    `
-    INSERT INTO users (display_name, password_hash, color_hex, text_color)
-    VALUES ($1, $2, $3, $4)
-    RETURNING id, display_name, role, color_hex, text_color, created_at;
-    `,
+    `INSERT INTO users (display_name, password_hash, color_hex, text_color)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, display_name, role, color_hex, text_color, created_at`,
     [canonicalDisplayName, passwordHash, color_hex, text_color],
   );
 
   const newUser: AuthUser = insertResult.rows[0];
-  const token = createToken(newUser);
+  return { mode: 'created', user: newUser, token: createToken(newUser) };
+}
 
-  return {
-    mode: 'created',
-    user: newUser,
-    token,
-  };
+// Create a shadow user for a hanab.live player who hasn't registered yet.
+// Returns the new user's ID.  Idempotent — returns the existing ID if the
+// display_name is already present (whether shadow or fully registered).
+export async function findOrCreateShadowUser(displayName: string): Promise<number> {
+  const existing = await pool.query<{ id: number }>(
+    `SELECT id FROM users WHERE display_name = $1 LIMIT 1`,
+    [displayName],
+  );
+  if ((existing.rowCount ?? 0) > 0) return existing.rows[0].id;
+
+  const color_hex = randomHexColor();
+  const text_color = pickTextColor(color_hex);
+  const result = await pool.query<{ id: number }>(
+    `INSERT INTO users (display_name, color_hex, text_color)
+     VALUES ($1, $2, $3)
+     RETURNING id`,
+    [displayName, color_hex, text_color],
+  );
+  return result.rows[0].id;
 }
 
 export async function recoverPasswordWithIdentityToken(input: {

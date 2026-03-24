@@ -13,7 +13,12 @@ import {
 import { EventCard } from '../../events';
 import { buildSimulatedBadgeDataUri } from '../badgeSimulation';
 import type { AdminAccessRequestRecord } from '../../admin-access/adminAccessApi';
-import type { UserBadgeRecord, UserEventRecord, UserProfileRecord } from '../userApi';
+import type {
+  UserAwardRecord,
+  UserBadgeRecord,
+  UserEventRecord,
+  UserProfileRecord,
+} from '../userApi';
 import { MaterialIcon, Tabs as NavTabs } from '../../../design-system';
 
 export type OwnTab = 'overview' | 'settings';
@@ -80,9 +85,10 @@ export function OverviewSections(props: {
   previewEvents: UserEventRecord[];
   badges: UserBadgeRecord[];
   previewBadges: UserBadgeRecord[];
+  awards: UserAwardRecord[];
   onSelectBadge: (badge: UserBadgeRecord) => void;
 }) {
-  const { displayName, previewEvents, badges, previewBadges, onSelectBadge } = props;
+  const { displayName, previewEvents, badges, previewBadges, awards, onSelectBadge } = props;
   return (
     <Stack gap="sm">
       <Stack gap={8}>
@@ -110,8 +116,9 @@ export function OverviewSections(props: {
                 long_description: event.long_description,
                 starts_at: event.starts_at,
                 ends_at: event.ends_at,
-                event_format: event.event_format,
-                event_status: event.event_status,
+                registration_opens_at: event.registration_opens_at,
+                registration_cutoff: event.registration_cutoff,
+                allow_late_registration: event.allow_late_registration,
               }}
               footer={
                 <Text size="xs" c="dimmed">
@@ -178,6 +185,32 @@ export function OverviewSections(props: {
           </Group>
         )}
       </Stack>
+
+      {awards.length > 0 ? (
+        <Stack gap={8}>
+          <Text fw={700}>Awards</Text>
+          <Stack gap={4}>
+            {awards.map((award) => (
+              <Group key={award.id} gap="xs" wrap="nowrap">
+                {award.icon ? (
+                  <Text size="lg" style={{ lineHeight: 1 }}>
+                    {String.fromCodePoint(Number.parseInt(award.icon, 16))}
+                  </Text>
+                ) : null}
+                <Stack gap={0}>
+                  <Text size="sm" fw={500}>
+                    {award.name}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    <Link to={`/events/${award.event_slug}`}>{award.event_name}</Link>
+                    {award.stage_label ? ` — ${award.stage_label}` : ''}
+                  </Text>
+                </Stack>
+              </Group>
+            ))}
+          </Stack>
+        </Stack>
+      ) : null}
     </Stack>
   );
 }

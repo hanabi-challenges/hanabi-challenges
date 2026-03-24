@@ -1,1868 +1,894 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { Link } from '../mantine';
-import { useEffect, useMemo, useState } from 'react';
-import { DndContext, closestCenter, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { NotFoundPage } from './NotFoundPage';
-import { useEventDetail } from '../hooks/useEventDetail';
-import { useEventTeams } from '../hooks/useEventTeams';
-import { useAuth } from '../context/AuthContext';
-import { useUserDirectory } from '../hooks/useUserDirectory';
-import { UserPill } from '../features/users/UserPill';
-import { getJson, getJsonAuth, putJsonAuth } from '../lib/api';
-import { useEventMemberships } from '../hooks/useEventMemberships';
-import { MarkdownRenderer } from '../ui/MarkdownRenderer';
-import { PageStateNotice } from '../features/shared/PageStateNotice';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
-  LeagueGameBlocks,
-  LeagueResultsTables,
-  RegisterModal,
-  SortableQueuedRoundPill,
-  StaticRoundPill,
-  firstHeadingSectionMarkdown,
-  formatDateRange,
-} from '../features/events/event-detail/fragments';
-import {
+  Alert,
   Button,
   Card,
   CardBody,
   CardHeader,
   Heading,
   Inline,
-  Input,
-  InputContainer,
-  Modal,
+  Main,
+  MaterialIcon,
   PageContainer,
   Pill,
-  SearchSelect,
   Section,
   Stack,
-  Text,
-  ToggleSwitch,
-  Alert,
-  Tooltip,
   Tabs,
-  Main,
-  CoreDivider as Divider,
+  Text,
   CoreTable as Table,
-  CoreUnstyledButton as UnstyledButton,
 } from '../design-system';
+import { useAuth } from '../context/AuthContext';
+import { ApiError, getJson, getJsonAuth, postJsonAuth } from '../lib/api';
+import { MarkdownRenderer } from '../ui/MarkdownRenderer';
+import type { EventSummary } from '../hooks/useEvents';
+import { useUserDirectory } from '../hooks/useUserDirectory';
+import { UserPill } from '../features/users/UserPill';
+import { NotFoundPage } from './NotFoundPage';
 
-const spinnerKeyframes = `
-@keyframes ds-rotate {
-  to { transform: rotate(360deg); }
-}
-`;
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-type VariantCatalogItem = {
-  code: number;
-  name: string;
+type MyTeamMember = {
+  user_id: number;
+  display_name: string;
+  confirmed: boolean;
+};
+
+type MyTeam = {
+  id: number;
+  display_name: string;
+  members: MyTeamMember[];
+};
+
+type PlayerStageScore = {
+  stage_id: number;
+  stage_label: string;
+  score: number;
+};
+
+type AggregateEntry = {
+  rank: number;
+  team: { id: number; display_name: string; members: { user_id: number; display_name: string }[] };
+  total_score: number;
+  stage_scores: PlayerStageScore[];
+};
+
+type AggregateTrack = {
+  team_size: number | null;
+  entries: AggregateEntry[];
+};
+
+type StageSummary = {
+  id: number;
   label: string;
+  mechanism: 'SEEDED_LEADERBOARD' | 'GAUNTLET' | 'MATCH_PLAY';
+  team_scope: 'EVENT' | 'STAGE';
+  status: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  team_count: number;
 };
 
-type LiveSessionStatePayload = {
-  rounds: Array<{
-    id: number;
-    round_index: number;
-    seed_payload: string | null;
-    status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-  }>;
-  presence: Array<{
-    user_id: number;
-    display_name: string;
-    role: 'playing' | 'spectating';
-    state: 'online' | 'offline';
-    last_seen_at: string | null;
-  }>;
-  round_players: Array<{
-    round_id: number;
-    user_id: number;
-    display_name: string;
-    role: 'playing' | 'spectating';
-    assigned_team_no: number | null;
-  }>;
-  round_results: Array<{
-    round_id: number;
-    team_no: number;
-    score: number;
-    submitted_at: string;
-    submitted_by_user_id: number | null;
-    replay_game_id: string | null;
-  }>;
-  ready_check: {
-    id: number;
-    status: 'open' | 'closed';
-    started_at: string;
-    ends_at: string;
-    initiated_by_user_id: number | null;
-    closed_at: string | null;
-  } | null;
-  ready_responses: Array<{
-    user_id: number;
-    is_ready: boolean;
-    responded_at: string;
-  }>;
+type AwardRow = {
+  id: number;
+  stage_id: number | null;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  criteria_type: string;
+  attribution: 'INDIVIDUAL' | 'TEAM';
+  sort_order: number;
 };
+
+type GroupedAwardsResponse = {
+  event_awards: AwardRow[];
+  stage_awards: { stage_id: number; stage_label: string; awards: AwardRow[] }[];
+};
+
+type AwardGrant = {
+  id: number;
+  award_id: number;
+  user_id: number;
+  event_team_id: number | null;
+  granted_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function statusBannerText(event: EventSummary): string | null {
+  switch (event.status) {
+    case 'REGISTRATION_OPEN':
+      return event.registration_cutoff
+        ? `Registration Open — closes ${formatDate(event.registration_cutoff)}`
+        : 'Registration Open';
+    case 'IN_PROGRESS':
+    case 'LIVE':
+      return event.ends_at ? `In Progress — ends ${formatDate(event.ends_at)}` : 'In Progress';
+    case 'UPCOMING':
+      return event.starts_at ? `Upcoming — starts ${formatDate(event.starts_at)}` : 'Upcoming';
+    case 'COMPLETE':
+      return 'Completed';
+    case 'ANNOUNCED':
+      return 'Announced';
+    default:
+      return null;
+  }
+}
+
+function statusBannerVariant(event: EventSummary): 'default' | 'accent' {
+  return event.status === 'REGISTRATION_OPEN' ||
+    event.status === 'IN_PROGRESS' ||
+    event.status === 'LIVE'
+    ? 'accent'
+    : 'default';
+}
+
+function stageDateRange(stage: StageSummary): string | null {
+  if (stage.starts_at && stage.ends_at) {
+    return `${formatDate(stage.starts_at)} — ${formatDate(stage.ends_at)}`;
+  }
+  if (stage.starts_at) return `Starts ${formatDate(stage.starts_at)}`;
+  if (stage.ends_at) return `Ends ${formatDate(stage.ends_at)}`;
+  return null;
+}
+
+function isStageActive(stage: StageSummary): boolean {
+  const now = Date.now();
+  const start = stage.starts_at ? new Date(stage.starts_at).getTime() : null;
+  const end = stage.ends_at ? new Date(stage.ends_at).getTime() : null;
+  if (start !== null && start > now) return false;
+  if (end !== null && end < now) return false;
+  return true;
+}
+
+function isStageBeforeWindow(stage: StageSummary): boolean {
+  if (!stage.starts_at) return false;
+  return new Date(stage.starts_at).getTime() > Date.now();
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export function EventDetailPage() {
-  const { slug, teamSize } = useParams<{ slug: string; teamSize?: string }>();
+  const { slug } = useParams<{ slug: string }>();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
-  const auth = useAuth();
-  const { users: directory } = useUserDirectory();
-  const { memberships } = useEventMemberships(slug);
-  const [showRegister, setShowRegister] = useState(false);
-  const [registerError, setRegisterError] = useState<string | null>(null);
-  const [nowTs, setNowTs] = useState(() => Date.now());
-  const [liveRefreshTick, setLiveRefreshTick] = useState(0);
-  const [eventStatus, setEventStatus] = useState<'DORMANT' | 'LIVE' | 'COMPLETE'>('DORMANT');
-  const [adminRailCollapsed, setAdminRailCollapsed] = useState(false);
-  const [adminRailDefaultApplied, setAdminRailDefaultApplied] = useState(false);
-  const [statusSaving, setStatusSaving] = useState(false);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  const [sessionAccess, setSessionAccess] = useState<{
-    can_manage: boolean;
-    owner_user_id: number | null;
-    delegates: Array<{ user_id: number; display_name: string }>;
-  } | null>(null);
-  const [sessionList, setSessionList] = useState<
-    Array<{
-      id: number;
-      session_index: number;
-      status: 'scheduled' | 'live' | 'closed';
-      starts_at: string | null;
-      ends_at: string | null;
-      round_count: number;
-    }>
-  >([]);
-  const [createSessionSaving, setCreateSessionSaving] = useState(false);
-  const [variantCatalog, setVariantCatalog] = useState<VariantCatalogItem[]>([]);
-  const [variantQuery, setVariantQuery] = useState('');
-  const [selectedVariantCode, setSelectedVariantCode] = useState<number | null>(null);
-  const [queueSeedInput, setQueueSeedInput] = useState('');
-  const [queueGameSaving, setQueueGameSaving] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const [stagedSessionRounds, setStagedSessionRounds] = useState<
-    Array<{
-      id: number;
-      round_index: number;
-      seed_payload: string | null;
-      status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-    }>
-  >([]);
-  const [sessionToggleConfirmOpen, setSessionToggleConfirmOpen] = useState(false);
-  const [endLeagueConfirmOpen, setEndLeagueConfirmOpen] = useState(false);
-  const [createGameModalOpen, setCreateGameModalOpen] = useState(false);
-  const [startGameConfirmOpen, setStartGameConfirmOpen] = useState(false);
-  const [draggingRoundId, setDraggingRoundId] = useState<number | null>(null);
-  const [startGameSaving, setStartGameSaving] = useState(false);
-  const [leagueTab, setLeagueTab] = useState<'overview' | 'results'>('overview');
-  const [showFullOverview, setShowFullOverview] = useState(false);
-  const [presenceSaving, setPresenceSaving] = useState(false);
-  const [presenceRemovingUserId, setPresenceRemovingUserId] = useState<number | null>(null);
-  const [readySubmitting, setReadySubmitting] = useState(false);
-  const [readyFinalizeInFlight, setReadyFinalizeInFlight] = useState(false);
-  const [readyFinalizeForId, setReadyFinalizeForId] = useState<number | null>(null);
-  const [presenceError, setPresenceError] = useState<string | null>(null);
-  const [liveSessionState, setLiveSessionState] = useState<LiveSessionStatePayload | null>(null);
-  const [resultsTab, setResultsTab] = useState<string>('standings');
-  const [resultsSummary, setResultsSummary] = useState<{
-    sessions: Array<{
-      id: number;
-      session_index: number;
-      status: 'scheduled' | 'live' | 'closed';
-      starts_at: string | null;
-      ends_at: string | null;
-      round_count: number;
-    }>;
-    standings: Array<{
-      user_id: number;
-      display_name: string;
-      rating: number;
-      games_played: number;
-      sessions_played: number;
-      last_played_at: string | null;
-    }>;
-    placements: Array<{
-      session_id: number;
-      session_index: number;
-      round_id: number;
-      round_index: number;
-      user_id: number;
-      display_name: string;
-      placement: number;
-    }>;
-    session_elo: Array<{
-      session_id: number;
-      session_index: number;
-      user_id: number;
-      display_name: string;
-      starting_elo: number;
-      final_elo: number;
-      elo_delta: number;
-    }>;
-  } | null>(null);
-  const [ratingHistory, setRatingHistory] = useState<
-    Array<{
-      ledger_id: number;
-      event_id: number;
-      session_id: number;
-      session_index: number;
-      round_id: number;
-      round_index: number;
-      user_id: number;
-      display_name: string;
-      old_rating: number;
-      delta_competitive: number;
-      delta_participation: number;
-      new_rating: number;
-      created_at: string;
-    }>
-  >([]);
-  const [gamesTab, setGamesTab] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
+  // Public data
+  const [event, setEvent] = useState<EventSummary | null>(null);
+  const [stages, setStages] = useState<StageSummary[]>([]);
+  const [lbTracks, setLbTracks] = useState<AggregateTrack[]>([]);
+  const [activeLbSize, setActiveLbSize] = useState<number | null | undefined>(undefined);
+  const [awards, setAwards] = useState<GroupedAwardsResponse | null>(null);
+  const [grantsByAward, setGrantsByAward] = useState<Map<number, AwardGrant[]>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // My teams (auth)
+  const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
+
+  // Leaderboard sort — default: total_score descending
+  type LbSortCol = 'total' | 'team' | number; // number = stage_id
+  const [lbSort, setLbSort] = useState<{ col: LbSortCol; dir: 'asc' | 'desc' }>({
+    col: 'total',
+    dir: 'desc',
+  });
+
+  // Leaderboard spoiler gate
+  const [lbGateMode, setLbGateMode] = useState<
+    'loading' | 'allow' | 'login' | 'blocked' | 'prompt' | 'error'
+  >('loading');
+  const [lbGateError, setLbGateError] = useState<string | null>(null);
+  const [lbForfeitLoading, setLbForfeitLoading] = useState(false);
+
+  // Stage seed accordion
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
+  const [stageSeeds, setStageSeeds] = useState<
+    Map<
+      number,
+      { id: number; game_index: number; nickname: string | null; effective_seed: string | null }[]
+    >
+  >(new Map());
+
+  const { users: allUsers } = useUserDirectory();
+
+  // Load public data
   useEffect(() => {
-    const id = window.setInterval(() => setNowTs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+    if (!slug) return;
+    let cancelled = false;
 
-  function formatCountdown(ms: number) {
-    if (Number.isNaN(ms)) return '';
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const days = Math.floor(totalSeconds / 86400);
-    const hours = Math.floor((totalSeconds % 86400) / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  }
-
-  const parsedTeamSize = (() => {
-    const n = teamSize ? Number(teamSize) : 3;
-    if (!Number.isInteger(n) || n < 2 || n > 6) return 3;
-    return n;
-  })();
-
-  const { event, loading, error, notFound } = useEventDetail(slug);
-  const {
-    teams,
-    loading: teamsLoading,
-    error: teamsError,
-    refetch: refetchTeams,
-  } = useEventTeams(slug);
-  const directoryById = useMemo(() => {
-    const map = new Map<number, { color_hex: string; text_color: string }>();
-    directory.forEach((user) => {
-      map.set(user.id, { color_hex: user.color_hex, text_color: user.text_color });
-    });
-    return map;
-  }, [directory]);
-
-  useEffect(() => {
-    if (!event?.event_status) return;
-    setEventStatus(event.event_status);
-  }, [event?.event_status]);
-
-  const isSessionLadder = event?.event_format === 'session_ladder';
-  const isChallenge = event?.event_format === 'challenge';
-
-  useEffect(() => {
-    if (!isSessionLadder) return;
-    const id = window.setInterval(() => {
-      setLiveRefreshTick((tick) => tick + 1);
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [isSessionLadder]);
-
-  useEffect(() => {
-    async function loadSessionData() {
-      if (!isSessionLadder || !slug) return;
+    async function load() {
+      setLoading(true);
+      setLoadError(null);
+      setNotFound(false);
       try {
-        const [summaryResp, historyResp] = await Promise.all([
-          getJson<{
-            sessions: typeof sessionList;
-            standings: Array<{
-              user_id: number;
-              display_name: string;
-              rating: number;
-              games_played: number;
-              sessions_played: number;
-              last_played_at: string | null;
-            }>;
-            placements: Array<{
-              session_id: number;
-              session_index: number;
-              round_id: number;
-              round_index: number;
-              user_id: number;
-              display_name: string;
-              placement: number;
-            }>;
-            session_elo: Array<{
-              session_id: number;
-              session_index: number;
-              user_id: number;
-              display_name: string;
-              starting_elo: number;
-              final_elo: number;
-              elo_delta: number;
-            }>;
-          }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`),
-          getJson<{
-            history: Array<{
-              ledger_id: number;
-              event_id: number;
-              session_id: number;
-              session_index: number;
-              round_id: number;
-              round_index: number;
-              user_id: number;
-              display_name: string;
-              old_rating: number;
-              delta_competitive: number;
-              delta_participation: number;
-              new_rating: number;
-              created_at: string;
-            }>;
-          }>(`/session-ladder/events/${encodeURIComponent(slug)}/history?limit=5000`),
+        const [eventData, stagesData, lbData, awardsData] = await Promise.all([
+          getJson<EventSummary>(`/events/${encodeURIComponent(slug!)}`),
+          getJson<StageSummary[]>(`/events/${encodeURIComponent(slug!)}/stages`),
+          getJson<{ tracks: AggregateTrack[] }>(
+            `/events/${encodeURIComponent(slug!)}/leaderboard`,
+          ).catch(() => ({ tracks: [] as AggregateTrack[] })),
+          getJson<GroupedAwardsResponse>(`/events/${encodeURIComponent(slug!)}/awards`).catch(
+            () => null,
+          ),
         ]);
-        setSessionList(summaryResp.sessions ?? []);
-        setResultsSummary(summaryResp);
-        setRatingHistory(historyResp.history ?? []);
-      } catch {
-        // Keep page usable if session API fails
-        setResultsSummary(null);
-        setRatingHistory([]);
-      }
-
-      if (!auth.token) return;
-      try {
-        const accessResp = await getJsonAuth<{
-          can_manage: boolean;
-          owner_user_id: number | null;
-          delegates: Array<{ user_id: number; display_name: string }>;
-        }>(`/session-ladder/events/${encodeURIComponent(slug)}/access`, auth.token);
-        setSessionAccess(accessResp);
-      } catch {
-        setSessionAccess(null);
-      }
-    }
-    void loadSessionData();
-  }, [isSessionLadder, slug, auth.token, liveRefreshTick]);
-
-  useEffect(() => {
-    async function loadVariants() {
-      try {
-        const resp = await getJson<{ variants: VariantCatalogItem[] }>('/variants');
-        setVariantCatalog(resp.variants ?? []);
-      } catch {
-        setVariantCatalog([]);
-      }
-    }
-    void loadVariants();
-  }, []);
-
-  const liveSession = useMemo(
-    () => sessionList.find((session) => session.status === 'live') ?? null,
-    [sessionList],
-  );
-  const stagedSession = useMemo(() => {
-    const openSessions = sessionList.filter((session) => session.status !== 'closed');
-    if (!openSessions.length) return null;
-    return [...openSessions].sort((a, b) => b.session_index - a.session_index)[0];
-  }, [sessionList]);
-
-  useEffect(() => {
-    async function loadLiveSessionState() {
-      if (!isSessionLadder || !liveSession?.id || !auth.token) {
-        setLiveSessionState(null);
-        return;
-      }
-      try {
-        const state = await getJsonAuth<LiveSessionStatePayload>(
-          `/session-ladder/sessions/${liveSession.id}/state`,
-          auth.token,
-        );
-        setLiveSessionState({
-          rounds: state.rounds ?? [],
-          presence: state.presence ?? [],
-          round_players: state.round_players ?? [],
-          round_results: state.round_results ?? [],
-          ready_check: state.ready_check ?? null,
-          ready_responses: state.ready_responses ?? [],
-        });
-      } catch {
-        setLiveSessionState(null);
-      }
-    }
-    void loadLiveSessionState();
-  }, [isSessionLadder, liveSession?.id, auth.token, liveRefreshTick]);
-
-  useEffect(() => {
-    async function loadStagedSessionRounds() {
-      const canManage = Boolean(sessionAccess?.can_manage || auth.user?.role === 'SUPERADMIN');
-      if (!isSessionLadder || !stagedSession?.id || !auth.token || !canManage) {
-        setStagedSessionRounds([]);
-        return;
-      }
-      try {
-        const state = await getJsonAuth<{
-          rounds: Array<{
-            id: number;
-            round_index: number;
-            seed_payload: string | null;
-            status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-          }>;
-        }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token);
-        setStagedSessionRounds(state.rounds ?? []);
-      } catch {
-        setStagedSessionRounds([]);
-      }
-    }
-    void loadStagedSessionRounds();
-  }, [
-    isSessionLadder,
-    stagedSession?.id,
-    auth.token,
-    sessionAccess?.can_manage,
-    auth.user?.role,
-    liveRefreshTick,
-  ]);
-
-  useEffect(() => {
-    setAdminRailDefaultApplied(false);
-  }, [slug, auth.user?.id]);
-
-  useEffect(() => {
-    const canManage = Boolean(sessionAccess?.can_manage || auth.user?.role === 'SUPERADMIN');
-    const isOwner = Boolean(
-      sessionAccess?.owner_user_id != null && auth.user?.id === sessionAccess.owner_user_id,
-    );
-    if (!isSessionLadder || !canManage || adminRailDefaultApplied) return;
-    // Default open for owner; closed for delegates and superadmins.
-    setAdminRailCollapsed(!isOwner);
-    setAdminRailDefaultApplied(true);
-  }, [
-    isSessionLadder,
-    sessionAccess?.can_manage,
-    sessionAccess?.owner_user_id,
-    auth.user?.id,
-    auth.user?.role,
-    adminRailDefaultApplied,
-  ]);
-
-  useEffect(() => {
-    async function maybeFinalizeReadyCheck() {
-      const canManage = Boolean(sessionAccess?.can_manage || auth.user?.role === 'SUPERADMIN');
-      const readyCheck = liveSessionState?.ready_check;
-      const openReadyCheck = readyCheck?.status === 'open' ? readyCheck : null;
-      if (
-        !isSessionLadder ||
-        !canManage ||
-        !auth.token ||
-        !stagedSession?.id ||
-        !openReadyCheck ||
-        openReadyCheck.id === readyFinalizeForId ||
-        readyFinalizeInFlight
-      ) {
-        return;
-      }
-      if (new Date(openReadyCheck.ends_at).getTime() > Date.now()) return;
-
-      setReadyFinalizeInFlight(true);
-      setReadyFinalizeForId(openReadyCheck.id);
-      try {
-        await postJsonAuth(
-          `/session-ladder/sessions/${stagedSession.id}/ready-check/finalize`,
-          auth.token,
-          {},
-        );
-        const [sessionState, liveState] = await Promise.all([
-          getJsonAuth<{
-            rounds: Array<{
-              id: number;
-              round_index: number;
-              seed_payload: string | null;
-              status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-            }>;
-          }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token),
-          liveSession?.id
-            ? getJsonAuth<LiveSessionStatePayload>(
-                `/session-ladder/sessions/${liveSession.id}/state`,
-                auth.token,
-              )
-            : Promise.resolve(null),
-        ]);
-        setStagedSessionRounds(sessionState.rounds ?? []);
-        if (liveState) {
-          setLiveSessionState({
-            rounds: liveState.rounds ?? [],
-            presence: liveState.presence ?? [],
-            round_players: liveState.round_players ?? [],
-            round_results: liveState.round_results ?? [],
-            ready_check: liveState.ready_check ?? null,
-            ready_responses: liveState.ready_responses ?? [],
-          });
+        if (!cancelled) {
+          setEvent(eventData);
+          setStages(stagesData);
+          setExpandedStages(new Set(stagesData.filter(isStageActive).map((s) => s.id)));
+          setLbTracks(lbData.tracks);
+          setActiveLbSize(lbData.tracks[0]?.team_size ?? undefined);
+          setAwards(awardsData);
+          setLoading(false);
         }
-      } catch {
-        // keep polling path
-      } finally {
-        setReadyFinalizeInFlight(false);
+      } catch (err) {
+        if (!cancelled) {
+          if (err instanceof ApiError && err.status === 404) {
+            setNotFound(true);
+          } else {
+            setLoadError('Failed to load event.');
+          }
+          setLoading(false);
+        }
       }
     }
-    void maybeFinalizeReadyCheck();
-  }, [
-    isSessionLadder,
-    sessionAccess?.can_manage,
-    auth.user?.role,
-    auth.token,
-    stagedSession?.id,
-    liveSessionState?.ready_check,
-    liveSessionState?.ready_check?.id,
-    liveSessionState?.ready_check?.status,
-    liveSessionState?.ready_check?.ends_at,
-    readyFinalizeForId,
-    readyFinalizeInFlight,
-    liveSession?.id,
-  ]);
 
-  const canManageLeague = Boolean(sessionAccess?.can_manage || auth.user?.role === 'SUPERADMIN');
-  const isLeagueLive = isSessionLadder && eventStatus === 'LIVE';
-  const currentPresence =
-    liveSessionState?.presence.find((p) => p.user_id === auth.user?.id) ?? null;
-  const isJoinedLiveSession = currentPresence?.state === 'online';
-  const openReadyCheck =
-    liveSessionState?.ready_check?.status === 'open' ? liveSessionState.ready_check : null;
-  const myReadyResponse = openReadyCheck
-    ? (liveSessionState?.ready_responses ?? []).find((r) => r.user_id === auth.user?.id)
-    : null;
-  const liveCurrentRound =
-    (liveSessionState?.rounds ?? []).find(
-      (r) => r.status === 'playing' || r.status === 'scoring',
-    ) ??
-    (liveSessionState?.rounds ?? []).find((r) => r.status === 'assigning') ??
-    null;
-  const myLiveTeamNo =
-    liveCurrentRound && auth.user
-      ? ((liveSessionState?.round_players ?? []).find(
-          (p) =>
-            p.round_id === liveCurrentRound.id &&
-            p.user_id === auth.user.id &&
-            p.role === 'playing' &&
-            p.assigned_team_no != null,
-        )?.assigned_team_no ?? null)
-      : null;
-  const myLiveTeamSubmitted =
-    liveCurrentRound && myLiveTeamNo != null
-      ? (liveSessionState?.round_results ?? []).some(
-          (r) => r.round_id === liveCurrentRound.id && r.team_no === Number(myLiveTeamNo),
-        )
-      : false;
-  const shouldShowAwakePrompt = Boolean(
-    openReadyCheck &&
-    auth.user &&
-    currentPresence?.state === 'online' &&
-    !myReadyResponse?.is_ready,
-  );
-  const myTeamPageHref =
-    isSessionLadder &&
-    slug &&
-    liveSession?.id &&
-    isLeagueLive &&
-    liveCurrentRound &&
-    myLiveTeamNo != null &&
-    !myLiveTeamSubmitted
-      ? `/events/${slug}/sessions/${liveSession.id}/team/${liveCurrentRound.id}/${Number(myLiveTeamNo)}`
-      : null;
-  const liveRoundsSorted = useMemo(
-    () => [...(liveSessionState?.rounds ?? [])].sort((a, b) => a.round_index - b.round_index),
-    [liveSessionState?.rounds],
-  );
-  const liveOngoingRound =
-    liveRoundsSorted.find(
-      (r) => r.status === 'assigning' || r.status === 'playing' || r.status === 'scoring',
-    ) ?? null;
-  const liveLastCompletedRound =
-    [...liveRoundsSorted].reverse().find((r) => r.status === 'finalized') ?? null;
-  const liveMostRecentRound = [...liveRoundsSorted].reverse()[0] ?? null;
-  const recommendedGamesTab = (() => {
-    if (!liveMostRecentRound) return null;
-    if (!liveOngoingRound || !auth.user) return `round-${liveMostRecentRound.id}`;
-    const myRoundPlayer = (liveSessionState?.round_players ?? []).find(
-      (p) =>
-        p.round_id === liveOngoingRound.id &&
-        p.user_id === auth.user.id &&
-        p.role === 'playing' &&
-        p.assigned_team_no != null,
-    );
-    if (!myRoundPlayer?.assigned_team_no) return `round-${liveOngoingRound.id}`;
-    const submitted = (liveSessionState?.round_results ?? []).some(
-      (r) =>
-        r.round_id === liveOngoingRound.id && r.team_no === Number(myRoundPlayer.assigned_team_no),
-    );
-    if (submitted) return `round-${liveOngoingRound.id}`;
-    if (liveLastCompletedRound) return `round-${liveLastCompletedRound.id}`;
-    return `round-${liveOngoingRound.id}`;
-  })();
-  const blockedOngoingRoundIdForViewer = (() => {
-    if (!liveOngoingRound || !auth.user) return null;
-    const myRoundPlayer = (liveSessionState?.round_players ?? []).find(
-      (p) =>
-        p.round_id === liveOngoingRound.id &&
-        p.user_id === auth.user.id &&
-        p.role === 'playing' &&
-        p.assigned_team_no != null,
-    );
-    if (!myRoundPlayer?.assigned_team_no) return null;
-    const submitted = (liveSessionState?.round_results ?? []).some(
-      (r) =>
-        r.round_id === liveOngoingRound.id && r.team_no === Number(myRoundPlayer.assigned_team_no),
-    );
-    return submitted ? null : liveOngoingRound.id;
-  })();
-  const visibleGameRounds = liveRoundsSorted.filter(
-    (round) => round.id !== blockedOngoingRoundIdForViewer,
-  );
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
+  // Load user's teams
   useEffect(() => {
-    if (!recommendedGamesTab) return;
-    const exists = visibleGameRounds.some((r) => `round-${r.id}` === gamesTab);
-    if (!gamesTab || !exists) {
-      setGamesTab(recommendedGamesTab);
+    if (!slug || !token) {
+      setMyTeams([]);
+      return;
     }
-  }, [recommendedGamesTab, gamesTab, visibleGameRounds]);
-  const assignmentRedirectKey =
-    isSessionLadder &&
-    slug &&
-    liveSession?.id &&
-    liveCurrentRound?.id &&
-    myLiveTeamNo != null &&
-    auth.user?.id
-      ? `${slug}:${liveSession.id}:${liveCurrentRound.id}:${Number(myLiveTeamNo)}:${auth.user.id}`
-      : null;
+    let cancelled = false;
+    getJsonAuth<MyTeam[]>(`/events/${encodeURIComponent(slug)}/teams?mine=true`, token)
+      .then((teams) => {
+        if (!cancelled) setMyTeams(teams);
+      })
+      .catch(() => {
+        if (!cancelled) setMyTeams([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, token]);
 
+  // Load grants when awards tab is active
   useEffect(() => {
-    if (!myTeamPageHref || !assignmentRedirectKey) return;
-    const storageKey = 'session-ladder:last-assignment-redirect';
-    const lastRedirected = window.sessionStorage.getItem(storageKey);
-    if (lastRedirected === assignmentRedirectKey) return;
-    window.sessionStorage.setItem(storageKey, assignmentRedirectKey);
-    navigate(myTeamPageHref, { replace: true });
-  }, [myTeamPageHref, assignmentRedirectKey, navigate]);
+    if (!slug || activeTab !== 'awards' || !awards) return;
+    let cancelled = false;
+
+    const allAwards = [...awards.event_awards, ...awards.stage_awards.flatMap((sg) => sg.awards)];
+
+    async function loadGrants() {
+      const results = await Promise.all(
+        allAwards.map((a) =>
+          getJson<AwardGrant[]>(`/events/${encodeURIComponent(slug!)}/awards/${a.id}/grants`).catch(
+            () => [] as AwardGrant[],
+          ),
+        ),
+      );
+      if (cancelled) return;
+      const map = new Map<number, AwardGrant[]>();
+      allAwards.forEach((a, i) => {
+        map.set(a.id, results[i]);
+      });
+      setGrantsByAward(map);
+    }
+
+    void loadGrants();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, activeTab, awards]);
+
+  // Reset leaderboard sort to default when switching team-size tracks
+  useEffect(() => {
+    setLbSort({ col: 'total', dir: 'desc' });
+  }, [activeLbSize]);
+
+  // Leaderboard spoiler gate
+  useEffect(() => {
+    if (!slug || event === null) return;
+
+    const now = Date.now();
+    const endedAt = event.ends_at ? new Date(event.ends_at).getTime() : null;
+    const cutoff = event.registration_cutoff
+      ? new Date(event.registration_cutoff).getTime()
+      : endedAt;
+    const registrationClosed = cutoff != null && !event.allow_late_registration && cutoff < now;
+    if ((endedAt && endedAt < now) || registrationClosed) {
+      setLbGateMode('allow');
+      return;
+    }
+
+    if (!user || !token) {
+      setLbGateMode('login');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLbGateMode('loading');
+      setLbGateError(null);
+      try {
+        const statuses = await getJsonAuth<{ status: string; team_size: number }[]>(
+          `/events/${encodeURIComponent(slug)}/eligibility/me`,
+          token,
+        );
+        if (cancelled) return;
+        const entries = Array.isArray(statuses) ? statuses : [];
+        const hasEnrolled = entries.some((e) => e.status === 'ENROLLED');
+        if (hasEnrolled) {
+          setLbGateMode('blocked');
+          return;
+        }
+        const allowedStatuses = ['INELIGIBLE', 'COMPLETED'];
+        const allAllowed =
+          entries.length > 0 && entries.every((e) => allowedStatuses.includes(e.status));
+        setLbGateMode(allAllowed ? 'allow' : 'prompt');
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          setLbGateMode('login');
+          return;
+        }
+        console.error('Failed to check leaderboard eligibility', err);
+        setLbGateError('Failed to check eligibility. Please try again.');
+        setLbGateMode('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, event, user, token]);
+
+  // Load seeds for any expanded stage that hasn't been fetched yet
+  useEffect(() => {
+    if (!slug) return;
+    for (const stageId of expandedStages) {
+      if (!stageSeeds.has(stageId)) {
+        getJson<
+          {
+            id: number;
+            game_index: number;
+            nickname: string | null;
+            effective_seed: string | null;
+          }[]
+        >(`/events/${encodeURIComponent(slug)}/stages/${stageId}/games`)
+          .then((seeds) => setStageSeeds((prev) => new Map(prev).set(stageId, seeds)))
+          .catch(() => setStageSeeds((prev) => new Map(prev).set(stageId, [])));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedStages, slug]);
+
+  if (loading) {
+    return (
+      <Main>
+        <PageContainer>
+          <Text variant="muted">Loading…</Text>
+        </PageContainer>
+      </Main>
+    );
+  }
 
   if (notFound) {
     return <NotFoundPage />;
   }
 
-  if (loading) {
-    return <PageStateNotice message="Loading event..." />;
+  if (loadError || !event) {
+    return (
+      <Main>
+        <PageContainer>
+          <Alert variant="error" message={loadError ?? 'Failed to load event.'} />
+        </PageContainer>
+      </Main>
+    );
   }
 
-  if (error && !event) {
-    return <PageStateNotice title="Event" message={error} variant="error" />;
+  // Derived state
+  const bannerText = statusBannerText(event);
+  function toggleStage(stageId: number) {
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
   }
 
-  if (!event) {
-    return <PageStateNotice title="Event not found" message="This event does not exist." />;
-  }
+  const showLeaderboard = lbTracks.length > 0 && lbTracks.some((t) => t.entries.length > 0);
+  const activeLbTrack = lbTracks.find((t) => t.team_size === activeLbSize) ?? lbTracks[0];
+  const leaderboard = activeLbTrack?.entries ?? [];
 
-  const startsAt = event.starts_at ? new Date(event.starts_at) : null;
-  const endsAt = event.ends_at ? new Date(event.ends_at) : null;
-  const cutoff = event.registration_cutoff ? new Date(event.registration_cutoff) : endsAt;
-  const registrationOpens = event.registration_opens_at
-    ? new Date(event.registration_opens_at)
-    : startsAt;
-  const now = new Date();
-  const registrationClosed = !!(cutoff && now > cutoff && !event.allow_late_registration);
-  const registrationWindow = (() => {
-    if (registrationOpens && nowTs < registrationOpens.getTime()) {
-      return {
-        label: `Opens in ${formatCountdown(registrationOpens.getTime() - nowTs)}`,
-        variant: 'default' as const,
-        canRegister: false,
-      };
-    }
-    if (cutoff && nowTs < cutoff.getTime()) {
-      return {
-        label: `Closes in ${formatCountdown(cutoff.getTime() - nowTs)}`,
-        variant: 'accent' as const,
-        canRegister: true,
-      };
-    }
-    if (registrationClosed) {
-      return { label: 'Registration closed', variant: 'default' as const, canRegister: false };
-    }
-    return { label: 'Registration open', variant: 'accent' as const, canRegister: true };
-  })();
-
-  const createSession = async () => {
-    if (!auth.token || !slug) return;
-    setCreateSessionSaving(true);
-    setSessionError(null);
-    try {
-      await postJsonAuth(
-        `/session-ladder/events/${encodeURIComponent(slug)}/sessions`,
-        auth.token,
-        {
-          starts_at: null,
-        },
-      );
-      const summaryResp = await getJson<{
-        sessions: typeof sessionList;
-        standings: NonNullable<typeof resultsSummary>['standings'];
-        placements: NonNullable<typeof resultsSummary>['placements'];
-        session_elo: NonNullable<typeof resultsSummary>['session_elo'];
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`);
-      setSessionList(summaryResp.sessions ?? []);
-      setResultsSummary(summaryResp);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setSessionError((err.body as { error?: string })?.error ?? 'Failed to create session.');
-      } else {
-        setSessionError('Failed to create session.');
-      }
-    } finally {
-      setCreateSessionSaving(false);
-    }
-  };
-
-  const refreshLeagueSummaryAndHistory = async () => {
-    if (!slug) return;
-    const [summaryResp, historyResp] = await Promise.all([
-      getJson<{
-        sessions: typeof sessionList;
-        standings: NonNullable<typeof resultsSummary>['standings'];
-        placements: NonNullable<typeof resultsSummary>['placements'];
-        session_elo: NonNullable<typeof resultsSummary>['session_elo'];
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`),
-      getJson<{
-        history: Array<{
-          ledger_id: number;
-          event_id: number;
-          session_id: number;
-          session_index: number;
-          round_id: number;
-          round_index: number;
-          user_id: number;
-          display_name: string;
-          old_rating: number;
-          delta_competitive: number;
-          delta_participation: number;
-          new_rating: number;
-          created_at: string;
-        }>;
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/history?limit=5000`),
-    ]);
-    setSessionList(summaryResp.sessions ?? []);
-    setResultsSummary(summaryResp);
-    setRatingHistory(historyResp.history ?? []);
-  };
-
-  const queueGame = async () => {
-    if (!auth.token || !slug) return;
-    if (!stagedSession?.id) {
-      setSessionError('Create a session first.');
-      return;
-    }
-    const selectedVariant = variantCatalog.find((variant) => variant.code === selectedVariantCode);
-    if (!selectedVariant || !queueSeedInput.trim()) {
-      setSessionError('Variant and seed are required.');
-      return;
-    }
-    setQueueGameSaving(true);
-    setSessionError(null);
-    try {
-      await postJsonAuth(`/session-ladder/sessions/${stagedSession.id}/rounds`, auth.token, {
-        variant: selectedVariant.label,
-        seed: queueSeedInput.trim(),
-      });
-      const summaryResp = await getJson<{
-        sessions: typeof sessionList;
-        standings: NonNullable<typeof resultsSummary>['standings'];
-        placements: NonNullable<typeof resultsSummary>['placements'];
-        session_elo: NonNullable<typeof resultsSummary>['session_elo'];
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`);
-      setSessionList(summaryResp.sessions ?? []);
-      setResultsSummary(summaryResp);
-      const state = await getJsonAuth<{
-        rounds: Array<{
-          id: number;
-          round_index: number;
-          seed_payload: string | null;
-          status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-        }>;
-      }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token);
-      setStagedSessionRounds(state.rounds ?? []);
-      setQueueSeedInput('');
-      setSelectedVariantCode(null);
-      setVariantQuery('');
-      setCreateGameModalOpen(false);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setSessionError((err.body as { error?: string })?.error ?? 'Failed to queue game.');
-      } else {
-        setSessionError('Failed to queue game.');
-      }
-    } finally {
-      setQueueGameSaving(false);
-    }
-  };
-  const isOpenEvent = isSessionLadder ? isLeagueLive : registrationWindow.canRegister;
-
-  const setMyPresence = async (nextState: 'online' | 'offline') => {
-    if (!auth.token || !liveSession?.id) return;
-    setPresenceSaving(true);
-    setPresenceError(null);
-    try {
-      await postJsonAuth(`/session-ladder/sessions/${liveSession.id}/presence`, auth.token, {
-        role: nextState === 'online' ? 'playing' : (currentPresence?.role ?? 'playing'),
-        state: nextState,
-      });
-      const refreshed = await getJsonAuth<LiveSessionStatePayload>(
-        `/session-ladder/sessions/${liveSession.id}/state`,
-        auth.token,
-      );
-      setLiveSessionState({
-        rounds: refreshed.rounds ?? [],
-        presence: refreshed.presence ?? [],
-        round_players: refreshed.round_players ?? [],
-        round_results: refreshed.round_results ?? [],
-        ready_check: refreshed.ready_check ?? null,
-        ready_responses: refreshed.ready_responses ?? [],
-      });
-    } catch {
-      setPresenceError('Unable to update participation right now.');
-    } finally {
-      setPresenceSaving(false);
-    }
-  };
-  const removeParticipant = async (userId: number) => {
-    if (!auth.token || !liveSession?.id || !canManageLeague) return;
-    setPresenceRemovingUserId(userId);
-    setPresenceError(null);
-    try {
-      await postJsonAuth(
-        `/session-ladder/sessions/${liveSession.id}/presence/${userId}/remove`,
-        auth.token,
-        {},
-      );
-      const refreshed = await getJsonAuth<LiveSessionStatePayload>(
-        `/session-ladder/sessions/${liveSession.id}/state`,
-        auth.token,
-      );
-      setLiveSessionState({
-        rounds: refreshed.rounds ?? [],
-        presence: refreshed.presence ?? [],
-        round_players: refreshed.round_players ?? [],
-        round_results: refreshed.round_results ?? [],
-        ready_check: refreshed.ready_check ?? null,
-        ready_responses: refreshed.ready_responses ?? [],
-      });
-    } catch {
-      setPresenceError('Unable to remove participant right now.');
-    } finally {
-      setPresenceRemovingUserId(null);
-    }
-  };
-  const reorderRounds = async (sourceId: number, targetId: number) => {
-    if (!stagedSession?.id || !auth.token || sourceId === targetId) return;
-    setDraggingRoundId(null);
-    const pending = stagedSessionRounds
-      .filter((r) => r.status === 'pending')
-      .sort((a, b) => a.round_index - b.round_index);
-    const sourceIdx = pending.findIndex((r) => r.id === sourceId);
-    const targetIdx = pending.findIndex((r) => r.id === targetId);
-    if (sourceIdx < 0 || targetIdx < 0) return;
-
-    const reordered = [...pending];
-    const [moved] = reordered.splice(sourceIdx, 1);
-    reordered.splice(targetIdx, 0, moved);
-    setSessionError(null);
-
-    try {
-      await postJsonAuth(
-        `/session-ladder/sessions/${stagedSession.id}/rounds/reorder`,
-        auth.token,
-        {
-          round_ids: reordered.map((r) => r.id),
-        },
-      );
-      const state = await getJsonAuth<{
-        rounds: Array<{
-          id: number;
-          round_index: number;
-          seed_payload: string | null;
-          status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-        }>;
-      }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token);
-      setStagedSessionRounds(state.rounds ?? []);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setSessionError((err.body as { error?: string })?.error ?? 'Failed to reorder games.');
-      } else {
-        setSessionError('Failed to reorder games.');
-      }
-      const state = await getJsonAuth<{
-        rounds: Array<{
-          id: number;
-          round_index: number;
-          seed_payload: string | null;
-          status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-        }>;
-      }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token);
-      setStagedSessionRounds(state.rounds ?? []);
-    } finally {
-      setDraggingRoundId(null);
-    }
-  };
-  const handleQueuedDragStart = (event: DragStartEvent) => {
-    const idNum = Number(event.active.id);
-    setDraggingRoundId(Number.isInteger(idNum) ? idNum : null);
-  };
-
-  const handleQueuedDragEnd = (event: DragEndEvent) => {
-    const activeId = Number(event.active.id);
-    const overId = event.over ? Number(event.over.id) : null;
-    setDraggingRoundId(null);
-    if (!Number.isInteger(activeId) || !Number.isInteger(overId) || activeId === overId) return;
-    void reorderRounds(activeId, overId);
-  };
-  const isSessionLive = stagedSession?.status === 'live';
-
-  const setSessionLive = async (nextLive: boolean) => {
-    if (!auth.token || !slug) return;
-    setStatusSaving(true);
-    setStatusError(null);
-    try {
-      if (nextLive) {
-        let targetSessionId = stagedSession?.id ?? null;
-        if (!targetSessionId) {
-          const created = await postJsonAuth<{ id: number }>(
-            `/session-ladder/events/${encodeURIComponent(slug)}/sessions`,
-            auth.token,
-            { starts_at: null },
-          );
-          targetSessionId = created.id;
-        }
-
-        await postJsonAuth(`/session-ladder/sessions/${targetSessionId}/start`, auth.token, {});
-        await putJsonAuth(`/events/${encodeURIComponent(event.slug)}`, auth.token, {
-          event_status: 'LIVE',
-        });
-        setEventStatus('LIVE');
-      } else {
-        if (!stagedSession?.id) return;
-        await postJsonAuth(`/session-ladder/sessions/${stagedSession.id}/close`, auth.token, {});
-        await putJsonAuth(`/events/${encodeURIComponent(event.slug)}`, auth.token, {
-          event_status: 'DORMANT',
-        });
-        setEventStatus('DORMANT');
-      }
-
-      const summaryResp = await getJson<{
-        sessions: typeof sessionList;
-        standings: NonNullable<typeof resultsSummary>['standings'];
-        placements: NonNullable<typeof resultsSummary>['placements'];
-        session_elo: NonNullable<typeof resultsSummary>['session_elo'];
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`);
-      setSessionList(summaryResp.sessions ?? []);
-      setResultsSummary(summaryResp);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setStatusError(
-          (err.body as { error?: string })?.error ?? 'Failed to update session state.',
-        );
-      } else {
-        setStatusError('Failed to update session state.');
-      }
-    } finally {
-      setStatusSaving(false);
-    }
-  };
-
-  const endLeague = async () => {
-    if (!auth.token || !slug || !isSessionLadder) return;
-    setStatusSaving(true);
-    setStatusError(null);
-    try {
-      await postJsonAuth(`/session-ladder/events/${encodeURIComponent(slug)}/end`, auth.token, {});
-      setEventStatus('COMPLETE');
-      const summaryResp = await getJson<{
-        sessions: typeof sessionList;
-        standings: NonNullable<typeof resultsSummary>['standings'];
-        placements: NonNullable<typeof resultsSummary>['placements'];
-        session_elo: NonNullable<typeof resultsSummary>['session_elo'];
-      }>(`/session-ladder/events/${encodeURIComponent(slug)}/results-summary`);
-      setSessionList(summaryResp.sessions ?? []);
-      setResultsSummary(summaryResp);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setStatusError((err.body as { error?: string })?.error ?? 'Failed to end league.');
-      } else {
-        setStatusError('Failed to end league.');
-      }
-    } finally {
-      setStatusSaving(false);
-    }
-  };
-  const pendingRounds = stagedSessionRounds
-    .filter((round) => round.status === 'pending')
-    .sort((a, b) => a.round_index - b.round_index);
-  const orderedRounds = [...stagedSessionRounds].sort((a, b) => a.round_index - b.round_index);
-  const activeRound = orderedRounds.find(
-    (round) =>
-      round.status === 'assigning' || round.status === 'playing' || round.status === 'scoring',
-  );
-  const adminRailWidth = adminRailCollapsed ? 64 : 320;
-
-  const startNextGame = async () => {
-    if (!auth.token || !stagedSession?.id) return;
-    setStartGameSaving(true);
-    setStatusError(null);
-    try {
-      await postJsonAuth(
-        `/session-ladder/sessions/${stagedSession.id}/ready-check/start`,
-        auth.token,
-        {
-          duration_seconds: 10,
-        },
-      );
-      const state = await getJsonAuth<{
-        rounds: Array<{
-          id: number;
-          round_index: number;
-          seed_payload: string | null;
-          status: 'pending' | 'assigning' | 'playing' | 'scoring' | 'finalized';
-        }>;
-      }>(`/session-ladder/sessions/${stagedSession.id}/state`, auth.token);
-      setStagedSessionRounds(state.rounds ?? []);
-      await refreshLeagueSummaryAndHistory();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const body = err.body as { reason?: string; missing_teams?: number; error?: string };
-        if (body.reason === 'SEED_REQUIRED') {
-          setStatusError('Next game is missing a variant or seed.');
-        } else {
-          setStatusError(body.error ?? 'Unable to start game right now.');
-        }
-      } else if (err instanceof ApiError) {
-        setStatusError(
-          (err.body as { error?: string })?.error ?? 'Unable to start game right now.',
-        );
-      } else {
-        setStatusError('Unable to start game right now.');
-      }
-    } finally {
-      setStartGameSaving(false);
-    }
-  };
-
-  const submitReadyCheck = async () => {
-    if (!auth.token || !liveSession?.id) return;
-    setReadySubmitting(true);
-    setPresenceError(null);
-    try {
-      await postJsonAuth(
-        `/session-ladder/sessions/${liveSession.id}/ready-check/respond`,
-        auth.token,
-        {
-          is_ready: true,
-        },
-      );
-      const refreshed = await getJsonAuth<LiveSessionStatePayload>(
-        `/session-ladder/sessions/${liveSession.id}/state`,
-        auth.token,
-      );
-      setLiveSessionState({
-        rounds: refreshed.rounds ?? [],
-        presence: refreshed.presence ?? [],
-        round_players: refreshed.round_players ?? [],
-        round_results: refreshed.round_results ?? [],
-        ready_check: refreshed.ready_check ?? null,
-        ready_responses: refreshed.ready_responses ?? [],
-      });
-    } catch {
-      setPresenceError('Unable to confirm readiness right now.');
-    } finally {
-      setReadySubmitting(false);
-    }
-  };
-
-  const showDateMeta = !isSessionLadder && (event.starts_at || event.ends_at);
-  const showRegistrationMeta = !isSessionLadder && !!registrationWindow.label;
-  const variantSuggestions = (() => {
-    const q = variantQuery.trim().toLowerCase();
-    const filtered = q
-      ? variantCatalog.filter(
-          (variant) =>
-            variant.label.toLowerCase().includes(q) ||
-            variant.name.toLowerCase().includes(q) ||
-            String(variant.code).includes(q),
-        )
-      : variantCatalog;
-    return filtered.slice(0, 100).map((variant) => ({
-      key: variant.code,
-      node: <Text variant="body">{variant.name}</Text>,
-      value: variant,
-    }));
-  })();
+  const tabItems = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      active: activeTab === 'overview',
+      onSelect: () => setActiveTab('overview'),
+    },
+    ...(showLeaderboard
+      ? [
+          {
+            key: 'leaderboard',
+            label: 'Leaderboard',
+            active: activeTab === 'leaderboard',
+            onSelect: () => setActiveTab('leaderboard'),
+          },
+        ]
+      : []),
+    ...((awards?.event_awards.length ?? 0) + (awards?.stage_awards.length ?? 0) > 0
+      ? [
+          {
+            key: 'awards',
+            label: 'Awards',
+            active: activeTab === 'awards',
+            onSelect: () => setActiveTab('awards'),
+          },
+        ]
+      : []),
+    ...(user && myTeams.length > 0
+      ? [
+          {
+            key: 'my-teams',
+            label: myTeams.length === 1 ? 'My Team' : 'My Teams',
+            active: activeTab === 'my-teams',
+            onSelect: () => {
+              if (myTeams.length === 1) {
+                void navigate(`/events/${slug}/event-teams/${myTeams[0].id}`);
+              } else {
+                setActiveTab('my-teams');
+              }
+            },
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Main>
-      <style>{spinnerKeyframes}</style>
       <PageContainer>
         <Section paddingY="lg">
+          {/* Header */}
           <Stack gap="md">
-            <Stack gap="sm">
-              <Inline align="center" justify="space-between" wrap>
-                <Heading level={1}>{event.name}</Heading>
-              </Inline>
-              <Inline gap="xs" wrap align="center">
-                {showDateMeta ? (
-                  <Pill size="sm" variant="accent">
-                    {formatDateRange(event.starts_at, event.ends_at)}
+            <Stack gap="xs">
+              <Heading level={1}>{event.name}</Heading>
+              <Inline gap="xs" wrap>
+                {bannerText ? (
+                  <Pill size="sm" variant={statusBannerVariant(event)}>
+                    {bannerText}
                   </Pill>
                 ) : null}
-                {showRegistrationMeta ? (
-                  <Pill
-                    size="sm"
-                    variant={registrationWindow.variant === 'accent' ? 'accent' : 'default'}
-                  >
-                    {registrationWindow.label}
-                  </Pill>
-                ) : null}
-                {event.event_status === 'LIVE' ? (
-                  <Pill size="sm" variant="accent">
-                    Live
-                  </Pill>
-                ) : null}
-                {event.event_status === 'COMPLETE' ? (
+                {event.starts_at || event.ends_at ? (
                   <Pill size="sm" variant="default">
-                    Complete
+                    {event.starts_at && event.ends_at
+                      ? `${formatDate(event.starts_at)} – ${formatDate(event.ends_at)}`
+                      : event.starts_at
+                        ? `Starts ${formatDate(event.starts_at)}`
+                        : `Ends ${formatDate(event.ends_at)}`}
                   </Pill>
                 ) : null}
               </Inline>
-              <Tabs
-                items={
-                  isSessionLadder
-                    ? [
-                        {
-                          key: 'overview',
-                          label: 'Overview',
-                          active: leagueTab === 'overview',
-                          onSelect: () => setLeagueTab('overview'),
-                        },
-                        {
-                          key: 'results',
-                          label: 'Results',
-                          active: leagueTab === 'results',
-                          onSelect: () => setLeagueTab('results'),
-                        },
-                      ]
-                    : [
-                        {
-                          key: 'overview',
-                          label: 'Overview',
-                          active: true,
-                          onSelect: () => undefined,
-                        },
-                        ...(isChallenge
-                          ? [
-                              {
-                                key: 'stats',
-                                label: 'Stats',
-                                active: false,
-                                onSelect: () => navigate(`/events/${event.slug}/stats`),
-                              },
-                            ]
-                          : []),
-                      ]
-                }
-              />
             </Stack>
 
-            <Inline gap="md" align="start" wrap>
-              <Stack
-                gap="md"
-                style={{ flex: canManageLeague && isSessionLadder ? '1 1 0' : '1 1 100%' }}
-              >
-                {(!isSessionLadder || leagueTab === 'overview') && (
-                  <Card variant="outline" separated>
-                    <CardBody>
-                      {isOpenEvent && !showFullOverview ? (
-                        <Stack gap="sm">
-                          <MarkdownRenderer
-                            markdown={firstHeadingSectionMarkdown(
-                              event.long_description || event.short_description || '',
-                            )}
-                          />
-                          <Inline>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setShowFullOverview(true)}
-                            >
-                              Show full details
-                            </Button>
-                          </Inline>
-                        </Stack>
-                      ) : (
-                        <Stack gap="sm">
-                          <MarkdownRenderer
-                            markdown={event.long_description || event.short_description || ''}
-                          />
-                          {isOpenEvent && (
-                            <Inline>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowFullOverview(false)}
-                              >
-                                Hide details
-                              </Button>
-                            </Inline>
-                          )}
-                        </Stack>
-                      )}
-                    </CardBody>
-                  </Card>
-                )}
+            {/* Tabs */}
+            <Tabs items={tabItems} />
+          </Stack>
 
-                {isSessionLadder ? (
-                  <>
-                    {leagueTab === 'overview' && isLeagueLive ? (
-                      <Stack gap="md">
-                        <Card variant="outline" separated>
-                          <CardHeader>
-                            <Inline justify="space-between" align="center" wrap>
-                              <Heading level={3}>Participants</Heading>
-                              <Inline gap="xs" align="center" wrap>
-                                {myTeamPageHref ? (
-                                  <Button as={Link} to={myTeamPageHref} variant="primary" size="sm">
-                                    Go to Team Page
-                                  </Button>
+          {/* Tab content */}
+          <Stack gap="md" style={{ marginTop: 'var(--ds-space-lg)' }}>
+            {activeTab === 'overview' ? (
+              <Stack gap="lg">
+                <MarkdownRenderer markdown={event.long_description} />
+                {stages.length > 0 ? (
+                  <Stack gap="sm">
+                    <Heading level={2}>Stages</Heading>
+                    {stages.map((stage) => {
+                      const isExpanded = expandedStages.has(stage.id);
+                      const seeds = stageSeeds.get(stage.id);
+                      const dateRange = stageDateRange(stage);
+                      const locked = isStageBeforeWindow(stage);
+                      const active = isStageActive(stage);
+                      return (
+                        <Card key={stage.id} variant="outline">
+                          <CardHeader
+                            style={{ cursor: locked ? 'default' : 'pointer' }}
+                            onClick={locked ? undefined : () => toggleStage(stage.id)}
+                          >
+                            <Inline gap="xs" justify="space-between" wrap>
+                              <Inline gap="xs" align="center">
+                                {locked ? <MaterialIcon name="lock" size={14} /> : null}
+                                <Text style={{ fontWeight: 500 }}>{stage.label}</Text>
+                              </Inline>
+                              <Inline gap="xs" align="center">
+                                {dateRange ? (
+                                  <Pill size="sm" variant={active ? 'accent' : 'default'}>
+                                    {dateRange}
+                                  </Pill>
                                 ) : null}
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  disabled={
-                                    presenceSaving || !isLeagueLive || !auth.user || !liveSession
-                                  }
-                                  onClick={() =>
-                                    void setMyPresence(isJoinedLiveSession ? 'offline' : 'online')
-                                  }
-                                >
-                                  {presenceSaving
-                                    ? 'Saving...'
-                                    : isJoinedLiveSession
-                                      ? 'Leave'
-                                      : 'Join'}
-                                </Button>
+                                {!locked ? (
+                                  <MaterialIcon
+                                    name={isExpanded ? 'expand_less' : 'expand_more'}
+                                    size={20}
+                                  />
+                                ) : null}
                               </Inline>
                             </Inline>
                           </CardHeader>
-                          <CardBody>
-                            <Stack gap="sm">
-                              {presenceError && <Alert variant="error" message={presenceError} />}
-                              {!isLeagueLive ? (
-                                <Text variant="muted">League is not live yet.</Text>
-                              ) : !liveSession ? (
-                                <Text variant="muted">No live session right now.</Text>
-                              ) : !auth.user ? (
-                                <Text variant="muted">Log in to join this session.</Text>
-                              ) : (liveSessionState?.presence ?? []).filter(
-                                  (p) => p.state === 'online',
-                                ).length === 0 ? (
-                                <Text variant="muted">No active participants yet.</Text>
+                          {isExpanded ? (
+                            <CardBody>
+                              {seeds === undefined ? (
+                                <Text variant="muted">Loading seeds…</Text>
+                              ) : seeds.length === 0 ? (
+                                <Text variant="muted">No seeds available.</Text>
                               ) : (
-                                <Inline gap="xs" wrap>
-                                  {(liveSessionState?.presence ?? [])
-                                    .filter((p) => p.state === 'online')
-                                    .map((p) => {
-                                      const userStyle = directoryById.get(p.user_id);
-                                      const pill = (
-                                        <UserPill
-                                          name={p.display_name}
-                                          color={userStyle?.color_hex}
-                                          textColor={userStyle?.text_color}
-                                          size="sm"
-                                          as={canManageLeague ? 'button' : 'span'}
-                                          type={canManageLeague ? 'button' : undefined}
-                                          interactive={canManageLeague}
-                                          disabled={
-                                            (canManageLeague &&
-                                              presenceRemovingUserId === p.user_id) ||
-                                            (canManageLeague && presenceSaving)
-                                          }
-                                          onClick={
-                                            canManageLeague
-                                              ? () => void removeParticipant(p.user_id)
-                                              : undefined
-                                          }
-                                          style={
-                                            canManageLeague ? { cursor: 'pointer' } : undefined
-                                          }
-                                        />
-                                      );
-                                      if (!canManageLeague) return pill;
-                                      return (
-                                        <Tooltip
-                                          key={p.user_id}
-                                          content="Remove from active players"
-                                        >
-                                          {pill}
-                                        </Tooltip>
-                                      );
-                                    })}
-                                </Inline>
+                                <Stack gap="xs">
+                                  {seeds.map((s) => (
+                                    <Text key={s.id} variant="caption">
+                                      {s.game_index + 1}. {s.nickname ?? s.effective_seed ?? '—'}
+                                    </Text>
+                                  ))}
+                                </Stack>
                               )}
-                            </Stack>
-                          </CardBody>
+                            </CardBody>
+                          ) : null}
                         </Card>
+                      );
+                    })}
+                  </Stack>
+                ) : null}
+              </Stack>
+            ) : null}
 
-                        <Card variant="outline" separated>
+            {activeTab === 'awards' && awards ? (
+              <Stack gap="md">
+                <Heading level={3}>Awards</Heading>
+                {awards.event_awards.length === 0 && awards.stage_awards.length === 0 ? (
+                  <Text variant="muted">No awards for this event.</Text>
+                ) : null}
+                {awards.event_awards.length > 0 ? (
+                  <Stack gap="xs">
+                    <Text variant="label">Event Awards</Text>
+                    {awards.event_awards.map((award) => {
+                      const grants = grantsByAward.get(award.id) ?? [];
+                      return (
+                        <Card key={award.id} variant="outline">
                           <CardHeader>
-                            <Inline justify="space-between" align="center" wrap>
-                              <Heading level={3}>Games</Heading>
-                              <Tabs
-                                items={liveRoundsSorted.map((round) => ({
-                                  key: `round-${round.id}`,
-                                  label: `Game ${round.round_index}`,
-                                  active: gamesTab === `round-${round.id}`,
-                                  disabled: round.id === blockedOngoingRoundIdForViewer,
-                                  onSelect: () => {
-                                    if (round.id === blockedOngoingRoundIdForViewer) return;
-                                    setGamesTab(`round-${round.id}`);
-                                  },
-                                }))}
-                              />
+                            <Inline gap="xs">
+                              {award.icon ? (
+                                <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
+                              ) : null}
+                              <Heading level={4}>{award.name}</Heading>
                             </Inline>
                           </CardHeader>
-                          <CardBody>
-                            {visibleGameRounds.length === 0 ? (
-                              <Text variant="muted">No games in this session yet.</Text>
-                            ) : (
-                              <LeagueGameBlocks
-                                round={
-                                  visibleGameRounds.find((r) => `round-${r.id}` === gamesTab) ??
-                                  visibleGameRounds[visibleGameRounds.length - 1]
-                                }
-                                roundPlayers={liveSessionState?.round_players ?? []}
-                                roundResults={liveSessionState?.round_results ?? []}
-                                ratingHistory={ratingHistory}
-                                directoryById={directoryById}
-                              />
-                            )}
-                          </CardBody>
+                          {award.description ? (
+                            <CardBody>
+                              <Text variant="caption">{award.description}</Text>
+                            </CardBody>
+                          ) : null}
+                          {grants.length > 0 ? (
+                            <CardBody>
+                              <Inline gap="xs" wrap>
+                                {grants.map((g) => {
+                                  const u = allUsers.find((x) => x.id === g.user_id);
+                                  const name = u?.display_name ?? `User ${g.user_id}`;
+                                  const isMe = g.user_id === user?.id;
+                                  return (
+                                    <Pill
+                                      key={g.id}
+                                      size="sm"
+                                      variant={isMe ? 'accent' : 'default'}
+                                    >
+                                      {name}
+                                    </Pill>
+                                  );
+                                })}
+                              </Inline>
+                            </CardBody>
+                          ) : null}
                         </Card>
-                      </Stack>
-                    ) : leagueTab === 'results' ? (
-                      <Card variant="outline" separated>
-                        <CardHeader>
-                          <Inline justify="space-between" align="center" wrap>
-                            <Heading level={3}>Results</Heading>
-                            <Tabs
-                              items={[
-                                {
-                                  key: 'standings',
-                                  label: 'Standings',
-                                  active: resultsTab === 'standings',
-                                  onSelect: () => setResultsTab('standings'),
-                                },
-                                ...(resultsSummary?.sessions ?? []).map((s) => ({
-                                  key: `session-${s.id}`,
-                                  label: `Session ${s.session_index}`,
-                                  active: resultsTab === `session-${s.id}`,
-                                  onSelect: () => setResultsTab(`session-${s.id}`),
-                                })),
-                              ]}
-                            />
-                          </Inline>
-                        </CardHeader>
-                        <CardBody>
-                          <LeagueResultsTables summary={resultsSummary} resultsTab={resultsTab} />
-                        </CardBody>
-                      </Card>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <Card variant="outline" separated>
-                      <CardHeader>
-                        <Inline align="center" justify="space-between" wrap>
-                          <Heading level={3}>Teams</Heading>
-                          <Button
-                            variant={registrationWindow.canRegister ? 'primary' : 'secondary'}
-                            size="md"
-                            onClick={() => {
-                              if (!registrationWindow.canRegister) return;
-                              setRegisterError(null);
-                              setShowRegister(true);
-                            }}
-                            disabled={!registrationWindow.canRegister}
-                            title={
-                              !registrationWindow.canRegister
-                                ? 'Registration for this event is closed or not yet open'
-                                : undefined
-                            }
-                          >
-                            Register a Team
+                      );
+                    })}
+                  </Stack>
+                ) : null}
+                {awards.stage_awards.map((sg) => (
+                  <Stack key={sg.stage_id} gap="xs">
+                    <Text variant="label">{sg.stage_label}</Text>
+                    {sg.awards.map((award) => {
+                      const grants = grantsByAward.get(award.id) ?? [];
+                      return (
+                        <Card key={award.id} variant="outline">
+                          <CardHeader>
+                            <Inline gap="xs">
+                              {award.icon ? (
+                                <Text>{String.fromCodePoint(Number.parseInt(award.icon, 16))}</Text>
+                              ) : null}
+                              <Heading level={4}>{award.name}</Heading>
+                            </Inline>
+                          </CardHeader>
+                          {award.description ? (
+                            <CardBody>
+                              <Text variant="caption">{award.description}</Text>
+                            </CardBody>
+                          ) : null}
+                          {grants.length > 0 ? (
+                            <CardBody>
+                              <Inline gap="xs" wrap>
+                                {grants.map((g) => {
+                                  const u = allUsers.find((x) => x.id === g.user_id);
+                                  const name = u?.display_name ?? `User ${g.user_id}`;
+                                  const isMe = g.user_id === user?.id;
+                                  return (
+                                    <Pill
+                                      key={g.id}
+                                      size="sm"
+                                      variant={isMe ? 'accent' : 'default'}
+                                    >
+                                      {name}
+                                    </Pill>
+                                  );
+                                })}
+                              </Inline>
+                            </CardBody>
+                          ) : null}
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                ))}
+              </Stack>
+            ) : null}
+
+            {activeTab === 'leaderboard' && showLeaderboard ? (
+              <Stack gap="sm">
+                <Heading level={3}>Leaderboard</Heading>
+                {lbGateMode !== 'allow' ? (
+                  <Stack gap="sm">
+                    {lbGateMode === 'loading' && <Text variant="muted">Checking eligibility…</Text>}
+                    {lbGateMode === 'login' && (
+                      <Stack gap="sm">
+                        <Text>
+                          The leaderboard contains spoilers. Log in so we can check your eligibility
+                          before you decide whether to peek.
+                        </Text>
+                        <Inline>
+                          <Button as={Link} to="/login" variant="primary" size="sm">
+                            Log in
                           </Button>
                         </Inline>
-                      </CardHeader>
-                      <CardBody>
-                        <Inline
-                          gap="sm"
-                          wrap
-                          align="center"
-                          style={{ marginBottom: 'var(--ds-space-sm)' }}
-                        >
-                          {[2, 3, 4, 5, 6].map((size) => {
-                            const isActive = parsedTeamSize === size;
-                            const target =
-                              size === 3
-                                ? `/events/${event.slug}`
-                                : `/events/${event.slug}/${size}`;
-                            return (
-                              <Link
-                                key={size}
-                                to={target}
-                                className={`pill ${isActive ? 'pill--accent' : ''}`}
-                              >
-                                {size} Player
-                              </Link>
-                            );
-                          })}
+                      </Stack>
+                    )}
+                    {lbGateMode === 'blocked' && (
+                      <Text>
+                        You&apos;re enrolled for this event, so the leaderboard is hidden to protect
+                        fairness. Finish playing before peeking.
+                      </Text>
+                    )}
+                    {lbGateMode === 'prompt' && (
+                      <Stack gap="sm">
+                        <Text>
+                          The leaderboard contains spoilers. Viewing it will forfeit your
+                          eligibility to participate. If you still plan to play, hold off &mdash; no
+                          hard feelings either way.
+                        </Text>
+                        <Inline gap="sm">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={lbForfeitLoading}
+                            onClick={async () => {
+                              if (!token) return;
+                              setLbForfeitLoading(true);
+                              setLbGateError(null);
+                              try {
+                                await postJsonAuth(
+                                  `/events/${encodeURIComponent(slug!)}/eligibility/spoilers`,
+                                  token,
+                                  { all_team_sizes: true, reason: 'leaderboard_spoiler' },
+                                );
+                                setLbGateMode('allow');
+                              } catch (err) {
+                                console.error('Failed to update eligibility', err);
+                                setLbGateError('Failed to update eligibility. Please try again.');
+                              } finally {
+                                setLbForfeitLoading(false);
+                              }
+                            }}
+                          >
+                            {lbForfeitLoading ? 'Continuing…' : 'View leaderboard'}
+                          </Button>
                         </Inline>
+                        {lbGateError && <Alert variant="error" message={lbGateError} />}
+                      </Stack>
+                    )}
+                    {lbGateMode === 'error' && (
+                      <Alert
+                        variant="error"
+                        message={lbGateError ?? 'Unable to check eligibility.'}
+                      />
+                    )}
+                  </Stack>
+                ) : (
+                  <>
+                    {lbTracks.length > 1 ? (
+                      <Tabs
+                        items={lbTracks.map((t) => ({
+                          key: String(t.team_size),
+                          label: t.team_size === null ? 'Combined' : `${t.team_size}p`,
+                          active: t.team_size === activeLbSize,
+                          onSelect: () => setActiveLbSize(t.team_size),
+                        }))}
+                      />
+                    ) : null}
+                    {leaderboard.length === 0 ? (
+                      <Text variant="muted">No results yet.</Text>
+                    ) : (
+                      (() => {
+                        const stageColumns = activeLbTrack?.entries[0]?.stage_scores ?? [];
 
-                        {teamsLoading && <Text variant="muted">Loading teams…</Text>}
-                        {teamsError && <Text variant="body">{teamsError}</Text>}
+                        function handleSort(col: LbSortCol) {
+                          setLbSort((prev) => {
+                            if (prev.col === col) {
+                              return { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' };
+                            }
+                            return { col, dir: col === 'team' ? 'asc' : 'desc' };
+                          });
+                        }
 
-                        {!teamsLoading && !teamsError && (
-                          <>
-                            {teams.filter((t) => t.team_size === parsedTeamSize).length === 0 ? (
-                              <Text variant="muted">No {parsedTeamSize}-player teams yet.</Text>
-                            ) : (
-                              <Table>
-                                <Table.Thead>
-                                  <Table.Tr>
-                                    <Table.Th>Name</Table.Th>
-                                    <Table.Th style={{ textAlign: 'right' }}>Games</Table.Th>
-                                    <Table.Th style={{ textAlign: 'right' }}>Win Rate</Table.Th>
-                                    <Table.Th style={{ textAlign: 'right' }}>Avg BDR</Table.Th>
-                                    <Table.Th style={{ textAlign: 'right' }}>Avg Score</Table.Th>
-                                  </Table.Tr>
-                                </Table.Thead>
-                                <Table.Tbody>
-                                  {teams
-                                    .filter((t) => t.team_size === parsedTeamSize)
-                                    .map((team) => {
-                                      const completed = team.completed_games ?? 0;
-                                      const perfect = team.perfect_games ?? 0;
-                                      const winRate =
-                                        completed > 0
-                                          ? `${Math.round((perfect / completed) * 100)}%`
-                                          : '—';
-                                      const avgBdr =
-                                        team.avg_bdr != null
-                                          ? Number(team.avg_bdr).toFixed(2)
-                                          : '—';
-                                      const avgScore =
-                                        team.avg_score != null
-                                          ? Number(team.avg_score).toFixed(2)
-                                          : '—';
-                                      return (
-                                        <Table.Tr
-                                          key={team.id}
-                                          style={{ borderTop: '1px solid var(--ds-color-border)' }}
-                                        >
-                                          <Table.Td style={{ fontSize: '0.875rem' }}>
-                                            <Link
-                                              to={`/events/${event.slug}/teams/${team.id}`}
-                                              style={{
-                                                fontWeight: 600,
-                                                color: '#1d4ed8',
-                                                textDecoration: 'none',
-                                              }}
-                                            >
-                                              {team.name}
-                                            </Link>
-                                          </Table.Td>
-                                          <Table.Td
-                                            style={{
-                                              fontSize: '0.875rem',
-                                              textAlign: 'right',
-                                              color: 'var(--ds-color-text-muted)',
-                                            }}
-                                          >
-                                            {completed} / {team.total_templates ?? '—'}
-                                          </Table.Td>
-                                          <Table.Td
-                                            style={{
-                                              fontSize: '0.875rem',
-                                              textAlign: 'right',
-                                              color: 'var(--ds-color-text-muted)',
-                                            }}
-                                          >
-                                            {winRate}
-                                          </Table.Td>
-                                          <Table.Td
-                                            style={{
-                                              fontSize: '0.875rem',
-                                              textAlign: 'right',
-                                              color: 'var(--ds-color-text-muted)',
-                                            }}
-                                          >
-                                            {avgBdr}
-                                          </Table.Td>
-                                          <Table.Td
-                                            style={{
-                                              fontSize: '0.875rem',
-                                              textAlign: 'right',
-                                              color: 'var(--ds-color-text-muted)',
-                                            }}
-                                          >
-                                            {avgScore}
-                                          </Table.Td>
-                                        </Table.Tr>
-                                      );
-                                    })}
-                                </Table.Tbody>
-                              </Table>
-                            )}
-                          </>
-                        )}
-                      </CardBody>
-                    </Card>
+                        function sortIndicator(col: LbSortCol) {
+                          if (lbSort.col !== col) return null;
+                          return lbSort.dir === 'desc' ? ' ↓' : ' ↑';
+                        }
+
+                        const sorted = [...leaderboard].sort((a, b) => {
+                          let cmp = 0;
+                          if (lbSort.col === 'total') {
+                            cmp = a.total_score - b.total_score;
+                          } else if (lbSort.col === 'team') {
+                            cmp = a.team.display_name.localeCompare(b.team.display_name);
+                          } else {
+                            const aScore =
+                              a.stage_scores.find((s) => s.stage_id === lbSort.col)?.score ??
+                              -Infinity;
+                            const bScore =
+                              b.stage_scores.find((s) => s.stage_id === lbSort.col)?.score ??
+                              -Infinity;
+                            cmp = aScore - bScore;
+                          }
+                          return lbSort.dir === 'desc' ? -cmp : cmp;
+                        });
+
+                        const thStyle = (col: LbSortCol, align: 'left' | 'right' = 'left') => ({
+                          textAlign: align,
+                          cursor: 'pointer',
+                          userSelect: 'none' as const,
+                          whiteSpace: 'nowrap' as const,
+                          opacity: lbSort.col === col ? 1 : 0.75,
+                        });
+
+                        return (
+                          <div style={{ overflowX: 'auto' }}>
+                            <Table style={{ width: 'auto' }}>
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th
+                                    style={thStyle('total')}
+                                    onClick={() => handleSort('total')}
+                                  >
+                                    #{sortIndicator('total')}
+                                  </Table.Th>
+                                  <Table.Th
+                                    style={thStyle('team')}
+                                    onClick={() => handleSort('team')}
+                                  >
+                                    Team{sortIndicator('team')}
+                                  </Table.Th>
+                                  {stageColumns.map((s) => (
+                                    <Table.Th
+                                      key={s.stage_id}
+                                      style={thStyle(s.stage_id, 'right')}
+                                      onClick={() => handleSort(s.stage_id)}
+                                    >
+                                      {s.stage_label}
+                                      {sortIndicator(s.stage_id)}
+                                    </Table.Th>
+                                  ))}
+                                  <Table.Th
+                                    style={thStyle('total', 'right')}
+                                    onClick={() => handleSort('total')}
+                                  >
+                                    Total{sortIndicator('total')}
+                                  </Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {sorted.map((entry) => {
+                                  const isMe = entry.team.members.some(
+                                    (m) => m.user_id === user?.id,
+                                  );
+                                  const scoreByStage = new Map(
+                                    entry.stage_scores.map((s) => [s.stage_id, s.score]),
+                                  );
+                                  return (
+                                    <Table.Tr
+                                      key={entry.team.id}
+                                      style={isMe ? { fontWeight: 'bold' } : {}}
+                                    >
+                                      <Table.Td>{entry.rank}</Table.Td>
+                                      <Table.Td>
+                                        <Link to={`/events/${slug}/event-teams/${entry.team.id}`}>
+                                          {entry.team.display_name}
+                                        </Link>
+                                      </Table.Td>
+                                      {stageColumns.map((s) => (
+                                        <Table.Td key={s.stage_id} style={{ textAlign: 'right' }}>
+                                          {scoreByStage.get(s.stage_id) ?? '—'}
+                                        </Table.Td>
+                                      ))}
+                                      <Table.Td style={{ textAlign: 'right' }}>
+                                        {entry.total_score}
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  );
+                                })}
+                              </Table.Tbody>
+                            </Table>
+                          </div>
+                        );
+                      })()
+                    )}
                   </>
                 )}
               </Stack>
+            ) : null}
 
-              {isSessionLadder && canManageLeague ? (
-                <Card
-                  variant="outline"
-                  separated
-                  style={{
-                    flex: `0 0 ${adminRailWidth}px`,
-                    width: `${adminRailWidth}px`,
-                    position: 'sticky',
-                    top: '1rem',
-                    zIndex: 2,
-                  }}
-                >
-                  {adminRailCollapsed ? (
-                    <CardBody style={{ padding: '0.2rem' }}>
-                      <Inline justify="center" align="center">
-                        <UnstyledButton
-                          onClick={() => setAdminRailCollapsed(false)}
-                          title="Expand admin controls"
-                          style={{
-                            cursor: 'pointer',
-                            fontSize: '1.6rem',
-                            lineHeight: 1,
-                            userSelect: 'none',
-                            padding: '0.15rem 0.25rem',
-                          }}
-                        >
-                          ⚙
-                        </UnstyledButton>
+            {activeTab === 'my-teams' && myTeams.length > 1 ? (
+              <Stack gap="sm">
+                <Heading level={2}>My Teams</Heading>
+                {myTeams.map((team) => (
+                  <Card key={team.id} variant="outline">
+                    <CardHeader>
+                      <Inline gap="xs" justify="space-between" wrap>
+                        <Link to={`/events/${slug}/event-teams/${team.id}`}>
+                          <Text style={{ fontWeight: 500 }}>{team.display_name}</Text>
+                        </Link>
+                        <Inline gap="xs" wrap>
+                          {team.members.map((m) => (
+                            <UserPill key={m.user_id} name={m.display_name} size="sm" />
+                          ))}
+                        </Inline>
                       </Inline>
-                    </CardBody>
-                  ) : (
-                    <>
-                      <CardHeader>
-                        <UnstyledButton
-                          onClick={() => setAdminRailCollapsed(true)}
-                          title="Collapse admin controls"
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <Heading level={3} style={{ margin: 0 }}>
-                            Admin Controls ⚙
-                          </Heading>
-                        </UnstyledButton>
-                      </CardHeader>
-                      <CardBody>
-                        <Stack gap="sm">
-                          <Inline align="center" justify="space-between" gap="sm" wrap>
-                            <ToggleSwitch
-                              checked={Boolean(isSessionLive)}
-                              disabled={statusSaving}
-                              label={isSessionLive ? 'Live' : 'Off'}
-                              onChange={(e) => {
-                                const nextChecked = e.currentTarget.checked;
-                                if (!nextChecked && isSessionLive) {
-                                  setSessionToggleConfirmOpen(true);
-                                  return;
-                                }
-                                if (nextChecked) {
-                                  void setSessionLive(true);
-                                }
-                              }}
-                            />
-                            <Button
-                              variant="secondary"
-                              disabled={
-                                statusSaving ||
-                                startGameSaving ||
-                                !isSessionLive ||
-                                pendingRounds.length === 0 ||
-                                Boolean(openReadyCheck)
-                              }
-                              onClick={() => {
-                                if (activeRound) {
-                                  setStartGameConfirmOpen(true);
-                                  return;
-                                }
-                                void startNextGame();
-                              }}
-                            >
-                              {startGameSaving
-                                ? 'Starting…'
-                                : openReadyCheck
-                                  ? 'Ready Check…'
-                                  : 'Start Game'}
-                            </Button>
-                          </Inline>
-                          {statusError && <Alert variant="error" message={statusError} />}
-                          <Divider />
-
-                          {stagedSession ? (
-                            <>
-                              <Heading
-                                level={4}
-                              >{`Session ${stagedSession.session_index}`}</Heading>
-                              {orderedRounds.length === 0 ? (
-                                <Text variant="muted">No games yet.</Text>
-                              ) : (
-                                <DndContext
-                                  collisionDetection={closestCenter}
-                                  onDragStart={handleQueuedDragStart}
-                                  onDragEnd={handleQueuedDragEnd}
-                                >
-                                  <SortableContext
-                                    items={pendingRounds.map((round) => round.id)}
-                                    strategy={verticalListSortingStrategy}
-                                  >
-                                    <Stack gap="xs">
-                                      {orderedRounds.map((round) =>
-                                        round.status === 'pending' ? (
-                                          <SortableQueuedRoundPill
-                                            key={round.id}
-                                            round={round}
-                                            draggingRoundId={draggingRoundId}
-                                          />
-                                        ) : (
-                                          <StaticRoundPill key={round.id} round={round} />
-                                        ),
-                                      )}
-                                    </Stack>
-                                  </SortableContext>
-                                </DndContext>
-                              )}
-                              <Inline>
-                                <Pill
-                                  as="button"
-                                  size="sm"
-                                  variant="accent"
-                                  type="button"
-                                  interactive
-                                  style={{ cursor: 'pointer' }}
-                                  onClick={() => {
-                                    const selected = variantCatalog.find(
-                                      (v) => v.code === selectedVariantCode,
-                                    );
-                                    setVariantQuery(selected?.name ?? '');
-                                    setCreateGameModalOpen(true);
-                                  }}
-                                >
-                                  + Create Game
-                                </Pill>
-                              </Inline>
-                            </>
-                          ) : (
-                            <Button
-                              variant="secondary"
-                              onClick={() => void createSession()}
-                              disabled={createSessionSaving}
-                            >
-                              {createSessionSaving ? 'Saving…' : 'Create Session'}
-                            </Button>
-                          )}
-                          {sessionError && <Alert variant="error" message={sessionError} />}
-                          <Divider />
-                          <Button
-                            variant="ghost"
-                            onClick={() => setEndLeagueConfirmOpen(true)}
-                            disabled={statusSaving}
-                          >
-                            End League
-                          </Button>
-                        </Stack>
-                      </CardBody>
-                    </>
-                  )}
-                </Card>
-              ) : null}
-            </Inline>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </Stack>
+            ) : null}
           </Stack>
         </Section>
       </PageContainer>
-
-      {!isSessionLadder && showRegister && (
-        <RegisterModal
-          eventSlug={event.slug}
-          eventName={event.name}
-          enforceExactTeamSize={Boolean(event.enforce_exact_team_size)}
-          refetchTeams={refetchTeams}
-          auth={auth}
-          directory={directory}
-          memberships={memberships}
-          onClose={() => {
-            setShowRegister(false);
-            setRegisterError(null);
-          }}
-          onSuccess={() => {
-            setRegisterError(null);
-          }}
-          onError={(msg) => {
-            setRegisterError(msg);
-          }}
-        />
-      )}
-      {!isSessionLadder && registerError && <Alert variant="error" message={registerError} />}
-
-      <Modal
-        open={sessionToggleConfirmOpen}
-        onClose={() => setSessionToggleConfirmOpen(false)}
-        maxWidth="440px"
-      >
-        <Stack gap="md">
-          <Heading level={4}>Are you sure you want to end the session?</Heading>
-          <Inline justify="end" gap="sm" wrap>
-            <Button variant="ghost" onClick={() => setSessionToggleConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setSessionToggleConfirmOpen(false);
-                void setSessionLive(false);
-              }}
-            >
-              End Session
-            </Button>
-          </Inline>
-        </Stack>
-      </Modal>
-
-      <Modal
-        open={startGameConfirmOpen}
-        onClose={() => setStartGameConfirmOpen(false)}
-        maxWidth="440px"
-      >
-        <Stack gap="md">
-          <Heading level={4}>End current game and start the next one?</Heading>
-          <Text variant="muted">
-            Teams without submitted scores in the current game will be recorded as 0/FF.
-          </Text>
-          <Inline justify="end" gap="sm" wrap>
-            <Button variant="ghost" onClick={() => setStartGameConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setStartGameConfirmOpen(false);
-                void startNextGame();
-              }}
-            >
-              End and Start Next
-            </Button>
-          </Inline>
-        </Stack>
-      </Modal>
-
-      <Modal open={shouldShowAwakePrompt} onClose={() => undefined} maxWidth="420px">
-        <Stack gap="md">
-          <Heading level={4}>Confirm participation</Heading>
-          <Text variant="body">A new game is starting. Confirm within 10 seconds to stay in.</Text>
-          <Inline justify="end">
-            <Button
-              variant="secondary"
-              onClick={() => void submitReadyCheck()}
-              disabled={readySubmitting}
-            >
-              {readySubmitting ? 'Confirming…' : "I'm awake"}
-            </Button>
-          </Inline>
-        </Stack>
-      </Modal>
-
-      <Modal
-        open={endLeagueConfirmOpen}
-        onClose={() => setEndLeagueConfirmOpen(false)}
-        maxWidth="440px"
-      >
-        <Stack gap="md">
-          <Heading level={4}>Are you sure you want to end the league?</Heading>
-          <Inline justify="end" gap="sm" wrap>
-            <Button variant="ghost" onClick={() => setEndLeagueConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setEndLeagueConfirmOpen(false);
-                void endLeague();
-              }}
-            >
-              End League
-            </Button>
-          </Inline>
-        </Stack>
-      </Modal>
-
-      <Modal
-        open={createGameModalOpen}
-        onClose={() => setCreateGameModalOpen(false)}
-        maxWidth="440px"
-      >
-        <Stack gap="sm">
-          <Heading level={4}>Create Game</Heading>
-          <InputContainer label="Variant">
-            <SearchSelect<VariantCatalogItem>
-              value={variantQuery}
-              onChange={(next) => {
-                setVariantQuery(next);
-                setSelectedVariantCode(null);
-              }}
-              suggestions={variantSuggestions}
-              onSelect={(value) => {
-                setSelectedVariantCode(value.code);
-                setVariantQuery(value.name);
-              }}
-              blurOnSelect
-              placeholder={variantCatalog.length > 0 ? 'Search variants' : 'Loading variants...'}
-              disabled={variantCatalog.length === 0 || queueGameSaving}
-            />
-          </InputContainer>
-          <InputContainer label="Seed">
-            <Input
-              value={queueSeedInput}
-              onChange={(e) => setQueueSeedInput(e.target.value)}
-              placeholder="Game seed"
-              fullWidth
-            />
-          </InputContainer>
-          <Inline justify="end" gap="sm" wrap>
-            <Button variant="ghost" onClick={() => setCreateGameModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="secondary" onClick={() => void queueGame()} disabled={queueGameSaving}>
-              {queueGameSaving ? 'Saving…' : 'Create Game'}
-            </Button>
-          </Inline>
-        </Stack>
-      </Modal>
     </Main>
   );
 }

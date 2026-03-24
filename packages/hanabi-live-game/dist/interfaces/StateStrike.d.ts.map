@@ -1,0 +1,1 @@
+{"version":3,"file":"StateStrike.d.ts","sourceRoot":"","sources":["../../src/interfaces/StateStrike.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,oBAAoB,CAAC;AAEpD,MAAM,WAAW,WAAW;IAC1B,QAAQ,CAAC,OAAO,EAAE,MAAM,CAAC;IACzB,QAAQ,CAAC,KAAK,EAAE,SAAS,CAAC;CAC3B"}

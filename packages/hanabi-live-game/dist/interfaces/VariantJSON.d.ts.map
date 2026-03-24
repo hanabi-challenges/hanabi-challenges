@@ -1,0 +1,1 @@
+{"version":3,"file":"VariantJSON.d.ts","sourceRoot":"","sources":["../../src/interfaces/VariantJSON.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,kBAAkB,EAAE,MAAM,sBAAsB,CAAC;AAE/D,qEAAqE;AACrE,MAAM,WAAW,WAAY,SAAQ,kBAAkB;IACrD;;;;OAIG;IACH,QAAQ,CAAC,EAAE,EAAE,MAAM,CAAC;IAEpB,qFAAqF;IACrF,QAAQ,CAAC,KAAK,EAAE,MAAM,CAAC;CACxB"}

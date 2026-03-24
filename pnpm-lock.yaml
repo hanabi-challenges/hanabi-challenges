@@ -40,7 +40,7 @@ importers:
     dependencies:
       '@hanabi-live/game':
         specifier: workspace:*
-        version: link:../../vendor/hanabi-live/packages/game
+        version: link:../../packages/hanabi-live-game
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3
@@ -248,19 +248,7 @@ importers:
         specifier: ^4.0.14
         version: 4.0.18(@types/node@24.10.15)(@vitest/browser-playwright@4.0.18)(happy-dom@15.11.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/shared:
-    devDependencies:
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.3
-      prettier:
-        specifier: ^3.8.1
-        version: 3.8.1
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  vendor/hanabi-live/packages/game:
+  packages/hanabi-live-game:
     dependencies:
       complete-common:
         specifier: 2.5.0
@@ -284,6 +272,18 @@ importers:
       typedoc:
         specifier: 0.28.13
         version: 0.28.13(typescript@5.9.3)
+
+  packages/shared:
+    devDependencies:
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.3
+      prettier:
+        specifier: ^3.8.1
+        version: 3.8.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
 packages:
 
@@ -6803,6 +6803,20 @@ snapshots:
       - utf-8-validate
       - vite
 
+  '@vitest/browser-playwright@4.0.18(playwright@1.58.2)(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
+    dependencies:
+      '@vitest/browser': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      playwright: 1.58.2
+      tinyrainbow: 3.0.3
+      vitest: 4.0.18(@types/node@24.10.15)(@vitest/browser-playwright@4.0.18)(happy-dom@15.11.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
+
   '@vitest/browser@4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
     dependencies:
       '@vitest/mocker': 4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))
@@ -6819,6 +6833,24 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+
+  '@vitest/browser@4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
+    dependencies:
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@vitest/utils': 4.0.18
+      magic-string: 0.30.21
+      pixelmatch: 7.1.0
+      pngjs: 7.0.0
+      sirv: 3.0.2
+      tinyrainbow: 3.0.3
+      vitest: 4.0.18(@types/node@24.10.15)(@vitest/browser-playwright@4.0.18)(happy-dom@15.11.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
 
   '@vitest/coverage-v8@4.0.18(@vitest/browser@4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18))(vitest@4.0.18)':
     dependencies:
@@ -10819,7 +10851,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.10.15
-      '@vitest/browser-playwright': 4.0.18(playwright@1.58.2)(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
+      '@vitest/browser-playwright': 4.0.18(playwright@1.58.2)(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
       happy-dom: 15.11.7
       jsdom: 27.4.0(@noble/hashes@1.8.0)
     transitivePeerDependencies:

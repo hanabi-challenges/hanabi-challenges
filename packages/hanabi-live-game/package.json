@@ -23,12 +23,6 @@
     "package.json",
     "README.md"
   ],
-  "scripts": {
-    "build": "rm -rf dist && tsc --project ./tsconfig.npm.json",
-    "docs": "npx typedoc ./src/index.ts",
-    "lint": "bash ./lint.sh",
-    "publish": "isaacscript publish"
-  },
   "dependencies": {
     "complete-common": "2.5.0",
     "immer": "10.1.3",

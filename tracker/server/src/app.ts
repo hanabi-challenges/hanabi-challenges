@@ -1,6 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 import type { HealthResponse, TrackerErrorResponse } from '@tracker/types';
+import { checkDbHealth } from './db/pool.js';
 
 export function createApp() {
   const app = express();
@@ -17,6 +18,15 @@ export function createApp() {
   app.get('/tracker/health', (_req: Request, res: Response) => {
     const body: HealthResponse = { status: 'ok', timestamp: new Date().toISOString() };
     res.json(body);
+  });
+
+  app.get('/tracker/health/db', async (_req: Request, res: Response) => {
+    const healthy = await checkDbHealth();
+    if (healthy) {
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    } else {
+      res.status(503).json({ status: 'unavailable', timestamp: new Date().toISOString() });
+    }
   });
 
   // 404 handler for unmatched tracker routes

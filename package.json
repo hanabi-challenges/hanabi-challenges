@@ -54,7 +54,10 @@
     "tracker:format": "pnpm -C tracker/types run format && pnpm -C tracker/server run format && pnpm -C tracker/client run format",
     "tracker:format:check": "pnpm -C tracker/types run format:check && pnpm -C tracker/server run format:check && pnpm -C tracker/client run format:check",
     "tracker:test:unit": "pnpm -C tracker/types run test:unit && pnpm -C tracker/server run test:unit && pnpm -C tracker/client run test:unit",
-    "tracker:test:integration": "pnpm -C tracker/server run test:integration"
+    "tracker:test:integration": "pnpm -C tracker/server run test:integration",
+    "tracker:db:migrate": "pnpm -C tracker/server run db:migrate",
+    "tracker:db:rollback": "pnpm -C tracker/server run db:rollback",
+    "tracker:db:reset": "pnpm -C tracker/server run db:reset"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

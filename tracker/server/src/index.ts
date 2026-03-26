@@ -1,6 +1,7 @@
 import './env.js'; // validate env first — crashes fast if misconfigured
 import { env } from './env.js';
 import { createApp } from './app.js';
+import { closePool } from './db/pool.js';
 
 const app = createApp();
 
@@ -10,7 +11,9 @@ const server = app.listen(env.TRACKER_PORT, () => {
 
 function shutdown() {
   server.close(() => {
-    process.exit(0);
+    void closePool().then(() => {
+      process.exit(0);
+    });
   });
 }
 

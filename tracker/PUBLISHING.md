@@ -6,18 +6,18 @@ All tracker work follows a two-tier branch structure:
 
 ```
 main
-  └── tracker                    ← long-lived; never merges to main until the project is complete
-        ├── tracker/ticket-001   ← per-ticket branch; merges into tracker when green
+  └── tracker-main               ← long-lived; never merges to main until the project is complete
+        ├── tracker/ticket-001   ← per-ticket branch; merges into tracker-main when green
         ├── tracker/ticket-002
         └── ...
 ```
 
-- **`tracker`** is the long-lived integration branch. It represents all completed, passing tracker work at any given moment. It is never merged into `main` until every ticket is done and the full E2E suite is green.
-- **Per-ticket branches** are named `tracker/ticket-NNN` (e.g. `tracker/ticket-015`). They branch off `tracker` and merge back into `tracker` when complete.
-- Direct pushes to `tracker` are blocked — all changes arrive via PR from a per-ticket branch.
-- Work is strictly sequential. A new per-ticket branch is never started until the previous ticket's PR has been merged into `tracker` with green CI.
+- **`tracker-main`** is the long-lived integration branch. It represents all completed, passing tracker work at any given moment. It is never merged into `main` until every ticket is done and the full E2E suite is green.
+- **Per-ticket branches** are named `tracker/ticket-NNN` (e.g. `tracker/ticket-015`). They branch off `tracker-main` and merge back into `tracker-main` when complete.
+- Direct pushes to `tracker-main` are blocked — all changes arrive via PR from a per-ticket branch.
+- Work is strictly sequential. A new per-ticket branch is never started until the previous ticket's PR has been merged into `tracker-main` with green CI.
 
-> **Git namespace note:** Because git cannot hold both a branch named `tracker` and branches named `tracker/*` as local refs simultaneously, delete the local `tracker` branch after pushing it to the remote. All per-ticket work is done on `tracker/ticket-NNN` branches that track `origin/tracker`. Merges to `origin/tracker` are done via GitHub PR; no local `tracker` branch is required.
+> **Git namespace note:** The spec originally called the integration branch `tracker`. Git cannot hold both a branch named `tracker` and branches named `tracker/*` simultaneously (git would need `tracker` to be both a file and a directory in `.git/refs/heads/`). The integration branch was therefore named `tracker-main` to preserve the `tracker/*` namespace for per-ticket branches. This is a permanent design decision — do not attempt to rename it back.
 
 ---
 
@@ -66,7 +66,7 @@ This is an absolute rule with no exceptions:
 1. CI must be green on the per-ticket branch before a PR can be opened
 2. CI must be green on the PR before it can be merged into `tracker`
 3. A new per-ticket branch is never started while CI is red on any open PR
-4. If CI breaks on `tracker` itself, all other work stops until it is fixed
+4. If CI breaks on `tracker-main` itself, all other work stops until it is fixed
 
 If CI is failing, that is the only work. There is no parallel progress.
 
@@ -102,19 +102,19 @@ Before promoting any build to production, verify the following on staging:
 
 All of the following must be true before promoting to production:
 
-- [ ] All CI jobs green on the `tracker` branch
+- [ ] All CI jobs green on the `tracker-main` branch
 - [ ] Staging verification checklist complete
 - [ ] `tracker/SECURITY_REVIEW.md` complete with no unresolved findings
 - [ ] `tracker/QUERY_REVIEW.md` complete with no unresolved performance concerns
 - [ ] All environment variables confirmed provisioned in production
 - [ ] Rollback procedure tested on staging within the last 7 days
-- [ ] The final `tracker` to `main` PR has been reviewed
+- [ ] The final `tracker-main` to `main` PR has been reviewed
 
 ---
 
 ## The Final Merge to Main
 
-When all 48 tickets are complete and the `tracker` branch is fully green including the E2E suite, one PR is opened from `tracker` into `main`. That PR's description serves as the release notes: what the tracker is, what it does, and the go-live checklist. The final merge to `main` is the only moment the tracker becomes part of the production codebase.
+When all 48 tickets are complete and the `tracker-main` branch is fully green including the E2E suite, one PR is opened from `tracker-main` into `main`. That PR's description serves as the release notes: what the tracker is, what it does, and the go-live checklist. The final merge to `main` is the only moment the tracker becomes part of the production codebase.
 
 ---
 

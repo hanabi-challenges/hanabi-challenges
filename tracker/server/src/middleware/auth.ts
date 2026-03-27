@@ -35,6 +35,7 @@ const ROLE_PERMISSIONS: Record<string, ReadonlySet<string>> = {
     'ticket.triage',
     'ticket.transition',
     'ticket.view_internal',
+    'ticket.flag_for_review',
   ]),
   committee: new Set([
     'ticket.create',
@@ -44,6 +45,7 @@ const ROLE_PERMISSIONS: Record<string, ReadonlySet<string>> = {
     'ticket.transition',
     'ticket.view_internal',
     'ticket.decide',
+    'ticket.flag_for_review',
     'user.role.assign',
   ]),
 };

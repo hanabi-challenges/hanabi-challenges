@@ -8,7 +8,7 @@ import type {
   TransitionTicketResponse,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
-import { listTickets, getTicketById, getStatusId } from '../db/tickets.js';
+import { listTickets, getTicketById, getStatusId, searchTickets } from '../db/tickets.js';
 import { submitTicket, transitionTicket } from '../services/lifecycle.js';
 import {
   flagTicketForReview,
@@ -124,6 +124,44 @@ router.get(
       const sql = getPool();
       const tickets = await getPlanningSignal(sql, typeId, domainId);
       res.json({ tickets });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/search?q=<query> — full-text search, non-terminal tickets only */
+router.get(
+  '/search',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const q = req.query['q'];
+    if (typeof q !== 'string' || !q.trim()) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'q parameter is required.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    try {
+      const sql = getPool();
+      const result = await searchTickets(sql, q);
+      if (!result.ok) {
+        const isLong = result.reason === 'query_too_long';
+        res.status(400).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: isLong ? 'Search query is too long.' : 'q parameter is required.',
+            correlationId: (req as AuthenticatedRequest).correlationId,
+          },
+        });
+        return;
+      }
+      res.json({ tickets: result.tickets });
     } catch (err) {
       next(err);
     }

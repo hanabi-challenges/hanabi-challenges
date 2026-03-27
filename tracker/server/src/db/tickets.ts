@@ -132,3 +132,39 @@ export async function getStatusId(sql: Sql, slug: string): Promise<number> {
   if (!row) throw new Error(`getStatusId: no status with slug '${slug}'`);
   return row.id;
 }
+
+const SEARCH_QUERY_MAX_LENGTH = 500;
+const SEARCH_RESULT_LIMIT = 5;
+
+/** Full-text ticket search using websearch_to_tsquery. Excludes terminal-status tickets. */
+export async function searchTickets(
+  sql: Sql,
+  query: string,
+): Promise<{ ok: true; tickets: TicketSummary[] } | { ok: false; reason: string }> {
+  const q = query.trim();
+  if (!q) return { ok: false, reason: 'query_empty' };
+  if (q.length > SEARCH_QUERY_MAX_LENGTH) return { ok: false, reason: 'query_too_long' };
+
+  const tickets = await sql<TicketSummary[]>`
+    SELECT
+      t.id,
+      t.title,
+      tt.slug AS type_slug,
+      d.slug  AS domain_slug,
+      s.slug  AS status_slug,
+      s.is_terminal,
+      u.display_name AS submitted_by_display_name,
+      t.created_at,
+      t.updated_at
+    FROM tickets t
+    JOIN ticket_types tt ON tt.id = t.type_id
+    JOIN domains      d  ON d.id  = t.domain_id
+    JOIN statuses     s  ON s.id  = t.current_status_id
+    JOIN users        u  ON u.id  = t.submitted_by
+    WHERE s.is_terminal = FALSE
+      AND t.search_vector @@ websearch_to_tsquery('english', ${q})
+    ORDER BY ts_rank(t.search_vector, websearch_to_tsquery('english', ${q})) DESC
+    LIMIT ${SEARCH_RESULT_LIMIT}
+  `;
+  return { ok: true, tickets };
+}

@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import type { NotificationEventType } from '@tracker/types';
 import { recordNotificationEvent } from '../db/notifications.js';
+import { sendDiscordWebhook } from './discord.js';
 
 /**
  * Fans out a notification event to all ticket subscribers (excluding the actor).
@@ -19,4 +20,7 @@ export async function fanoutNotification(
   } catch (err) {
     console.error({ ticketId, actorId, eventType, err }, 'Notification fanout failed');
   }
+
+  // Discord webhook fires after fanout; failures are handled inside sendDiscordWebhook
+  void sendDiscordWebhook(sql, ticketId, actorId, eventType, null);
 }

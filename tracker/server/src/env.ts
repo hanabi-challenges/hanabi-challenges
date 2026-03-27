@@ -14,6 +14,15 @@ const schema = z.object({
   DISCORD_BOT_TOKEN: z.string().optional(),
   DISCORD_GUILD_ID: z.string().optional(),
   DISCORD_MOD_ROLE_NAME: z.string().optional(),
+  // GitHub integration — optional; activates on presence
+  GITHUB_BOT_TOKEN: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  GITHUB_REPO_OWNER: z.string().optional(),
+  GITHUB_REPO_NAME: z.string().optional(),
+  // Feature configuration — optional with defaults
+  STALE_TICKET_DAYS: z.coerce.number().int().positive().default(14),
+  COMMENT_EDIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 
 function loadEnv() {

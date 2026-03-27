@@ -6,10 +6,7 @@ import { fileURLToPath } from 'url';
 import { getTestDatabaseUrl, setupTestSchema, teardownTestSchema } from '../../support/db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationPath = join(
-  __dirname,
-  '../../../migrations/20260327000000_core_lookup_tables.sql',
-);
+const migrationPath = join(__dirname, '../../../migrations/20260327000000_core_lookup_tables.sql');
 
 function parseMigration(filePath: string): { up: string; down: string } {
   const content = readFileSync(filePath, 'utf8');

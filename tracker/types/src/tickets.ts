@@ -1,27 +1,26 @@
-/** Ticket type slugs. */
-export type TicketTypeSlug = 'bug' | 'idea' | 'feedback';
+/** Ticket type slugs — must match ticket_types seed data. */
+export type TicketTypeSlug = 'bug' | 'feature_request' | 'question' | 'feedback' | 'other';
 
-/** Domain slugs. */
+/** Domain slugs — must match domains seed data. */
 export type DomainSlug =
-  | 'site_and_ui'
-  | 'competition_rules'
-  | 'content_and_docs'
-  | 'community_and_moderation'
-  | 'infrastructure';
+  | 'gameplay'
+  | 'scoring'
+  | 'registration'
+  | 'interface'
+  | 'matchmaking'
+  | 'events'
+  | 'discord'
+  | 'other';
 
-/** Status slugs. */
+/** Status slugs — must match statuses seed data. */
 export type StatusSlug =
   | 'submitted'
-  | 'needs_clarification'
-  | 'in_triage'
-  | 'open'
-  | 'planned'
-  | 'in_progress'
-  | 'shipped'
-  | 'declined'
-  | 'noted'
-  | 'duplicate'
-  | 'abandoned';
+  | 'triaged'
+  | 'in_review'
+  | 'decided'
+  | 'resolved'
+  | 'rejected'
+  | 'closed';
 
 /** Severity levels for bug tickets. */
 export type BugSeverity = 'cosmetic' | 'functional' | 'blocking';

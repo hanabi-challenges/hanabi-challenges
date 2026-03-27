@@ -25,7 +25,7 @@ describe('migration: 20260327000000_core_lookup_tables', () => {
   let sql: postgres.Sql;
 
   beforeAll(async () => {
-    sql = postgres(testDbUrl, { max: 2 });
+    sql = postgres(testDbUrl, { max: 2, connection: { search_path: 'tracker' } });
     await setupTestSchema(sql);
     await sql.unsafe(up);
   });

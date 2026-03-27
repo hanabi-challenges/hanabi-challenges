@@ -42,3 +42,34 @@ export interface CreateTicketRequest {
 export interface CreateTicketResponse {
   id: string;
 }
+
+/** Summary of a ticket as returned in list views. */
+export interface TicketSummary {
+  id: string;
+  title: string;
+  type_slug: TicketTypeSlug;
+  domain_slug: DomainSlug;
+  status_slug: StatusSlug;
+  is_terminal: boolean;
+  submitted_by_display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Full ticket detail including description. */
+export interface TicketDetail extends TicketSummary {
+  description: string;
+  severity: BugSeverity | null;
+  reproducibility: BugReproducibility | null;
+}
+
+/** Response body for GET /tracker/api/tickets */
+export interface ListTicketsResponse {
+  tickets: TicketSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Response body for GET /tracker/api/tickets/:id */
+export type GetTicketResponse = TicketDetail;

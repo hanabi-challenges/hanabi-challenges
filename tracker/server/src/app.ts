@@ -8,6 +8,7 @@ import { meRouter } from './routes/me.js';
 import { usersRouter } from './routes/users.js';
 import { lookupsRouter } from './routes/lookups.js';
 import { adminRouter } from './routes/admin.js';
+import { templatesRouter } from './routes/templates.js';
 import { logger } from './logger.js';
 
 export function createApp() {
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/tracker/api/users', usersRouter);
   app.use('/tracker/api/lookups', lookupsRouter);
   app.use('/tracker/api', adminRouter);
+  app.use('/tracker/api/templates', templatesRouter);
 
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {

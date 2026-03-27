@@ -94,4 +94,76 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+
+  // Admin: users
+  listUsers: () =>
+    apiFetch<{
+      users: Array<{
+        id: string;
+        hanablive_username: string;
+        display_name: string;
+        role: string;
+        discord_linked: boolean;
+      }>;
+    }>('/tracker/api/users'),
+
+  assignRole: (userId: string, role: 'moderator' | 'committee') =>
+    apiFetch<{ user_id: string; role: string }>(`/tracker/api/users/${userId}/roles`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
+
+  revokeRole: (userId: string, roleSlug: string) =>
+    fetch(`/tracker/api/users/${userId}/roles/${roleSlug}`, { method: 'DELETE' }),
+
+  // Admin: templates
+  listTemplates: () =>
+    apiFetch<{
+      templates: Array<{
+        type_slug: string;
+        type_name: string;
+        body: string;
+        updated_at: string | null;
+        updated_by: string | null;
+      }>;
+    }>('/tracker/api/templates'),
+
+  updateTemplate: (typeSlug: string, body: string) =>
+    fetch(`/tracker/api/templates/${typeSlug}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    }),
+
+  // Admin: GitHub integration health
+  getGithubFailures: () =>
+    apiFetch<{
+      failed_webhooks: Array<{
+        id: string;
+        github_event: string;
+        error: string | null;
+        received_at: string;
+      }>;
+      tickets_missing_link: Array<{
+        ticket_id: string;
+        ticket_title: string;
+        status_slug: string;
+      }>;
+    }>('/tracker/api/admin/github-failures'),
+
+  runReconcile: () =>
+    apiFetch<{
+      linked: Array<{
+        ticket_id: string;
+        ticket_title: string;
+        status_slug: string;
+        issue_number: number;
+        issue_url: string;
+      }>;
+      missing: Array<{
+        ticket_id: string;
+        ticket_title: string;
+        status_slug: string;
+      }>;
+    }>('/tracker/api/admin/reconcile'),
 };

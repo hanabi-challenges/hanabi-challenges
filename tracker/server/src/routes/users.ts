@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import type { AssignRoleRequest, AssignRoleResponse, RoleSlug } from '@tracker/types';
 import { getPool } from '../db/pool.js';
 import { assignRole, revokeRole } from '../db/roles.js';
+import { listUsersWithRoles } from '../db/users.js';
 import {
   requireTrackerAuth,
   requirePermission,
@@ -11,6 +12,22 @@ import {
 const router = Router();
 
 const VALID_ROLES: ReadonlySet<string> = new Set(['moderator', 'committee']);
+
+/** GET /tracker/api/users — list all users with role and Discord link status (committee only) */
+router.get(
+  '/',
+  requireTrackerAuth,
+  requirePermission('user.role.assign'),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sql = getPool();
+      const users = await listUsersWithRoles(sql);
+      res.json({ users });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** POST /tracker/api/users/:userId/roles — assign a role to a user */
 router.post(

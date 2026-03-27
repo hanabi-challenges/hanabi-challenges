@@ -2,6 +2,8 @@ import type { Sql } from 'postgres';
 import type { CreateTicketInput } from '../db/tickets.js';
 import { getStatusId } from '../db/tickets.js';
 import { fanoutNotification } from './notifications.js';
+import { createGithubIssue } from './github.js';
+import { env } from '../env.js';
 import { logger } from '../logger.js';
 
 /**
@@ -82,9 +84,10 @@ export async function transitionTicket(
   };
 
   // Read current state and validate in one query (no FOR UPDATE — acceptable at this scale)
-  const [row] = await sql<CheckRow[]>`
+  const [row] = await sql<(CheckRow & { ticket_title: string })[]>`
     SELECT
       t.current_status_id,
+      t.title AS ticket_title,
       s_from.is_terminal,
       s_to.id AS to_id,
       EXISTS (
@@ -107,6 +110,7 @@ export async function transitionTicket(
 
   const toId = row.to_id;
   const fromId = row.current_status_id;
+  const ticketTitle = row.ticket_title;
 
   // Apply update and history record in one CTE (atomic)
   await sql`
@@ -124,6 +128,13 @@ export async function transitionTicket(
   );
 
   void fanoutNotification(sql, ticketId, changedBy, 'status_changed');
+
+  // Create a GitHub issue when a ticket moves to in_review
+  if (toStatusSlug === 'in_review') {
+    const base = env.TRACKER_BASE_URL ?? '';
+    const trackerUrl = `${base}/tracker/tickets/${ticketId}`;
+    void createGithubIssue(sql, ticketId, ticketTitle, trackerUrl);
+  }
 
   return { ok: true };
 }

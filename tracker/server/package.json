@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tracker/types": "workspace:*",
+    "discord.js": "^14.25.1",
     "express": "^5.1.0",
     "node-pg-migrate": "^7.9.1",
     "pg": "^8.16.3",

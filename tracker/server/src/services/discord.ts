@@ -2,6 +2,7 @@ import type { Sql } from 'postgres';
 import type { NotificationEventType } from '@tracker/types';
 import { env } from '../env.js';
 import { logDiscordDelivery } from '../db/discord.js';
+import { logger } from '../logger.js';
 
 /** Shape of the Discord webhook payload sent to the mod channel. */
 interface WebhookPayload {
@@ -102,9 +103,9 @@ export async function sendDiscordWebhook(
     const error = err instanceof Error ? err.message : String(err);
     await logDiscordDelivery(sql, { eventId, status: 'failure', error: error.slice(0, 500) }).catch(
       (logErr) => {
-        console.error({ ticketId, eventType, logErr }, 'Failed to log Discord delivery failure');
+        logger.error({ ticketId, eventType, logErr }, 'Failed to log Discord delivery failure');
       },
     );
-    console.error({ ticketId, eventType, err }, 'Discord webhook dispatch failed');
+    logger.error({ ticketId, eventType, err }, 'Discord webhook dispatch failed');
   }
 }

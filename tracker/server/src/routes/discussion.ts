@@ -18,6 +18,7 @@ import {
   requirePermission,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
+import { fanoutNotification } from '../services/notifications.js';
 
 // All discussion routes are nested under /tracker/api/tickets/:ticketId
 const router = Router({ mergeParams: true });
@@ -69,6 +70,10 @@ router.post(
         body.trim(),
         isInternal,
       );
+      // Fanout only for public comments — internal notes don't notify community members
+      if (!isInternal) {
+        void fanoutNotification(sql, ticketId, authed.trackerUser.id, 'comment_added');
+      }
       const responseBody: CreateCommentResponse = { id: result.id };
       res.status(201).json(responseBody);
     } catch (err) {

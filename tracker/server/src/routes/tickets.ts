@@ -8,8 +8,16 @@ import type {
   TransitionTicketResponse,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
-import { listTickets, getTicketById } from '../db/tickets.js';
+import { listTickets, getTicketById, getStatusId } from '../db/tickets.js';
 import { submitTicket, transitionTicket } from '../services/lifecycle.js';
+import {
+  flagTicketForReview,
+  clearReviewFlag,
+  closeAsDuplicate,
+  getDuplicateOf,
+  listReadyForReviewTickets,
+  getPlanningSignal,
+} from '../db/moderation.js';
 import {
   requireTrackerAuth,
   requirePermission,
@@ -78,6 +86,44 @@ router.get(
       const { tickets, total } = await listTickets(sql, { limit, offset });
       const body: ListTicketsResponse = { tickets, total, limit, offset };
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/ready-for-review — tickets flagged for committee review */
+router.get(
+  '/ready-for-review',
+  requireTrackerAuth,
+  requirePermission('ticket.decide'),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sql = getPool();
+      const tickets = await listReadyForReviewTickets(sql);
+      res.json({ tickets });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/planning-signal — open tickets ranked by vote count */
+router.get(
+  '/planning-signal',
+  requireTrackerAuth,
+  requirePermission('ticket.decide'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const rawTypeId = req.query['type_id'];
+    const rawDomainId = req.query['domain_id'];
+    const typeId = typeof rawTypeId === 'string' && rawTypeId ? Number(rawTypeId) : undefined;
+    const domainId =
+      typeof rawDomainId === 'string' && rawDomainId ? Number(rawDomainId) : undefined;
+
+    try {
+      const sql = getPool();
+      const tickets = await getPlanningSignal(sql, typeId, domainId);
+      res.json({ tickets });
     } catch (err) {
       next(err);
     }
@@ -199,6 +245,144 @@ router.patch(
         status_slug: ticket.status_slug,
       };
       res.json(responseBody);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /tracker/api/tickets/:id/flag — mark ticket ready for committee review */
+router.post(
+  '/:id/flag',
+  requireTrackerAuth,
+  requirePermission('ticket.flag_for_review'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await flagTicketForReview(sql, id, (req as AuthenticatedRequest).trackerUser.id);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /tracker/api/tickets/:id/flag — clear the ready-for-review flag */
+router.delete(
+  '/:id/flag',
+  requireTrackerAuth,
+  requirePermission('ticket.flag_for_review'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await clearReviewFlag(sql, id);
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /tracker/api/tickets/:id/duplicate — close a ticket as duplicate of another */
+router.post(
+  '/:id/duplicate',
+  requireTrackerAuth,
+  requirePermission('ticket.triage'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    const { canonical_ticket_id } = req.body as { canonical_ticket_id?: string };
+    if (!canonical_ticket_id || typeof canonical_ticket_id !== 'string') {
+      res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'canonical_ticket_id is required.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    if (canonical_ticket_id === id) {
+      res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'A ticket cannot be a duplicate of itself.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    try {
+      const sql = getPool();
+
+      // Ensure canonical ticket exists and is not itself a duplicate
+      const canonical = await getTicketById(sql, canonical_ticket_id);
+      if (!canonical) {
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Canonical ticket not found.',
+            correlationId: (req as AuthenticatedRequest).correlationId,
+          },
+        });
+        return;
+      }
+
+      const canonicalDuplicateOf = await getDuplicateOf(sql, canonical_ticket_id);
+      if (canonicalDuplicateOf !== null) {
+        res.status(422).json({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'The canonical ticket is itself a duplicate.',
+            correlationId: (req as AuthenticatedRequest).correlationId,
+          },
+        });
+        return;
+      }
+
+      const closedStatusId = await getStatusId(sql, 'closed');
+      await closeAsDuplicate(
+        sql,
+        id,
+        canonical_ticket_id,
+        closedStatusId,
+        (req as AuthenticatedRequest).trackerUser.id,
+      );
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

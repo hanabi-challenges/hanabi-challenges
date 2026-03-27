@@ -7,6 +7,7 @@ import { discussionRouter } from './routes/discussion.js';
 import { meRouter } from './routes/me.js';
 import { usersRouter } from './routes/users.js';
 import { lookupsRouter } from './routes/lookups.js';
+import { logger } from './logger.js';
 
 export function createApp() {
   const app = express();
@@ -57,7 +58,7 @@ export function createApp() {
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     const correlationId =
       (req as Request & { correlationId?: string }).correlationId ?? randomUUID();
-    console.error({ correlationId, err }, 'Unhandled tracker error');
+    logger.error({ correlationId, err }, 'Unhandled tracker error');
     const body: TrackerErrorResponse = {
       error: {
         code: 'INTERNAL_ERROR',

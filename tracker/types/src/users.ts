@@ -15,3 +15,14 @@ export interface TrackerUser {
   account_status: AccountStatus;
   role: RoleSlug;
 }
+
+/** Request body for assigning a role to a user. */
+export interface AssignRoleRequest {
+  role: RoleSlug;
+}
+
+/** Response body for a role assignment or revocation. */
+export interface AssignRoleResponse {
+  user_id: string;
+  role: RoleSlug;
+}

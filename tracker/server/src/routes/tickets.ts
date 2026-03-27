@@ -4,10 +4,12 @@ import type {
   CreateTicketResponse,
   ListTicketsResponse,
   GetTicketResponse,
+  TransitionTicketRequest,
+  TransitionTicketResponse,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
 import { listTickets, getTicketById } from '../db/tickets.js';
-import { submitTicket } from '../services/lifecycle.js';
+import { submitTicket, transitionTicket } from '../services/lifecycle.js';
 import {
   requireTrackerAuth,
   requirePermission,
@@ -114,6 +116,89 @@ router.get(
       }
       const body: GetTicketResponse = ticket;
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** PATCH /tracker/api/tickets/:id/status — transition ticket to a new status */
+router.patch(
+  '/:id/status',
+  requireTrackerAuth,
+  requirePermission('ticket.transition'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    const { to_status, resolution_note } = req.body as TransitionTicketRequest;
+    if (typeof to_status !== 'string' || !to_status) {
+      res.status(422).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'to_status is required.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    try {
+      const sql = getPool();
+      const authed = req as AuthenticatedRequest;
+      const result = await transitionTicket(
+        sql,
+        id,
+        to_status,
+        authed.trackerUser.id,
+        authed.trackerUser.role,
+        resolution_note,
+      );
+
+      if (!result.ok) {
+        const statusCode = result.reason === 'ticket_not_found' ? 404 : 422;
+        const code =
+          result.reason === 'ticket_not_found'
+            ? 'NOT_FOUND'
+            : result.reason === 'transition_not_allowed'
+              ? 'FORBIDDEN'
+              : 'VALIDATION_ERROR';
+        res.status(statusCode).json({
+          error: {
+            code,
+            message: result.reason,
+            correlationId: authed.correlationId,
+          },
+        });
+        return;
+      }
+
+      const ticket = await getTicketById(sql, id);
+      if (!ticket) {
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Ticket not found after transition.',
+            correlationId: authed.correlationId,
+          },
+        });
+        return;
+      }
+
+      const responseBody: TransitionTicketResponse = {
+        id: ticket.id,
+        status_slug: ticket.status_slug,
+      };
+      res.json(responseBody);
     } catch (err) {
       next(err);
     }

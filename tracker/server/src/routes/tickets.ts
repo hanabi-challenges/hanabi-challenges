@@ -4,11 +4,18 @@ import type {
   CreateTicketResponse,
   ListTicketsResponse,
   GetTicketResponse,
+  GetTicketHistoryResponse,
   TransitionTicketRequest,
   TransitionTicketResponse,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
-import { listTickets, getTicketById, getStatusId, searchTickets } from '../db/tickets.js';
+import {
+  listTickets,
+  getTicketById,
+  getStatusId,
+  searchTickets,
+  getTicketHistory,
+} from '../db/tickets.js';
 import { submitTicket, transitionTicket } from '../services/lifecycle.js';
 import {
   flagTicketForReview,
@@ -421,6 +428,33 @@ router.post(
         (req as AuthenticatedRequest).trackerUser.id,
       );
       res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/:id/history — status transition history */
+router.get(
+  '/:id/history',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+    try {
+      const sql = getPool();
+      const history = await getTicketHistory(sql, id);
+      const body: GetTicketHistoryResponse = { history };
+      res.json(body);
     } catch (err) {
       next(err);
     }

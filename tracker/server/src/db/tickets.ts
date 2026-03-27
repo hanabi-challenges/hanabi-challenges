@@ -7,6 +7,7 @@ import type {
   BugReproducibility,
   TicketSummary,
   TicketDetail,
+  TicketHistoryEntry,
 } from '@tracker/types';
 
 export interface CreateTicketInput {
@@ -167,4 +168,23 @@ export async function searchTickets(
     LIMIT ${SEARCH_RESULT_LIMIT}
   `;
   return { ok: true, tickets };
+}
+
+/** Returns the status transition history for a ticket, oldest first. */
+export async function getTicketHistory(sql: Sql, ticketId: string): Promise<TicketHistoryEntry[]> {
+  return sql<TicketHistoryEntry[]>`
+    SELECT
+      h.id,
+      s_from.slug AS from_status_slug,
+      s_to.slug   AS to_status_slug,
+      u.display_name AS changed_by_display_name,
+      h.resolution_note,
+      h.created_at
+    FROM ticket_status_history h
+    LEFT JOIN statuses s_from ON s_from.id = h.from_status_id
+    JOIN      statuses s_to   ON s_to.id   = h.to_status_id
+    JOIN      users    u      ON u.id       = h.changed_by
+    WHERE h.ticket_id = ${ticketId}
+    ORDER BY h.created_at ASC
+  `;
 }

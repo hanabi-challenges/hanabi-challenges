@@ -85,3 +85,18 @@ export interface TransitionTicketResponse {
   id: string;
   status_slug: StatusSlug;
 }
+
+/** A single entry in the ticket status history. */
+export interface TicketHistoryEntry {
+  id: string;
+  from_status_slug: StatusSlug | null;
+  to_status_slug: StatusSlug;
+  changed_by_display_name: string;
+  resolution_note: string | null;
+  created_at: string;
+}
+
+/** Response body for GET /tracker/api/tickets/:id/history */
+export interface GetTicketHistoryResponse {
+  history: TicketHistoryEntry[];
+}

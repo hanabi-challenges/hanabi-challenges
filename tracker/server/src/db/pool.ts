@@ -16,6 +16,7 @@ export function getPool(): postgres.Sql {
       ssl: env.TRACKER_DATABASE_SSL ? 'require' : false,
       connection: {
         application_name: 'tracker',
+        search_path: 'tracker',
       },
       // Crash the process on connection error at startup — do not swallow silently
       onnotice: () => undefined,

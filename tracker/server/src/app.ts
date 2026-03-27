@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import { randomUUID } from 'crypto';
 import type { HealthResponse, TrackerErrorResponse } from '@tracker/types';
 import { checkDbHealth } from './db/pool.js';
+import { ticketsRouter } from './routes/tickets.js';
 
 export function createApp() {
   const app = express();
@@ -13,6 +14,9 @@ export function createApp() {
     (req as Request & { correlationId: string }).correlationId = randomUUID();
     next();
   });
+
+  // API routes
+  app.use('/tracker/api/tickets', ticketsRouter);
 
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {

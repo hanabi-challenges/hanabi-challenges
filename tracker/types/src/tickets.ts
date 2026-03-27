@@ -73,3 +73,15 @@ export interface ListTicketsResponse {
 
 /** Response body for GET /tracker/api/tickets/:id */
 export type GetTicketResponse = TicketDetail;
+
+/** Request body for PATCH /tracker/api/tickets/:id/status */
+export interface TransitionTicketRequest {
+  to_status: StatusSlug;
+  resolution_note?: string;
+}
+
+/** Response body for a successful status transition. */
+export interface TransitionTicketResponse {
+  id: string;
+  status_slug: StatusSlug;
+}

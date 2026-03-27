@@ -118,12 +118,58 @@ When all 48 tickets are complete and the `tracker-main` branch is fully green in
 
 ---
 
+## Deployment Infrastructure (Render)
+
+The tracker runs on [Render](https://render.com), matching the existing site's infrastructure. Two services are added:
+
+### `hanabi-challenges-tracker-api-prod` (Tracker API — Production)
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Region | Virginia |
+| Branch | `main` |
+| Build | `pnpm install ... && pnpm tracker:build` |
+| Start | `pnpm tracker:db:migrate && node tracker/server/dist/src/index.js` |
+| Health check | `GET /tracker/health` |
+| Domain | `tracker-api.hanabi-challenges.com` |
+
+**Required environment variables** (set in Render dashboard before first deploy):
+- `TRACKER_DATABASE_URL` — from `hanabi-challenges-db` (same Postgres instance as main API)
+- `TRACKER_PORT` — set to `10000` (Render's standard web service port)
+- `TRACKER_BASE_URL` — `https://hanabi-challenges.com`
+- `NODE_ENV` — `production`
+
+**Optional environment variables** (set when activating integrations):
+- `GITHUB_BOT_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`
+- `DISCORD_MOD_WEBHOOK_URL`, `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_MOD_ROLE_NAME`
+
+### `hanabi-challenges-tracker-api-test` (Tracker API — Test)
+
+Same configuration as production but pointing to `hanabi-challenges-db-test`. PR preview environments are enabled — each open PR gets an isolated tracker API instance.
+
+### Static Frontend
+
+The tracker client is built and merged into the main web static service at `/tracker/`. The build command is `bash scripts/build-with-tracker.sh`, which:
+1. Builds the main web app (`apps/web`)
+2. Builds the tracker client (`tracker/client`)
+3. Copies tracker client dist into `apps/web/dist/tracker/`
+
+Routes in the static service forward `/tracker/api/*` and `/tracker/health*` to the tracker API, and serve `/tracker/*` from the tracker client's `index.html`.
+
+### Migration Automation
+
+Migrations run automatically as part of the start command (`pnpm tracker:db:migrate`) before the tracker server starts. If a migration fails, the server process exits and Render marks the deployment failed — no traffic is routed to the broken version.
+
+---
+
 ## Go-Live Activation for Dormant Integrations
 
 These steps require no deployment — configuration only:
 
 - **Discord outbound webhook**: set `DISCORD_MOD_WEBHOOK_URL` in the production environment. The dispatcher activates on the next ticket submission.
 - **Discord bot**: set `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, and `DISCORD_MOD_ROLE_NAME` in the production environment, then redeploy so the bot process starts. Verify by running `/token` in the Discord server.
+- **GitHub integration**: set `GITHUB_BOT_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_REPO_OWNER`, and `GITHUB_REPO_NAME` in the production environment, then redeploy. Register the webhook in the GitHub repository settings pointing to `https://hanabi-challenges.com/tracker/api/webhooks/github`.
 
 ---
 

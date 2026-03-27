@@ -6,6 +6,7 @@ import { ticketsRouter } from './routes/tickets.js';
 import { discussionRouter } from './routes/discussion.js';
 import { meRouter } from './routes/me.js';
 import { usersRouter } from './routes/users.js';
+import { lookupsRouter } from './routes/lookups.js';
 
 export function createApp() {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp() {
   app.use('/tracker/api/tickets/:ticketId', discussionRouter);
   app.use('/tracker/api/me', meRouter);
   app.use('/tracker/api/users', usersRouter);
+  app.use('/tracker/api/lookups', lookupsRouter);
 
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {

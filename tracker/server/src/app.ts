@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { HealthResponse, TrackerErrorResponse } from '@tracker/types';
 import { checkDbHealth } from './db/pool.js';
 import { ticketsRouter } from './routes/tickets.js';
+import { discussionRouter } from './routes/discussion.js';
 
 export function createApp() {
   const app = express();
@@ -17,6 +18,7 @@ export function createApp() {
 
   // API routes
   app.use('/tracker/api/tickets', ticketsRouter);
+  app.use('/tracker/api/tickets/:ticketId', discussionRouter);
 
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {

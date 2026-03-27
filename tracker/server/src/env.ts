@@ -19,6 +19,8 @@ const schema = z.object({
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   GITHUB_REPO_OWNER: z.string().optional(),
   GITHUB_REPO_NAME: z.string().optional(),
+  // Public base URL for the tracker site — used in GitHub issue body links
+  TRACKER_BASE_URL: z.string().url().optional(),
   // Feature configuration — optional with defaults
   STALE_TICKET_DAYS: z.coerce.number().int().positive().default(14),
   COMMENT_EDIT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),

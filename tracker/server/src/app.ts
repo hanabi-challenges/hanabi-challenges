@@ -7,10 +7,21 @@ import { discussionRouter } from './routes/discussion.js';
 import { meRouter } from './routes/me.js';
 import { usersRouter } from './routes/users.js';
 import { lookupsRouter } from './routes/lookups.js';
+import { adminRouter } from './routes/admin.js';
 import { logger } from './logger.js';
 
 export function createApp() {
   const app = express();
+
+  // Capture raw body for GitHub webhook HMAC verification before JSON parsing
+  app.use(
+    '/tracker/api/webhooks/github',
+    express.raw({ type: 'application/json', limit: '1mb' }),
+    (req: Request, _res: Response, next: NextFunction) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = req.body as Buffer;
+      next();
+    },
+  );
 
   app.use(express.json({ limit: '1mb' }));
 
@@ -26,6 +37,7 @@ export function createApp() {
   app.use('/tracker/api/me', meRouter);
   app.use('/tracker/api/users', usersRouter);
   app.use('/tracker/api/lookups', lookupsRouter);
+  app.use('/tracker/api', adminRouter);
 
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {

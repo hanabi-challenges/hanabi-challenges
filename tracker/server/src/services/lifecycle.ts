@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import type { CreateTicketInput } from '../db/tickets.js';
 import { getStatusId } from '../db/tickets.js';
+import { fanoutNotification } from './notifications.js';
 
 /**
  * Submits a new ticket.
@@ -48,6 +49,10 @@ export async function submitTicket(
 
   const ticket = rows[0];
   if (!ticket) throw new Error('submitTicket: no row returned');
+
+  // Fanout is fire-and-continue — notification failure does not fail the submission
+  void fanoutNotification(sql, ticket.id, submittedBy, 'status_changed');
+
   return { id: ticket.id };
 }
 
@@ -110,6 +115,8 @@ export async function transitionTicket(
     INSERT INTO ticket_status_history (ticket_id, from_status_id, to_status_id, changed_by, resolution_note)
     VALUES (${ticketId}, ${fromId}, ${toId}, ${changedBy}, ${resolutionNote ?? null})
   `;
+
+  void fanoutNotification(sql, ticketId, changedBy, 'status_changed');
 
   return { ok: true };
 }

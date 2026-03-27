@@ -17,6 +17,8 @@ export function getPool(): postgres.Sql {
       connection: {
         application_name: 'tracker',
         search_path: 'tracker',
+        // Kill any query that runs longer than 5 seconds; logged by the global error handler.
+        statement_timeout: 5000,
       },
       // Crash the process on connection error at startup — do not swallow silently
       onnotice: () => undefined,

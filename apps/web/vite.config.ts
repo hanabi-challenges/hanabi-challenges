@@ -24,6 +24,11 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // Tracker API (runs as subprocess on port 4001)
+      '/tracker/api': {
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+      },
     },
   },
   test: {

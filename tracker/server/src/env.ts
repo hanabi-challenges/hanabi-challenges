@@ -1,4 +1,7 @@
+import dotenv from 'dotenv';
 import { z } from 'zod';
+
+dotenv.config();
 
 const schema = z.object({
   TRACKER_DATABASE_URL: z.string().url('TRACKER_DATABASE_URL must be a valid URL'),
@@ -14,8 +17,12 @@ const schema = z.object({
   DISCORD_BOT_TOKEN: z.string().optional(),
   DISCORD_GUILD_ID: z.string().optional(),
   DISCORD_MOD_ROLE_NAME: z.string().optional(),
-  // GitHub integration — optional; activates on presence
-  GITHUB_BOT_TOKEN: z.string().optional(),
+  // Main site JWT secret — used to authenticate requests from the main site SPA
+  JWT_SECRET: z.string().optional(),
+  // GitHub App integration — optional; activates on presence
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+  GITHUB_APP_INSTALLATION_ID: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
   GITHUB_REPO_OWNER: z.string().optional(),
   GITHUB_REPO_NAME: z.string().optional(),

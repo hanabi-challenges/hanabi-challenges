@@ -4,6 +4,7 @@ export interface GithubLink {
   ticket_id: string;
   issue_number: number;
   issue_url: string;
+  node_id: string | null;
   created_at: string;
 }
 
@@ -22,10 +23,11 @@ export async function insertGithubLink(
   ticketId: string,
   issueNumber: number,
   issueUrl: string,
+  nodeId?: string,
 ): Promise<void> {
   await sql`
-    INSERT INTO github_links (ticket_id, issue_number, issue_url)
-    VALUES (${ticketId}, ${issueNumber}, ${issueUrl})
+    INSERT INTO github_links (ticket_id, issue_number, issue_url, node_id)
+    VALUES (${ticketId}, ${issueNumber}, ${issueUrl}, ${nodeId ?? null})
     ON CONFLICT (ticket_id) DO NOTHING
   `;
 }
@@ -120,7 +122,7 @@ export async function getTicketsMissingGithubLink(sql: Sql): Promise<TicketMissi
     FROM tickets t
     JOIN statuses s ON s.id = t.current_status_id
     LEFT JOIN github_links gl ON gl.ticket_id = t.id
-    WHERE s.slug = 'in_review'
+    WHERE s.slug IN ('decided', 'in_progress')
       AND gl.ticket_id IS NULL
     ORDER BY t.created_at
   `;
@@ -131,9 +133,29 @@ export async function getGithubLinkByTicket(
   ticketId: string,
 ): Promise<GithubLink | null> {
   const [row] = await sql<GithubLink[]>`
-    SELECT ticket_id, issue_number, issue_url, created_at
+    SELECT ticket_id, issue_number, issue_url, node_id, created_at
     FROM github_links
     WHERE ticket_id = ${ticketId}
+  `;
+  return row ?? null;
+}
+
+export interface TicketByNodeId {
+  ticket_id: string;
+  current_status_slug: string;
+  is_terminal: boolean;
+}
+
+export async function getTicketByIssueNodeId(
+  sql: Sql,
+  nodeId: string,
+): Promise<TicketByNodeId | null> {
+  const [row] = await sql<TicketByNodeId[]>`
+    SELECT gl.ticket_id, s.slug AS current_status_slug, s.is_terminal
+    FROM github_links gl
+    JOIN tickets  t ON t.id = gl.ticket_id
+    JOIN statuses s ON s.id = t.current_status_id
+    WHERE gl.node_id = ${nodeId}
   `;
   return row ?? null;
 }

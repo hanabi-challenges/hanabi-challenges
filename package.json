@@ -16,7 +16,7 @@
     "logs:backend:follow": "tail -n 50 -f var/logs/backend.log",
     "logs:clean": "rm -f var/logs/backend.log && echo 'Cleared var/logs/backend.log'",
     "dev:env": "bash ./infra/dev/start-dev-env.sh",
-    "dev:servers": "concurrently -k -n api,web \"pnpm -C apps/api run dev\" \"pnpm -C apps/web run dev\"",
+    "dev:servers": "concurrently -k -n api,web,tracker-api,tracker-web \"pnpm -C apps/api run dev\" \"pnpm -C apps/web run dev\" \"pnpm -C tracker/server run dev\" \"pnpm -C tracker/client run dev\"",
     "dev": "pnpm run dev:env && pnpm run dev:servers",
     "dev:api": "pnpm -C apps/api run dev",
     "dev:web": "pnpm -C apps/web run dev",

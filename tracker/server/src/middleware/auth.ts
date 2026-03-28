@@ -1,8 +1,10 @@
 import { type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
+import jwt from 'jsonwebtoken';
 import type { TrackerUser, TrackerErrorResponse } from '@tracker/types';
 import { getPool } from '../db/pool.js';
 import { upsertTrackerUser, resolveUserRole } from '../db/users.js';
+import { env } from '../env.js';
 
 /**
  * Shape of req.user as attached by the main site's auth middleware.
@@ -83,14 +85,33 @@ export async function requireTrackerAuth(
       ? (req.headers['x-tracker-test-username'] as string | undefined)
       : undefined;
 
-  const hanabLiveUsername = testUsername ?? siteUser?.hanabLiveUsername;
+  // Cookie-based auth: decode the main site's hanabi_token JWT.
+  let cookieUsername: string | undefined;
+  if (!testUsername && !siteUser?.hanabLiveUsername && env.JWT_SECRET) {
+    const cookieHeader = req.headers?.cookie ?? '';
+    const token = cookieHeader
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith('hanabi_token='))
+      ?.slice('hanabi_token='.length);
+    if (token) {
+      try {
+        const payload = jwt.verify(token, env.JWT_SECRET) as { displayName?: string };
+        cookieUsername = payload.displayName;
+      } catch {
+        // Invalid or expired token — fall through to 401
+      }
+    }
+  }
+
+  const hanabLiveUsername = testUsername ?? siteUser?.hanabLiveUsername ?? cookieUsername;
 
   if (!hanabLiveUsername) {
     res.status(401).json(errorResponse('UNAUTHORIZED', 'Authentication required.', req));
     return;
   }
 
-  const displayName = testUsername ?? siteUser?.displayName ?? hanabLiveUsername;
+  const displayName = testUsername ?? siteUser?.displayName ?? cookieUsername ?? hanabLiveUsername;
 
   try {
     const sql = getPool();

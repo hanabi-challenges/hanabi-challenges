@@ -3,8 +3,12 @@ import type { CreateTicketInput } from '../db/tickets.js';
 import { getStatusId } from '../db/tickets.js';
 import { fanoutNotification } from './notifications.js';
 import { createGithubIssue } from './github.js';
+import { getTicketByIssueNodeId } from '../db/github.js';
 import { env } from '../env.js';
 import { logger } from '../logger.js';
+
+/** Fixed UUID for the GitHub bot system user (seeded in migration 20260328000000). */
+const GITHUB_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 /**
  * Submits a new ticket.
@@ -81,13 +85,18 @@ export async function transitionTicket(
     is_terminal: boolean;
     to_id: number | null;
     allowed: boolean;
+    ticket_title: string;
+    type_slug: string;
+    domain_slug: string;
   };
 
   // Read current state and validate in one query (no FOR UPDATE — acceptable at this scale)
-  const [row] = await sql<(CheckRow & { ticket_title: string })[]>`
+  const [row] = await sql<CheckRow[]>`
     SELECT
       t.current_status_id,
       t.title AS ticket_title,
+      tt.slug AS type_slug,
+      d.slug  AS domain_slug,
       s_from.is_terminal,
       s_to.id AS to_id,
       EXISTS (
@@ -98,6 +107,8 @@ export async function transitionTicket(
           AND r.name            = ${roleSlug}
       ) AS allowed
     FROM tickets t
+    JOIN ticket_types tt ON tt.id = t.type_id
+    JOIN domains d       ON d.id  = t.domain_id
     JOIN statuses s_from ON s_from.id = t.current_status_id
     LEFT JOIN statuses s_to ON s_to.slug = ${toStatusSlug}
     WHERE t.id = ${ticketId}
@@ -129,12 +140,67 @@ export async function transitionTicket(
 
   void fanoutNotification(sql, ticketId, changedBy, 'status_changed');
 
-  // Create a GitHub issue when a ticket moves to in_review
-  if (toStatusSlug === 'in_review') {
+  // Create a GitHub issue when a ticket moves to decided
+  if (toStatusSlug === 'decided') {
     const base = env.TRACKER_BASE_URL ?? '';
     const trackerUrl = `${base}/tracker/tickets/${ticketId}`;
-    void createGithubIssue(sql, ticketId, ticketTitle, trackerUrl);
+    void createGithubIssue(sql, ticketId, ticketTitle, trackerUrl, row.type_slug, row.domain_slug);
   }
+
+  return { ok: true };
+}
+
+/**
+ * Transitions a ticket triggered by a GitHub webhook event.
+ *
+ * Bypasses role/permission checks — caller is responsible for ensuring only
+ * trusted GitHub events invoke this function. Uses the GitHub bot system user
+ * as the actor in the status history.
+ *
+ * @param nodeId         The GitHub issue node_id stored in github_links.
+ * @param toStatusSlug   Target status slug (e.g. 'in_progress', 'resolved').
+ * @param fromStatusSlug Expected current status slug. If the ticket is not in
+ *                       this state, the transition is skipped (idempotent).
+ */
+export async function transitionTicketFromGithub(
+  sql: Sql,
+  nodeId: string,
+  toStatusSlug: string,
+  fromStatusSlug: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const link = await getTicketByIssueNodeId(sql, nodeId);
+  if (!link) return { ok: false, reason: 'no_linked_ticket' };
+  if (link.is_terminal) return { ok: false, reason: 'already_terminal' };
+  if (link.current_status_slug !== fromStatusSlug) {
+    return { ok: false, reason: `unexpected_status:${link.current_status_slug}` };
+  }
+
+  type StatusRow = { id: number };
+  const [toRow] = await sql<StatusRow[]>`SELECT id FROM statuses WHERE slug = ${toStatusSlug}`;
+  if (!toRow) return { ok: false, reason: 'invalid_to_status' };
+
+  type FromRow = { id: number };
+  const [fromRow] = await sql<FromRow[]>`
+    SELECT id FROM statuses WHERE slug = ${fromStatusSlug}
+  `;
+  if (!fromRow) return { ok: false, reason: 'invalid_from_status' };
+
+  const ticketId = link.ticket_id;
+  const toId = toRow.id;
+  const fromId = fromRow.id;
+
+  await sql`
+    WITH upd AS (
+      UPDATE tickets SET current_status_id = ${toId}, updated_at = now()
+      WHERE id = ${ticketId}
+    )
+    INSERT INTO ticket_status_history (ticket_id, from_status_id, to_status_id, changed_by)
+    VALUES (${ticketId}, ${fromId}, ${toId}, ${GITHUB_BOT_USER_ID})
+  `;
+
+  logger.info({ ticketId, fromStatusSlug, toStatusSlug, nodeId }, 'ticket.transitioned_by_github');
+
+  void fanoutNotification(sql, ticketId, GITHUB_BOT_USER_ID, 'status_changed');
 
   return { ok: true };
 }

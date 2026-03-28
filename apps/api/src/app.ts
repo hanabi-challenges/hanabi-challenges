@@ -1,4 +1,5 @@
 import express from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { pool } from './config/db';
 import { env } from './config/env';
 import routes from './routes';
@@ -6,6 +7,26 @@ import { errorHandler } from './middleware/errorHandler';
 import mockHanabRoutes from './modules/simulation/mock-hanab.routes';
 
 export const app = express();
+
+// Proxy all /tracker/** requests to the tracker server before any body parsing.
+// Must be first so express.json() never consumes the body for proxied requests.
+app.use(
+  createProxyMiddleware({
+    target: 'http://localhost:4001',
+    pathFilter: '/tracker/**',
+    changeOrigin: false,
+    on: {
+      error: (_err, _req, res) => {
+        (res as express.Response).status(502).json({
+          error: {
+            code: 'TRACKER_UNAVAILABLE',
+            message: 'Tracker service temporarily unavailable.',
+          },
+        });
+      },
+    },
+  }),
+);
 
 app.use(express.json());
 

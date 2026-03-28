@@ -43,7 +43,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `NODE_ENV=test TRACKER_PORT=${port} TRACKER_SERVE_CLIENT=1 pnpm exec tsx tracker/server/src/index.ts`,
+    command: `NODE_ENV=test TRACKER_PORT=${port} TRACKER_SERVE_CLIENT=1 node tracker/server/dist/src/index.js`,
     url: `${baseUrl}/tracker/health`,
     reuseExistingServer: !process.env['CI'],
     timeout: 60_000,

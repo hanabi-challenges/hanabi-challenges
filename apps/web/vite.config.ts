@@ -24,6 +24,10 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      '/tracker': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+      },
     },
   },
   test: {

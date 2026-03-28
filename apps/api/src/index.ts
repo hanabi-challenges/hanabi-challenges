@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+import { join } from 'path';
 import { app } from './app';
 import { env } from './config/env';
 import { info, warn } from './utils/logger';
@@ -19,6 +21,18 @@ runMigrations()
     });
 
     initNotificationsWebSocketServer(server);
+
+    // Spawn the tracker server as a co-located subprocess in non-dev environments.
+    // In development each server runs independently via `pnpm run dev`.
+    if (process.env.NODE_ENV !== 'development') {
+      const trackerPath = join(process.cwd(), 'tracker/server/dist/src/index.js');
+      const tracker = spawn(process.execPath, [trackerPath], {
+        env: process.env,
+        stdio: 'inherit',
+      });
+      tracker.on('error', (err) => warn('tracker process error:', err));
+      tracker.on('exit', (code) => warn(`tracker process exited with code ${code}`));
+    }
 
     startVariantSyncScheduler();
     startReplayPullWorker();

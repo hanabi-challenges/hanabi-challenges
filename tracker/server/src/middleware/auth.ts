@@ -64,6 +64,10 @@ function errorResponse(code: string, message: string, req: Request): TrackerErro
  *
  * Returns 401 if no authenticated session is present.
  * Returns 403 if the account_status is 'banned' or 'restricted'.
+ *
+ * In non-production environments, the X-Tracker-Test-Username header may be
+ * used to supply a username directly (bypassing the main site's JWT). This
+ * header is never honoured in production.
  */
 export async function requireTrackerAuth(
   req: Request,
@@ -71,14 +75,22 @@ export async function requireTrackerAuth(
   next: NextFunction,
 ): Promise<void> {
   const siteUser = (req as Request & { user?: SiteUser }).user;
-  const hanabLiveUsername = siteUser?.hanabLiveUsername;
+
+  // Test-mode auth: accept a plain username header in non-production only.
+  // Never enabled in production — NODE_ENV check is the gate.
+  const testUsername =
+    process.env['NODE_ENV'] !== 'production' && req.headers
+      ? (req.headers['x-tracker-test-username'] as string | undefined)
+      : undefined;
+
+  const hanabLiveUsername = testUsername ?? siteUser?.hanabLiveUsername;
 
   if (!hanabLiveUsername) {
     res.status(401).json(errorResponse('UNAUTHORIZED', 'Authentication required.', req));
     return;
   }
 
-  const displayName = siteUser.displayName ?? hanabLiveUsername;
+  const displayName = testUsername ?? siteUser?.displayName ?? hanabLiveUsername;
 
   try {
     const sql = getPool();

@@ -152,3 +152,64 @@ jobs:
         env:
           TRACKER_DATABASE_URL: postgresql://hanabi_user:hanabi_password@localhost:5432/hanabi_test
           TRACKER_TEST_DATABASE_URL: postgresql://hanabi_user:hanabi_password@localhost:5432/hanabi_test
+
+  e2e-tests:
+    name: e2e-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hanabi_test
+          POSTGRES_USER: hanabi_user
+          POSTGRES_PASSWORD: hanabi_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build tracker packages (types + server + client)
+        run: pnpm tracker:build
+
+      - name: Run tracker database migrations
+        run: pnpm tracker:db:migrate
+        env:
+          TRACKER_DATABASE_URL: postgresql://hanabi_user:hanabi_password@localhost:5432/hanabi_test
+
+      - name: Install Playwright browser
+        run: pnpm tracker:test:e2e:install
+
+      - name: Run tracker E2E tests
+        run: pnpm tracker:test:e2e
+        env:
+          TRACKER_DATABASE_URL: postgresql://hanabi_user:hanabi_password@localhost:5432/hanabi_test
+          NODE_ENV: test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracker-e2e-artifacts
+          path: |
+            test-results/
+          retention-days: 7

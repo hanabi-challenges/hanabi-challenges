@@ -16,7 +16,7 @@ export interface SeedResult {
   domainIds: number[];
   statusIds: number[];
   submittedStatusId: number;
-  openStatusId: number;
+  triagedStatusId: number;
 }
 
 export async function seedPerformanceData(sql: Sql): Promise<SeedResult> {
@@ -32,8 +32,8 @@ export async function seedPerformanceData(sql: Sql): Promise<SeedResult> {
   const statusIds = statuses.map((r) => r.id);
 
   const submittedStatus = statuses.find((s) => s.slug === 'submitted');
-  const openStatus = statuses.find((s) => s.slug === 'open');
-  if (!submittedStatus || !openStatus) throw new Error('seed: expected statuses not found');
+  const triagedStatus = statuses.find((s) => s.slug === 'triaged');
+  if (!submittedStatus || !triagedStatus) throw new Error('seed: expected statuses not found');
 
   // Insert 500 users in bulk using unnest
   const usernames = Array.from({ length: 500 }, (_, i) => `perf_user_${i}`);
@@ -141,6 +141,6 @@ export async function seedPerformanceData(sql: Sql): Promise<SeedResult> {
     domainIds,
     statusIds,
     submittedStatusId: submittedStatus.id,
-    openStatusId: openStatus.id,
+    triagedStatusId: triagedStatus.id,
   };
 }

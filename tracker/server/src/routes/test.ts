@@ -33,9 +33,12 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
   try {
     const sql = getPool();
 
-    // Wipe ticket-related data; preserve users / roles so callers can
-    // call /test/seed multiple times with the same users across test files.
+    // Wipe ticket-related and discord-related data; preserve users / roles so
+    // callers can call /test/seed multiple times with the same users across test files.
     await sql`DELETE FROM inbound_webhook_log`;
+    await sql`DELETE FROM discord_role_sync_log`;
+    await sql`DELETE FROM discord_delivery_log`;
+    await sql`DELETE FROM discord_identities`;
     await sql`DELETE FROM github_links`;
     await sql`DELETE FROM user_notifications`;
     await sql`DELETE FROM notification_events`;

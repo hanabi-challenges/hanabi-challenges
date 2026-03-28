@@ -127,8 +127,8 @@ test('Journey 2: moderator triages submitted ticket', async ({ page, request }) 
     to_status: 'triaged',
   });
   expect(transitionRes.status()).toBe(200);
-  const { status } = (await transitionRes.json()) as { status: string };
-  expect(status).toBe('triaged');
+  const { status_slug } = (await transitionRes.json()) as { status_slug: string };
+  expect(status_slug).toBe('triaged');
 
   // Moderator navigates to ticket detail page — status should show "triaged"
   await navigateAs(page, 'e2e-triager', `/tickets/${ticketId}`);
@@ -249,9 +249,9 @@ test('Journey 4: vote on ticket and verify count', async ({ page, request }) => 
   await navigateAs(page, 'e2e-voter', `/tickets/${ticketId}`);
   await expect(page.getByText('Journey 4 feedback ticket')).toBeVisible();
 
-  // Voter casts a vote via API
-  const voteRes = await voter.post(`/tracker/api/tickets/${ticketId}/votes`);
-  expect(voteRes.status()).toBe(201);
+  // Voter casts a vote via API (action: 'add', returns updated vote state)
+  const voteRes = await voter.post(`/tracker/api/tickets/${ticketId}/votes`, { action: 'add' });
+  expect(voteRes.status()).toBe(200);
 
   // Vote count should now be 1
   const afterVoteRes = await voter.get(`/tracker/api/tickets/${ticketId}/votes`);
@@ -263,7 +263,7 @@ test('Journey 4: vote on ticket and verify count', async ({ page, request }) => 
   expect(afterVote.user_has_voted).toBe(true);
 
   // Voter can unvote
-  const unvoteRes = await voter.delete(`/tracker/api/tickets/${ticketId}/votes`);
+  const unvoteRes = await voter.post(`/tracker/api/tickets/${ticketId}/votes`, { action: 'remove' });
   expect(unvoteRes.status()).toBe(200);
 
   const afterUnvoteRes = await voter.get(`/tracker/api/tickets/${ticketId}/votes`);
@@ -308,9 +308,9 @@ test('Journey 5: flag for review and committee queue', async ({ request }) => {
   // Triage the ticket first
   await flagger.patch(`/tracker/api/tickets/${ticketId}/status`, { to_status: 'triaged' });
 
-  // Moderator flags it for committee review
+  // Moderator flags it for committee review (returns 204 No Content)
   const flagRes = await flagger.post(`/tracker/api/tickets/${ticketId}/flag`);
-  expect(flagRes.status()).toBe(200);
+  expect(flagRes.status()).toBe(204);
 
   // Committee sees the ticket in the ready-for-review queue
   const queueRes = await committee.get('/tracker/api/tickets/ready-for-review');
@@ -431,8 +431,8 @@ test('Journey 7: duplicate detection via search, vote instead of submit', async 
   expect(found).toBeDefined();
 
   // Finder votes on the existing ticket instead of creating a duplicate
-  const voteRes = await finder.post(`/tracker/api/tickets/${existingTicketId}/votes`);
-  expect(voteRes.status()).toBe(201);
+  const voteRes = await finder.post(`/tracker/api/tickets/${existingTicketId}/votes`, { action: 'add' });
+  expect(voteRes.status()).toBe(200);
 
   const voteState = (await (
     await finder.get(`/tracker/api/tickets/${existingTicketId}/votes`)
@@ -479,7 +479,7 @@ test('Journey 8: role assignment — new moderator can triage', async ({ page, r
 
   // Committee member navigates to admin users page
   await navigateAs(page, 'e2e-admin8', '/admin/users');
-  await expect(page.getByText('e2e-new-mod')).toBeVisible();
+  await expect(page.getByText('e2e-new-mod').first()).toBeVisible();
 
   // Committee assigns moderator role via API
   const newModUserId = byUsername.get('e2e-new-mod')!.id;
@@ -522,7 +522,7 @@ test('Journey 9: Discord identity link via mocked bot', async ({ page, request }
 
   // Admin views the users page — user should appear as Discord-linked
   await navigateAs(page, 'e2e-discord-admin', '/admin/users');
-  await expect(page.getByText('e2e-discord-user')).toBeVisible();
+  await expect(page.getByText('e2e-discord-user').first()).toBeVisible();
 
   // Verify via API that the user is Discord-linked
   const usersRes = await admin.get('/tracker/api/users');

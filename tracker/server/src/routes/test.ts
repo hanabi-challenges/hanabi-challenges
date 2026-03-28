@@ -70,9 +70,9 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
         if (!roleRow) throw new Error(`seed: unknown role ${u.role}`);
 
         await sql`
-          INSERT INTO user_roles (user_id, role_id, assigned_by)
+          INSERT INTO user_role_assignments (user_id, role_id, granted_by)
           VALUES (${userId}, ${roleRow.id}, ${userId})
-          ON CONFLICT (user_id, role_id) DO NOTHING
+          ON CONFLICT (user_id, role_id) WHERE revoked_at IS NULL DO NOTHING
         `;
       }
 

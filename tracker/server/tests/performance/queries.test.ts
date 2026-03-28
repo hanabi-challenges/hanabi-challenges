@@ -97,7 +97,7 @@ describe('tracker query performance', () => {
   // ---------------------------------------------------------------------------
 
   it('listTickets — uses index scan on created_at', async () => {
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT t.id, t.title, tt.slug, d.slug, s.slug, s.is_terminal,
              u.display_name, t.created_at, t.updated_at
@@ -109,13 +109,13 @@ describe('tracker query performance', () => {
       ORDER BY t.created_at DESC
       LIMIT 25 OFFSET 0
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('getTicketById — uses index scan on primary key', async () => {
     const ticketId = seed.ticketIds[0]!;
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT t.id, t.title, t.description, tt.slug, d.slug, s.slug, s.is_terminal,
              u.display_name, t.severity, t.reproducibility, t.created_at, t.updated_at
@@ -126,13 +126,13 @@ describe('tracker query performance', () => {
       JOIN users         u  ON u.id  = t.submitted_by
       WHERE t.id = ${ticketId}
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('listComments — uses index scan on ticket_id', async () => {
     const ticketId = seed.ticketIds[0]!;
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT c.id, c.ticket_id, u.display_name, c.body, c.is_internal,
              c.created_at, c.updated_at
@@ -142,13 +142,13 @@ describe('tracker query performance', () => {
         AND NOT c.is_internal
       ORDER BY c.created_at ASC
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('getTicketHistory — uses index scan on ticket_id', async () => {
     const ticketId = seed.ticketIds[0]!;
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT h.id, s_from.slug, s_to.slug, u.display_name, h.resolution_note, h.created_at
       FROM ticket_status_history h
@@ -158,26 +158,26 @@ describe('tracker query performance', () => {
       WHERE h.ticket_id = ${ticketId}
       ORDER BY h.created_at ASC
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('getVoteState — uses index scan on ticket_votes primary key', async () => {
     const ticketId = seed.ticketIds[0]!;
     const userId = seed.userIds[0]!;
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT COUNT(*)::TEXT, BOOL_OR(user_id = ${userId})
       FROM ticket_votes
       WHERE ticket_id = ${ticketId}
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('listUserNotifications — uses index scan on user_id', async () => {
     const userId = seed.userIds[0]!;
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT un.id, ne.ticket_id, t.title, ne.event_type,
              u.display_name, un.is_read, un.created_at
@@ -188,12 +188,12 @@ describe('tracker query performance', () => {
       WHERE un.user_id = ${userId}
       ORDER BY un.created_at DESC
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('listReadyForReviewTickets — uses partial index on ready_for_review_at', async () => {
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT t.id, t.title, tt.slug, d.slug, s.slug, s.is_terminal,
              u.display_name, t.created_at, t.updated_at
@@ -205,12 +205,12 @@ describe('tracker query performance', () => {
       WHERE t.ready_for_review_at IS NOT NULL
       ORDER BY t.ready_for_review_at ASC
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesIndexScan(plan), `Expected index scan in:\n${plan}`).toBe(true);
   });
 
   it('searchTickets — uses GIN index on search_vector', async () => {
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT t.id, t.title, tt.slug, d.slug, s.slug, s.is_terminal,
              u.display_name, t.created_at, t.updated_at
@@ -224,14 +224,14 @@ describe('tracker query performance', () => {
       ORDER BY ts_rank(t.search_vector, websearch_to_tsquery('english', 'performance test')) DESC
       LIMIT 5
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     expect(usesGinScan(plan) || usesIndexScan(plan), `Expected GIN/index scan in:\n${plan}`).toBe(
       true,
     );
   });
 
   it('getPlanningSignal — uses index scan on ticket_votes', async () => {
-    const rows = await sql<{ 'query plan': string }[]>`
+    const rows = await sql<{ 'QUERY PLAN': string }[]>`
       EXPLAIN (ANALYZE, FORMAT TEXT)
       SELECT t.id, t.title, tt.slug, d.slug, s.slug, s.is_terminal,
              u.display_name, t.created_at, t.updated_at, COUNT(tv.user_id)::int AS vote_count
@@ -245,7 +245,7 @@ describe('tracker query performance', () => {
       GROUP BY t.id, tt.slug, d.slug, s.slug, s.is_terminal, u.display_name
       ORDER BY vote_count DESC, t.created_at ASC
     `;
-    const plan = rows.map((r) => r['query plan']).join('\n');
+    const plan = rows.map((r) => r['QUERY PLAN']).join('\n');
     // This query aggregates all open tickets — seq scan on tickets is acceptable;
     // the join to ticket_votes must use an index on ticket_id.
     expect(plan).toMatch(/idx_votes_ticket_id|Index.*ticket_votes/i);

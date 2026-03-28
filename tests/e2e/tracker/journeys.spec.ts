@@ -496,7 +496,7 @@ test('Journey 8: role assignment — new moderator can triage', async ({ page, r
 
   // Admin users page reflects the role update
   await page.reload();
-  await expect(page.getByText('moderator')).toBeVisible();
+  await expect(page.getByText('moderator').first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

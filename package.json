@@ -29,6 +29,8 @@
     "test:integration:bail": "pnpm -r --if-present test:integration -- --bail=1",
     "test:e2e": "pnpm exec playwright test",
     "test:e2e:install": "pnpm exec playwright install chromium",
+    "tracker:test:e2e": "pnpm exec playwright test --config playwright.tracker.config.ts",
+    "tracker:test:e2e:install": "pnpm exec playwright install chromium",
     "ci:tests": "pnpm run format && pnpm run lint && pnpm run test:unit && pnpm run test:integration && pnpm run build && pnpm run test:e2e",
     "test:api": "pnpm -C apps/api run test",
     "test:api:integration": "pnpm -C apps/api run test:integration",
@@ -44,7 +46,21 @@
     "build:backend": "pnpm run build:api",
     "build:frontend": "pnpm run build:web",
     "prod:start:node": "bash ./infra/prod/start-node.sh",
-    "prod:start:docker": "bash ./infra/prod/deploy-compose.sh"
+    "prod:start:docker": "bash ./infra/prod/deploy-compose.sh",
+    "tracker:dev:server": "pnpm -C tracker/server run dev",
+    "tracker:dev:client": "pnpm -C tracker/client run dev",
+    "tracker:dev": "concurrently -k -n tracker-server,tracker-client \"pnpm run tracker:dev:server\" \"pnpm run tracker:dev:client\"",
+    "tracker:build": "pnpm -C tracker/types run build && pnpm -C tracker/server run build && pnpm -C tracker/client run build",
+    "tracker:typecheck": "pnpm -C tracker/types run typecheck && pnpm -C tracker/server run typecheck && pnpm -C tracker/client run typecheck",
+    "tracker:lint": "pnpm -C tracker/types run lint && pnpm -C tracker/server run lint && pnpm -C tracker/client run lint",
+    "tracker:format": "pnpm -C tracker/types run format && pnpm -C tracker/server run format && pnpm -C tracker/client run format",
+    "tracker:format:check": "pnpm -C tracker/types run format:check && pnpm -C tracker/server run format:check && pnpm -C tracker/client run format:check",
+    "tracker:test:unit": "pnpm -C tracker/types run test:unit && pnpm -C tracker/server run test:unit && pnpm -C tracker/client run test:unit",
+    "tracker:test:integration": "pnpm -C tracker/server run test:integration",
+    "tracker:test:performance": "pnpm -C tracker/server run test:performance",
+    "tracker:db:migrate": "pnpm -C tracker/server run db:migrate",
+    "tracker:db:rollback": "pnpm -C tracker/server run db:rollback",
+    "tracker:db:reset": "pnpm -C tracker/server run db:reset"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

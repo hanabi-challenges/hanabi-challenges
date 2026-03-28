@@ -1,0 +1,27 @@
+{
+  "name": "@hanabi-challenges/design-system",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mantine": "./src/mantine.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier -w . --ignore-path ../../.prettierignore",
+    "format:check": "prettier -c . --ignore-path ../../.prettierignore"
+  },
+  "peerDependencies": {
+    "@mantine/core": ">=8",
+    "react": ">=19",
+    "react-dom": ">=19",
+    "react-router-dom": ">=7"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.1",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  }
+}

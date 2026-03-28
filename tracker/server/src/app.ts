@@ -72,7 +72,7 @@ export function createApp() {
   if (process.env['TRACKER_SERVE_CLIENT'] === '1') {
     const clientDist = join(__dirname, '../../../../tracker/client/dist');
     app.use('/tracker', express.static(clientDist));
-    app.get('/tracker/*', (_req: Request, res: Response) => {
+    app.get('/tracker/*path', (_req: Request, res: Response) => {
       res.sendFile(join(clientDist, 'index.html'));
     });
   }

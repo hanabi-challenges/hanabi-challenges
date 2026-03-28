@@ -65,7 +65,7 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
       if (u.role && u.role !== 'community_member') {
         // Resolve role id
         const [roleRow] = await sql<{ id: number }[]>`
-          SELECT id FROM roles WHERE slug = ${u.role}
+          SELECT id FROM roles WHERE name = ${u.role}
         `;
         if (!roleRow) throw new Error(`seed: unknown role ${u.role}`);
 

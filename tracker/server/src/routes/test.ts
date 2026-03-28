@@ -47,6 +47,9 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
     await sql`DELETE FROM ticket_comments`;
     await sql`DELETE FROM ticket_status_history`;
     await sql`DELETE FROM tickets`;
+    // Wipe role assignments so each seed call starts with a clean role state.
+    // Roles are re-assigned below for each seeded user.
+    await sql`DELETE FROM user_role_assignments`;
 
     // Upsert each requested user and assign their role.
     const seeded: { username: string; id: string; role: string }[] = [];

@@ -1,5 +1,7 @@
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type { HealthResponse, TrackerErrorResponse } from '@tracker/types';
 import { checkDbHealth } from './db/pool.js';
 import { ticketsRouter } from './routes/tickets.js';
@@ -9,7 +11,10 @@ import { usersRouter } from './routes/users.js';
 import { lookupsRouter } from './routes/lookups.js';
 import { adminRouter } from './routes/admin.js';
 import { templatesRouter } from './routes/templates.js';
+import { testRouter } from './routes/test.js';
 import { logger } from './logger.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function createApp() {
   const app = express();
@@ -41,6 +46,11 @@ export function createApp() {
   app.use('/tracker/api', adminRouter);
   app.use('/tracker/api/templates', templatesRouter);
 
+  // Test-only endpoints — never mounted in production
+  if (process.env['NODE_ENV'] !== 'production') {
+    app.use('/tracker/api/test', testRouter);
+  }
+
   // Health checks — no auth required
   app.get('/tracker/health', (_req: Request, res: Response) => {
     const body: HealthResponse = { status: 'ok', timestamp: new Date().toISOString() };
@@ -55,6 +65,17 @@ export function createApp() {
       res.status(503).json({ status: 'unavailable', timestamp: new Date().toISOString() });
     }
   });
+
+  // In E2E test mode, serve the built tracker client so a single server
+  // handles both the API and the SPA — all relative /tracker/api/* calls
+  // resolve naturally without a separate proxy or port.
+  if (process.env['TRACKER_SERVE_CLIENT'] === '1') {
+    const clientDist = join(__dirname, '../../../../tracker/client/dist');
+    app.use('/tracker', express.static(clientDist));
+    app.get('/tracker/*path', (_req: Request, res: Response) => {
+      res.sendFile(join(clientDist, 'index.html'));
+    });
+  }
 
   // 404 handler for unmatched tracker routes
   app.use('/tracker', (_req: Request, res: Response) => {

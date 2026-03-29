@@ -17,8 +17,9 @@ import {
   Stack,
   Text,
 } from '../design-system';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 import { VoteButton } from '../features/feedback/VoteButton';
+import { UserPill } from '../features/users/UserPill';
 import {
   getTicket,
   getTicketHistory,
@@ -83,7 +84,7 @@ export function FeedbackDetailPage() {
   const [transitionBusy, setTransitionBusy] = useState(false);
   const [transitionError, setTransitionError] = useState<string | null>(null);
 
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(user, 'MOD');
 
   useEffect(() => {
     if (!id) return;
@@ -304,7 +305,11 @@ export function FeedbackDetailPage() {
                     </MetaRow>
                   ) : null}
                   <MetaRow label="Submitted by">
-                    <Text variant="body">{ticket.submitted_by_display_name}</Text>
+                    <UserPill
+                      name={ticket.submitted_by_display_name}
+                      color={ticket.submitted_by_color_hex}
+                      textColor={ticket.submitted_by_text_color}
+                    />
                   </MetaRow>
                   <MetaRow label="Opened">
                     <Text variant="caption">{formatDate(ticket.created_at)}</Text>
@@ -392,7 +397,10 @@ function HistoryEntry({ entry }: { entry: TicketHistoryEntry }) {
           </Text>
           <Text variant="caption">{formatDate(entry.created_at)}</Text>
         </div>
-        <Text variant="caption">by {entry.changed_by_display_name}</Text>
+        <Inline gap="xs" align="center">
+          <Text variant="caption">by</Text>
+          <UserPill name={entry.changed_by_display_name} />
+        </Inline>
         {entry.resolution_note ? (
           <Text variant="muted" style={{ marginTop: 4 }}>
             {entry.resolution_note}
@@ -410,7 +418,7 @@ function CommentEntry({ comment }: { comment: TicketComment }) {
       <div className="feedback-detail__timeline-dot">{initial}</div>
       <div className="feedback-detail__timeline-body">
         <div className="feedback-detail__meta-row">
-          <Text variant="label">{comment.author_display_name}</Text>
+          <UserPill name={comment.author_display_name} />
           <Text variant="caption">{formatDate(comment.created_at)}</Text>
         </div>
         <p className="feedback-detail__comment-text">{comment.body}</p>

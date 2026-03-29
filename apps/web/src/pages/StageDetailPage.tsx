@@ -427,9 +427,7 @@ function StageParticipation({
             </Text>
             <Inline gap="xs" wrap>
               {stageTeam.members.map((m) => (
-                <Pill key={m.user_id} size="sm" variant="default">
-                  {m.display_name}
-                </Pill>
+                <UserPill key={m.user_id} name={m.display_name} />
               ))}
             </Inline>
           </Stack>

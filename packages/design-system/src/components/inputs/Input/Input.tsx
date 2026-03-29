@@ -44,6 +44,17 @@ const sizeInputStyles: Record<'sm' | 'md', CSSProperties> = {
   },
 };
 
+// TextareaAutosize throws if style.minHeight is set — use padding-only styles for multiline.
+const sizeTextareaStyles: Record<'sm' | 'md', CSSProperties> = {
+  sm: {
+    padding: '0 var(--ds-size-control-sm-paddingX)',
+    fontSize: 'var(--ds-textScale-3-fontSize, 12px)',
+  },
+  md: {
+    padding: '0 var(--ds-size-control-md-paddingX)',
+  },
+};
+
 export function Input(props: InputProps): ReactElement {
   const {
     label,
@@ -65,6 +76,11 @@ export function Input(props: InputProps): ReactElement {
 
   const inputStyle: CSSProperties = {
     ...sizeInputStyles[size],
+    width: fullWidth ? '100%' : undefined,
+  };
+
+  const textareaStyle: CSSProperties = {
+    ...sizeTextareaStyles[size],
     width: fullWidth ? '100%' : undefined,
   };
 
@@ -109,7 +125,7 @@ export function Input(props: InputProps): ReactElement {
           error={hasError}
           aria-invalid={hasError}
           aria-describedby={describedBy}
-          styles={{ input: inputStyle }}
+          styles={{ input: textareaStyle }}
           {...(rest as TextAreaProps)}
         />
       ) : (

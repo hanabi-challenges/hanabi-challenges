@@ -54,12 +54,16 @@ export interface LookupsResponse {
 export interface TicketSummary {
   id: string;
   title: string;
+  description: string;
   type_slug: TicketTypeSlug;
   domain_slug: DomainSlug;
   status_slug: StatusSlug;
   is_terminal: boolean;
   submitted_by_display_name: string;
+  submitted_by_color_hex?: string | null;
+  submitted_by_text_color?: string | null;
   vote_count?: number;
+  comment_count?: number;
   created_at: string;
   updated_at: string;
 }

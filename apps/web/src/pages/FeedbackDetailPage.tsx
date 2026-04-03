@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -6,27 +6,31 @@ import {
   Button,
   Heading,
   Inline,
-  Input,
   Main,
   MaterialIcon,
+  Modal,
   PageContainer,
-  Pill,
+  PageHeader,
   Section,
-  SectionCard,
-  Select,
   Stack,
   Text,
 } from '../design-system';
-import { useAuth, hasRole } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { VoteButton } from '../features/feedback/VoteButton';
 import { UserPill } from '../features/users/UserPill';
+import { MarkdownRenderer, type MentionColorMap } from '../ui/MarkdownRenderer';
+import { MarkdownEditor } from '../ui/MarkdownEditor';
 import {
   getTicket,
   getTicketHistory,
   getTicketComments,
   getVoteState,
+  getPinState,
+  setPinned,
+  getSubscriptionState,
+  setSubscribed,
   createComment,
-  transitionStatus,
+  searchMentionUsers,
 } from '../features/feedback/api';
 import {
   STATUS_CONFIG,
@@ -34,14 +38,14 @@ import {
   DOMAIN_LABELS,
   SEVERITY_LABELS,
   REPRODUCIBILITY_LABELS,
-  VALID_NEXT_STATUSES,
 } from '../features/feedback/statusConfig';
 import type {
   TicketDetail,
   TicketHistoryEntry,
   TicketComment,
   TicketVoteState,
-  StatusSlug,
+  TicketPinState,
+  TicketSubscriptionState,
 } from '../features/feedback/types';
 import './FeedbackDetailPage.css';
 
@@ -67,24 +71,24 @@ function formatDate(iso: string) {
 export function FeedbackDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user, token } = useAuth();
+  const { token } = useAuth();
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [voteState, setVoteState] = useState<TicketVoteState | null>(null);
+  const [pinState, setPinState] = useState<TicketPinState | null>(null);
+  const [subscriptionState, setSubscriptionState] = useState<TicketSubscriptionState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
 
   const [commentBody, setCommentBody] = useState('');
   const [commentBusy, setCommentBusy] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
 
-  const [transitionTo, setTransitionTo] = useState('');
-  const [resolutionNote, setResolutionNote] = useState('');
-  const [transitionBusy, setTransitionBusy] = useState(false);
-  const [transitionError, setTransitionError] = useState<string | null>(null);
-
-  const isAdmin = hasRole(user, 'MOD');
+  const [pinBusy, setPinBusy] = useState(false);
+  const [subscribeBusy, setSubscribeBusy] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -95,17 +99,81 @@ export function FeedbackDetailPage() {
       getTicketHistory(id),
       getTicketComments(id),
       getVoteState(id, token),
+      getPinState(id, token),
+      getSubscriptionState(id, token),
     ])
-      .then(([t, { history }, { comments }, votes]) => {
+      .then(([t, { history }, { comments }, votes, pins, subs]) => {
         setTicket(t);
         setTimeline(buildTimeline(history, comments));
         setVoteState(votes);
+        setPinState(pins);
+        setSubscriptionState(subs);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load ticket.');
       })
       .finally(() => setLoading(false));
   }, [id, token]);
+
+  const togglePin = async () => {
+    if (!token) {
+      setLoginModalOpen(true);
+      return;
+    }
+    if (!id || !pinState || pinBusy) return;
+    setPinBusy(true);
+    try {
+      const next = await setPinned(id, !pinState.is_pinned, token);
+      setPinState(next);
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const toggleSubscription = async () => {
+    if (!token) {
+      setLoginModalOpen(true);
+      return;
+    }
+    if (!id || !subscriptionState || subscribeBusy) return;
+    setSubscribeBusy(true);
+    try {
+      const next = await setSubscribed(id, !subscriptionState.is_subscribed, token);
+      setSubscriptionState(next);
+    } finally {
+      setSubscribeBusy(false);
+    }
+  };
+
+  const searchMentions = token
+    ? (q: string) => searchMentionUsers(q, token).then((r) => r.users)
+    : undefined;
+
+  // Build a display_name → color map from all loaded user data so that
+  // @mention pills in ticket descriptions and comments render with their colors.
+  const mentionColors = useMemo<MentionColorMap>(() => {
+    const map: MentionColorMap = {};
+    if (ticket) {
+      map[ticket.submitted_by_display_name] = {
+        color_hex: ticket.submitted_by_color_hex,
+        text_color: ticket.submitted_by_text_color,
+      };
+    }
+    for (const entry of timeline) {
+      if (entry.kind === 'history') {
+        map[entry.data.changed_by_display_name] = {
+          color_hex: entry.data.changed_by_color_hex,
+          text_color: entry.data.changed_by_text_color,
+        };
+      } else {
+        map[entry.data.author_display_name] = {
+          color_hex: entry.data.author_color_hex,
+          text_color: entry.data.author_text_color,
+        };
+      }
+    }
+    return map;
+  }, [ticket, timeline]);
 
   const submitComment = async () => {
     if (!id || !token || !commentBody.trim()) return;
@@ -123,34 +191,6 @@ export function FeedbackDetailPage() {
       setCommentError(err instanceof Error ? err.message : 'Failed to post comment.');
     } finally {
       setCommentBusy(false);
-    }
-  };
-
-  const applyTransition = async () => {
-    if (!id || !token || !transitionTo) return;
-    setTransitionBusy(true);
-    setTransitionError(null);
-    try {
-      const updated = await transitionStatus(
-        id,
-        {
-          to_status: transitionTo as StatusSlug,
-          resolution_note: resolutionNote.trim() || undefined,
-        },
-        token,
-      );
-      setTicket((prev) => (prev ? { ...prev, status_slug: updated.status_slug } : prev));
-      const [{ history }, { comments }] = await Promise.all([
-        getTicketHistory(id),
-        getTicketComments(id),
-      ]);
-      setTimeline(buildTimeline(history, comments));
-      setTransitionTo('');
-      setResolutionNote('');
-    } catch (err) {
-      setTransitionError(err instanceof Error ? err.message : 'Failed to transition status.');
-    } finally {
-      setTransitionBusy(false);
     }
   };
 
@@ -186,242 +226,272 @@ export function FeedbackDetailPage() {
     tone: 'neutral' as const,
   };
 
-  const nextStatusOptions = (VALID_NEXT_STATUSES[ticket.status_slug] ?? []).map((s) => ({
-    value: s,
-    label: STATUS_CONFIG[s]?.label ?? s,
-  }));
-
   return (
     <Main>
       <PageContainer>
         <Section paddingY="lg" baseLevel={1}>
-          {/* Back link */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/feedback')}
-            style={{ marginBottom: 'var(--ds-space-xs)' }}
-          >
-            <Inline gap="xs" align="center">
-              <MaterialIcon name="arrow_back" size={14} />
-              Back
-            </Inline>
-          </Button>
-
-          <div className="feedback-detail__layout">
-            {/* Main column */}
-            <Stack gap="md">
-              {/* Title + status */}
-              <Inline justify="space-between" align="start" wrap gap="sm">
-                <Heading level={1} style={{ flex: 1, minWidth: 0 }}>
-                  {ticket.title}
-                </Heading>
-                <Badge tone={statusTone}>{statusLabel}</Badge>
+          <Stack gap="sm">
+            {/* Back nav */}
+            <Button variant="ghost" size="sm" onClick={() => navigate('/feedback')}>
+              <Inline gap="xxs" align="center">
+                <MaterialIcon name="chevron_left" size={14} />
+                Feedback
               </Inline>
+            </Button>
 
-              {/* Description */}
-              <SectionCard>
-                <Text variant="body" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-                  {ticket.description}
-                </Text>
-              </SectionCard>
+            <div className="feedback-detail__layout">
+              {/* Content column — right on desktop, top on mobile */}
+              <div className="feedback-detail__content">
+                <Stack gap="md">
+                  {/* Title + status badge */}
+                  <PageHeader
+                    title={ticket.title}
+                    actions={<Badge tone={statusTone}>{statusLabel}</Badge>}
+                  />
 
-              {/* Timeline */}
-              {timeline.length > 0 ? (
-                <Section header={<Heading level={2}>History</Heading>} paddingY="sm">
-                  <div className="feedback-detail__timeline">
+                  {/* Description — rendered as markdown */}
+                  <MarkdownRenderer markdown={ticket.description} mentionColors={mentionColors} />
+
+                  {/* Metadata: type/domain/severity badges left, attribution right */}
+                  <Inline justify="space-between" align="center" wrap>
+                    <Inline gap="xs" align="center" wrap>
+                      <Badge size="sm">{TYPE_LABELS[ticket.type_slug] ?? ticket.type_slug}</Badge>
+                      <Badge size="sm">
+                        {DOMAIN_LABELS[ticket.domain_slug] ?? ticket.domain_slug}
+                      </Badge>
+                      {ticket.severity ? (
+                        <Badge size="sm">
+                          {SEVERITY_LABELS[ticket.severity] ?? ticket.severity}
+                        </Badge>
+                      ) : null}
+                      {ticket.reproducibility ? (
+                        <Badge size="sm">
+                          {REPRODUCIBILITY_LABELS[ticket.reproducibility] ?? ticket.reproducibility}
+                        </Badge>
+                      ) : null}
+                    </Inline>
+                    <Inline gap="xs" align="center">
+                      <UserPill
+                        name={ticket.submitted_by_display_name}
+                        color={ticket.submitted_by_color_hex}
+                        textColor={ticket.submitted_by_text_color}
+                      />
+                      <Text variant="caption">{formatDate(ticket.created_at)}</Text>
+                      {ticket.updated_at !== ticket.created_at ? (
+                        <Text variant="caption">(updated {formatDate(ticket.updated_at)})</Text>
+                      ) : null}
+                    </Inline>
+                  </Inline>
+
+                  {/* Activity timeline — entries + comment box connected by a vertical line */}
+                  <div className="activity-timeline">
                     {timeline.map((entry) =>
                       entry.kind === 'history' ? (
                         <HistoryEntry key={entry.data.id} entry={entry.data} />
                       ) : (
-                        <CommentEntry key={entry.data.id} comment={entry.data} />
+                        <CommentEntry
+                          key={entry.data.id}
+                          comment={entry.data}
+                          mentionColors={mentionColors}
+                        />
                       ),
                     )}
+
+                    {/* Terminal node: comment input (logged-in) or login prompt */}
+                    {token ? (
+                      <div className="timeline-row">
+                        <div className="timeline-node">
+                          <MaterialIcon name="edit" size={12} />
+                        </div>
+                        <div className="timeline-content">
+                          <Stack gap="sm">
+                            <MarkdownEditor
+                              value={commentBody}
+                              onChange={setCommentBody}
+                              placeholder="Write a comment…"
+                              rows={5}
+                              disabled={commentBusy}
+                              onMentionSearch={searchMentions}
+                            />
+                            {commentError ? <Alert variant="error" message={commentError} /> : null}
+                            <Inline justify="start">
+                              <Button
+                                variant="primary"
+                                size="md"
+                                onClick={() => void submitComment()}
+                                disabled={commentBusy || !commentBody.trim()}
+                              >
+                                {commentBusy ? 'Posting…' : 'Post comment'}
+                              </Button>
+                            </Inline>
+                          </Stack>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="timeline-row">
+                        <div className="timeline-node">
+                          <MaterialIcon name="lock" size={12} />
+                        </div>
+                        <div className="timeline-content">
+                          <Text variant="caption">
+                            <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
+                              Log in
+                            </Button>{' '}
+                            to leave a comment.
+                          </Text>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </Section>
-              ) : null}
-
-              {/* Add comment */}
-              {token ? (
-                <Section header={<Heading level={2}>Add a comment</Heading>} paddingY="sm">
-                  <Stack gap="sm">
-                    <Input
-                      multiline
-                      rows={4}
-                      placeholder="Write a comment…"
-                      value={commentBody}
-                      onChange={(e) => setCommentBody(e.target.value)}
-                      fullWidth
-                    />
-                    {commentError ? <Alert variant="error" message={commentError} /> : null}
-                    <Button
-                      variant="primary"
-                      size="md"
-                      onClick={() => void submitComment()}
-                      disabled={commentBusy || !commentBody.trim()}
-                    >
-                      {commentBusy ? 'Posting…' : 'Post comment'}
-                    </Button>
-                  </Stack>
-                </Section>
-              ) : (
-                <Text variant="caption">
-                  <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>
-                    Log in
-                  </Button>{' '}
-                  to leave a comment.
-                </Text>
-              )}
-            </Stack>
-
-            {/* Sidebar */}
-            <Stack gap="sm">
-              {/* Metadata */}
-              <SectionCard>
-                <Stack gap="sm">
-                  <Heading level={3}>Details</Heading>
-                  <MetaRow label="Type">
-                    <Pill size="sm" variant="default">
-                      {TYPE_LABELS[ticket.type_slug] ?? ticket.type_slug}
-                    </Pill>
-                  </MetaRow>
-                  <MetaRow label="Domain">
-                    <Pill size="sm" variant="default">
-                      {DOMAIN_LABELS[ticket.domain_slug] ?? ticket.domain_slug}
-                    </Pill>
-                  </MetaRow>
-                  {ticket.severity ? (
-                    <MetaRow label="Severity">
-                      <Text variant="body">
-                        {SEVERITY_LABELS[ticket.severity] ?? ticket.severity}
-                      </Text>
-                    </MetaRow>
-                  ) : null}
-                  {ticket.reproducibility ? (
-                    <MetaRow label="Reproducibility">
-                      <Text variant="body">
-                        {REPRODUCIBILITY_LABELS[ticket.reproducibility] ?? ticket.reproducibility}
-                      </Text>
-                    </MetaRow>
-                  ) : null}
-                  <MetaRow label="Submitted by">
-                    <UserPill
-                      name={ticket.submitted_by_display_name}
-                      color={ticket.submitted_by_color_hex}
-                      textColor={ticket.submitted_by_text_color}
-                    />
-                  </MetaRow>
-                  <MetaRow label="Opened">
-                    <Text variant="caption">{formatDate(ticket.created_at)}</Text>
-                  </MetaRow>
-                  {ticket.updated_at !== ticket.created_at ? (
-                    <MetaRow label="Updated">
-                      <Text variant="caption">{formatDate(ticket.updated_at)}</Text>
-                    </MetaRow>
-                  ) : null}
                 </Stack>
-              </SectionCard>
+              </div>
 
-              {/* Vote */}
-              {voteState ? (
-                <SectionCard>
-                  <Stack gap="sm">
-                    <Heading level={3}>Votes</Heading>
-                    <VoteButton voteState={voteState} token={token} onVoteChange={setVoteState} />
-                    {!token ? <Text variant="caption">Log in to vote.</Text> : null}
-                  </Stack>
-                </SectionCard>
-              ) : null}
+              {/* Actions column — left on desktop, bottom on mobile */}
+              <div className="feedback-detail__actions">
+                <Stack gap="md" align="center">
+                  {/* Vote */}
+                  {voteState ? (
+                    <VoteButton
+                      voteState={voteState}
+                      token={token}
+                      onVoteChange={setVoteState}
+                      onLoginRequired={() => setLoginModalOpen(true)}
+                    />
+                  ) : null}
 
-              {/* Admin tools */}
-              {isAdmin && nextStatusOptions.length > 0 ? (
-                <SectionCard>
-                  <Stack gap="sm">
-                    <Heading level={3}>Moderation</Heading>
-                    <Select
-                      options={nextStatusOptions}
-                      value={transitionTo}
-                      onChange={setTransitionTo}
-                      placeholder="Transition to…"
-                    />
-                    <Input
-                      multiline
-                      rows={2}
-                      placeholder="Resolution note (optional)"
-                      value={resolutionNote}
-                      onChange={(e) => setResolutionNote(e.target.value)}
-                      fullWidth
-                    />
-                    {transitionError ? <Alert variant="error" message={transitionError} /> : null}
+                  {/* Pin + follow */}
+                  <Stack gap="xs" align="center">
                     <Button
-                      variant="primary"
+                      variant="ghost"
                       size="sm"
-                      onClick={() => void applyTransition()}
-                      disabled={transitionBusy || !transitionTo}
+                      icon
+                      onClick={() => void togglePin()}
+                      disabled={pinBusy}
+                      aria-label={pinState?.is_pinned ? 'Unpin' : 'Pin to top of feed'}
                     >
-                      {transitionBusy ? 'Applying…' : 'Apply'}
+                      <MaterialIcon
+                        name="push_pin"
+                        size={18}
+                        style={
+                          pinState?.is_pinned
+                            ? {
+                                color: 'var(--ds-color-accent-strong)',
+                                fontVariationSettings: "'FILL' 1",
+                              }
+                            : undefined
+                        }
+                      />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon
+                      onClick={() => void toggleSubscription()}
+                      disabled={subscribeBusy}
+                      aria-label={
+                        subscriptionState?.is_subscribed ? 'Unsubscribe' : 'Subscribe to updates'
+                      }
+                    >
+                      <MaterialIcon
+                        name={
+                          subscriptionState?.is_subscribed ? 'notifications' : 'notifications_none'
+                        }
+                        size={18}
+                        style={
+                          subscriptionState?.is_subscribed
+                            ? {
+                                color: 'var(--ds-color-accent-strong)',
+                                fontVariationSettings: "'FILL' 1",
+                              }
+                            : undefined
+                        }
+                      />
                     </Button>
                   </Stack>
-                </SectionCard>
-              ) : null}
-            </Stack>
-          </div>
+                </Stack>
+              </div>
+
+              {/* Login prompt modal */}
+              <Modal
+                open={loginModalOpen}
+                onClose={() => setLoginModalOpen(false)}
+                maxWidth="360px"
+              >
+                <Heading level={3}>Log in to continue</Heading>
+                <Text variant="body">
+                  You need to be logged in to vote, pin, or subscribe to tickets.
+                </Text>
+                <Inline gap="sm">
+                  <Button variant="primary" onClick={() => navigate('/login')}>
+                    Log in
+                  </Button>
+                  <Button variant="secondary" onClick={() => setLoginModalOpen(false)}>
+                    Cancel
+                  </Button>
+                </Inline>
+              </Modal>
+            </div>
+          </Stack>
         </Section>
       </PageContainer>
     </Main>
   );
 }
 
-function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Inline justify="space-between" align="baseline" gap="xs" wrap>
-      <Text variant="caption">{label}</Text>
-      {children}
-    </Inline>
-  );
-}
-
 function HistoryEntry({ entry }: { entry: TicketHistoryEntry }) {
-  const toMeta = STATUS_CONFIG[entry.to_status_slug];
+  const toLabel = STATUS_CONFIG[entry.to_status_slug]?.label ?? entry.to_status_slug;
+  const action = entry.from_status_slug
+    ? `changed the status to ${toLabel}`
+    : `opened the ticket as ${toLabel}`;
   return (
-    <div className="feedback-detail__timeline-entry">
-      <div className="feedback-detail__timeline-dot feedback-detail__timeline-dot--transition">
-        <MaterialIcon name="swap_horiz" size={14} />
+    <div className="timeline-row">
+      <div className="timeline-node">
+        <MaterialIcon name="swap_horiz" size={12} />
       </div>
-      <div className="feedback-detail__timeline-body">
-        <div className="feedback-detail__meta-row">
-          <Text variant="label">
-            {entry.from_status_slug
-              ? `${STATUS_CONFIG[entry.from_status_slug]?.label ?? entry.from_status_slug} → ${toMeta?.label ?? entry.to_status_slug}`
-              : `Opened as ${toMeta?.label ?? entry.to_status_slug}`}
-          </Text>
-          <Text variant="caption">{formatDate(entry.created_at)}</Text>
-        </div>
+      <div className="timeline-content">
         <Inline gap="xs" align="center">
-          <Text variant="caption">by</Text>
-          <UserPill name={entry.changed_by_display_name} />
+          <UserPill
+            name={entry.changed_by_display_name}
+            color={entry.changed_by_color_hex}
+            textColor={entry.changed_by_text_color}
+          />
+          <Text variant="caption">{action}</Text>
+          <Text variant="caption">· {formatDate(entry.created_at)}</Text>
         </Inline>
-        {entry.resolution_note ? (
-          <Text variant="muted" style={{ marginTop: 4 }}>
-            {entry.resolution_note}
-          </Text>
-        ) : null}
       </div>
     </div>
   );
 }
 
-function CommentEntry({ comment }: { comment: TicketComment }) {
-  const initial = comment.author_display_name.charAt(0).toUpperCase();
+function CommentEntry({
+  comment,
+  mentionColors,
+}: {
+  comment: TicketComment;
+  mentionColors: MentionColorMap;
+}) {
   return (
-    <div className="feedback-detail__timeline-entry">
-      <div className="feedback-detail__timeline-dot">{initial}</div>
-      <div className="feedback-detail__timeline-body">
-        <div className="feedback-detail__meta-row">
-          <UserPill name={comment.author_display_name} />
-          <Text variant="caption">{formatDate(comment.created_at)}</Text>
+    <div className="timeline-row">
+      <div className="timeline-node">
+        <MaterialIcon name="chat_bubble" size={12} />
+      </div>
+      <div className="timeline-content">
+        <div className="activity-comment">
+          <div className="activity-comment__header">
+            <Inline gap="xs" align="center">
+              <UserPill
+                name={comment.author_display_name}
+                color={comment.author_color_hex}
+                textColor={comment.author_text_color}
+              />
+              <Text variant="caption">commented</Text>
+            </Inline>
+            <Text variant="caption">{formatDate(comment.created_at)}</Text>
+          </div>
+          <div className="activity-comment__body">
+            <MarkdownRenderer markdown={comment.body} mentionColors={mentionColors} />
+          </div>
         </div>
-        <p className="feedback-detail__comment-text">{comment.body}</p>
       </div>
     </div>
   );

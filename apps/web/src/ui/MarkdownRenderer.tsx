@@ -316,7 +316,12 @@ function renderBlocks(
             mentionColors,
           ),
           icon: isTaskListItem(item) ? (
-            <CoreCheckbox checked={Boolean(listItemChecked(item))} readOnly tabIndex={-1} size="xs" />
+            <CoreCheckbox
+              checked={Boolean(listItemChecked(item))}
+              readOnly
+              tabIndex={-1}
+              size="xs"
+            />
           ) : undefined,
         }));
         rendered.push(
@@ -356,9 +361,7 @@ function renderBlocks(
               color: 'var(--ds-color-text-muted)',
             }}
           >
-            <Stack gap="none">
-              {renderBlocks(node.children, key, definitions, mentionColors)}
-            </Stack>
+            <Stack gap="none">{renderBlocks(node.children, key, definitions, mentionColors)}</Stack>
           </CoreBox>,
         );
         return;
@@ -405,9 +408,7 @@ export function MarkdownRenderer({ markdown, mentionColors }: MarkdownRendererPr
   const { tree, definitions } = parseMarkdown(markdown);
   return (
     <Prose>
-      <Stack gap="none">
-        {renderBlocks(tree.children, 'md', definitions, mentionColors)}
-      </Stack>
+      <Stack gap="none">{renderBlocks(tree.children, 'md', definitions, mentionColors)}</Stack>
     </Prose>
   );
 }

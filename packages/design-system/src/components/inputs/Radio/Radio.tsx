@@ -6,7 +6,7 @@ export type RadioProps = {
   helperText?: string;
   error?: string | null;
   className?: string;
-} & Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size'>;
 
 export function Radio({
   label,

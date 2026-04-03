@@ -8,7 +8,7 @@ import type {
 import { useState } from 'react';
 import { Box } from '../../../mantine';
 
-export type PillSize = 'sm' | 'md' | 'lg';
+export type PillSize = 'xs' | 'sm' | 'md' | 'lg';
 export type PillVariant = 'default' | 'accent';
 
 export type PillProps<T extends ElementType = 'div'> = {
@@ -23,6 +23,13 @@ export type PillProps<T extends ElementType = 'div'> = {
 } & Omit<ComponentPropsWithoutRef<T>, 'as' | 'children' | 'className'>;
 
 const sizeStyles: Record<PillSize, CSSProperties> = {
+  xs: {
+    // Tight enough to sit within a body-text line without pushing line-height.
+    // At 11px / line-height 1 / 2px vertical padding → ~13px total height.
+    padding: '1px var(--ds-space-xxs)',
+    fontSize: '0.6875rem', // 11px
+    lineHeight: '1',
+  },
   sm: {
     padding: 'calc(var(--ds-space-xxs) + 2px) var(--ds-space-xs)',
     fontSize: 'var(--ds-textScale-3-fontSize, 12px)',

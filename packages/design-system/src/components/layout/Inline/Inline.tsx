@@ -1,5 +1,5 @@
 // src/design-system/components/layout/Inline/Inline.tsx
-import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../mantine';
 
 export type InlineGap = 'none' | 'xs' | 'sm' | 'md' | 'lg';
@@ -80,7 +80,7 @@ export function Inline({
   className,
   style,
   ...rest
-}: InlineProps & { style?: CSSProperties }) {
+}: InlineProps & { style?: CSSProperties }): ReactElement {
   const gridTemplate =
     columnWidths && columnWidths.length > 0
       ? columnWidths

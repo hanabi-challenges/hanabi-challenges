@@ -10,6 +10,7 @@ type PillSkeletonProps = {
 };
 
 const heightBySize: Record<PillSize, string> = {
+  xs: '20px',
   sm: '24px',
   md: '32px',
   lg: '36px',

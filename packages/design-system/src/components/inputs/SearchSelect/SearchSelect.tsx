@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { Box, TextInput, UnstyledButton } from '../../../mantine';
 import { Inline } from '../../layout/Inline/Inline';
 
@@ -178,7 +185,7 @@ export function SearchSelect<T>({
                 key={s.key}
                 data-active={active || undefined}
                 onMouseEnter={() => setHighlightIndex(idx)}
-                onMouseDown={(e) => {
+                onMouseDown={(e: MouseEvent) => {
                   e.preventDefault();
                   handleSelect(s.value);
                 }}

@@ -1,5 +1,5 @@
 // frontend/src/design-system/components/layout/Stack/Stack.tsx
-import type { CSSProperties, ElementType, HTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, ElementType, HTMLAttributes, ReactElement, ReactNode } from 'react';
 import { Box } from '../../../mantine';
 
 export type StackGap = 'none' | 'xs' | 'sm' | 'md' | 'lg';
@@ -86,7 +86,7 @@ export function Stack({
   className,
   style,
   ...rest
-}: StackProps) {
+}: StackProps): ReactElement {
   return (
     <Box
       component={(as ?? 'div') as 'div'}

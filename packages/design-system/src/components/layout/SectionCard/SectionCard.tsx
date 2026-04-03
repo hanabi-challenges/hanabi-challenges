@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import { Card } from '../Card/Card';
 
 export type SectionCardDensity = 'comfortable' | 'compact';
@@ -19,7 +19,7 @@ export function SectionCard({
   density = 'comfortable',
   className,
   style,
-}: SectionCardProps) {
+}: SectionCardProps): ReactElement {
   return (
     <Card
       variant="outline"

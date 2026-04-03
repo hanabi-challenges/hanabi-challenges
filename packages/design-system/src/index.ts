@@ -27,11 +27,16 @@ export { Table } from './components/data-display/Table/Table';
 export { TableSkeleton } from './components/data-display/Table/TableSkeleton';
 export { KPIText } from './components/data-display/KPIText/KPIText';
 export { KPITextSkeleton } from './components/data-display/KPIText/KPITextSkeleton';
+export { StatBlock } from './components/data-display/StatBlock/StatBlock';
+export { TimelineDot } from './components/data-display/TimelineDot/TimelineDot';
+export type { TimelineDotVariant } from './components/data-display/TimelineDot/TimelineDot';
+export { EloDelta } from './components/data-display/EloDelta/EloDelta';
 export { List } from './components/data-display/List/List';
 export { Heading } from './components/typography/Heading/Heading';
 export { HeadingSkeleton } from './components/typography/Heading/HeadingSkeleton';
 export { Prose } from './components/typography/Prose/Prose';
 export { Text } from './components/typography/Text/Text';
+export type { TextVariant, TextWeight } from './components/typography/Text/Text';
 export { TextSkeleton } from './components/typography/Text/TextSkeleton';
 export { FormContainer } from './components/inputs/FormContainer/FormContainer';
 export { InputContainer } from './components/inputs/InputContainer/InputContainer';
@@ -49,7 +54,16 @@ export { Modal } from './components/overlay/Modal/Modal';
 export { Popover } from './components/overlay/Popover/Popover';
 export { Drawer } from './components/overlay/Drawer/Drawer';
 export { Tooltip } from './components/overlay/Tooltip/Tooltip';
-export { ActionIcon, Indicator, Menu, PasswordInput, ScrollArea, SimpleGrid } from './mantine';
+export {
+  ActionIcon,
+  Indicator,
+  Link,
+  Menu,
+  PasswordInput,
+  ScrollArea,
+  SimpleGrid,
+} from './mantine';
+export type { LinkProps } from './mantine';
 
 // Core wrapper exports for pages/features that need lower-level primitives.
 // Use these via design-system (not direct ../mantine imports) to preserve a single UI boundary.

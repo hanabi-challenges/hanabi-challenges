@@ -16,6 +16,8 @@ export type ButtonProps<T extends ElementType = 'button'> = {
   children?: ReactNode;
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /** Removes horizontal padding and makes the button square — use for icon-only buttons. */
+  icon?: boolean;
   className?: string;
   disabled?: boolean;
 } & Omit<ComponentPropsWithoutRef<T>, 'as' | 'className' | 'children' | 'disabled'>;
@@ -92,11 +94,31 @@ const sizeStyles: Record<ButtonSize, CSSProperties> = {
   },
 };
 
+const iconSizeStyles: Record<ButtonSize, CSSProperties> = {
+  md: {
+    height: 'var(--ds-size-control-md-height)',
+    minHeight: 'var(--ds-size-control-md-height)',
+    width: 'var(--ds-size-control-md-height)',
+    padding: '0',
+    lineHeight: '1',
+    borderRadius: 'var(--ds-radius-md)',
+  },
+  sm: {
+    height: 'var(--ds-size-control-sm-height)',
+    minHeight: 'var(--ds-size-control-sm-height)',
+    width: 'var(--ds-size-control-sm-height)',
+    padding: '0',
+    lineHeight: '1',
+    borderRadius: 'var(--ds-radius-sm)',
+  },
+};
+
 export function Button<T extends ElementType = 'button'>({
   as,
   children,
   variant = 'primary',
   size = 'md',
+  icon = false,
   className,
   style,
   disabled = false,
@@ -118,7 +140,7 @@ export function Button<T extends ElementType = 'button'>({
     textDecoration: 'none',
     verticalAlign: 'middle',
     ...baseStyles[variant],
-    ...sizeStyles[size],
+    ...(icon ? iconSizeStyles[size] : sizeStyles[size]),
     ...(isHovered ? hoverStyles[variant] : {}),
     ...(disabled ? disabledStyles[variant] : {}),
     ...style,

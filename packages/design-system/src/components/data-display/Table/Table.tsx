@@ -5,9 +5,15 @@ type TableProps = {
   children: ReactNode;
   density?: 'relaxed' | 'tight';
   className?: string;
+  style?: CSSProperties;
 };
 
-export function Table({ children, density = 'relaxed', className }: TableProps): ReactElement {
+function TableComponent({
+  children,
+  density = 'relaxed',
+  className,
+  style,
+}: TableProps): ReactElement {
   const tight = density === 'tight';
   const cellFontSize: CSSProperties['fontSize'] = tight
     ? 'var(--ds-textScale-3-fontSize, 12px)'
@@ -18,9 +24,9 @@ export function Table({ children, density = 'relaxed', className }: TableProps):
       highlightOnHover
       withRowBorders
       className={className}
+      style={{ '--table-hover-color': 'var(--ds-color-surface-muted)', ...style } as CSSProperties}
       verticalSpacing={tight ? ('var(--ds-space-xxs)' as never) : ('var(--ds-space-xs)' as never)}
       horizontalSpacing={tight ? ('var(--ds-space-xs)' as never) : ('var(--ds-space-sm)' as never)}
-      style={{ '--table-hover-color': 'var(--ds-color-surface-muted)' } as CSSProperties}
       styles={{
         thead: { background: 'var(--ds-color-surface-muted)' } as CSSProperties,
         th: {
@@ -35,3 +41,13 @@ export function Table({ children, density = 'relaxed', className }: TableProps):
     </MantineTable>
   );
 }
+
+export const Table = Object.assign(TableComponent, {
+  Thead: MantineTable.Thead,
+  Tbody: MantineTable.Tbody,
+  Tfoot: MantineTable.Tfoot,
+  Tr: MantineTable.Tr,
+  Th: MantineTable.Th,
+  Td: MantineTable.Td,
+  Caption: MantineTable.Caption,
+});

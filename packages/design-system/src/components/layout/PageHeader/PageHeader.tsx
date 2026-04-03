@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { Box } from '../../../mantine';
 import { Heading } from '../../typography/Heading/Heading';
 import { Text } from '../../typography/Text/Text';
@@ -15,7 +15,7 @@ export type PageHeaderProps = {
  * Canonical title/subtitle header block.
  * Locks spacing so pages do not drift between title/subtitle/body rhythm.
  */
-export function PageHeader({ title, subtitle, actions, level = 1 }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, actions, level = 1 }: PageHeaderProps): ReactElement {
   return (
     <Box style={{ display: 'block' }}>
       <Inline style={{ width: '100%' }} justify="space-between" align="start" wrap>

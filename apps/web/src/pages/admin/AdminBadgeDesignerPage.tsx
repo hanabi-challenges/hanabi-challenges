@@ -16,7 +16,7 @@ import {
   CoreTextarea as Textarea,
   CoreTitle as Title,
 } from '../../design-system';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Link } from '../../mantine';
 import { useAuth } from '../../context/AuthContext';
@@ -444,7 +444,7 @@ export function AdminBadgeDesignerPage() {
                     role="button"
                     tabIndex={0}
                     onClick={() => setTier(item.key)}
-                    onKeyDown={(event) => {
+                    onKeyDown={(event: KeyboardEvent) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
                         setTier(item.key);

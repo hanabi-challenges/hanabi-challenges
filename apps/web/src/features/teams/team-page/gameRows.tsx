@@ -1,4 +1,3 @@
-import { Link } from '../../../mantine';
 import { useState } from 'react';
 import { ApiError, postJsonAuth } from '../../../lib/api';
 import {
@@ -243,14 +242,14 @@ export function PlayedRow({
       <Table.Td className="teamgame-cell">{playedAt ? playedAt.toLocaleDateString() : ''}</Table.Td>
       <Table.Td className="teamgame-cell">
         {r.hanab_game_id ? (
-          <Link
-            to={`https://hanab.live/replay/${r.hanab_game_id}`}
+          <Anchor
+            href={`https://hanab.live/replay/${r.hanab_game_id}`}
             className="teamgame-link"
             target="_blank"
             rel="noreferrer"
           >
             {r.hanab_game_id}
-          </Link>
+          </Anchor>
         ) : (
           ''
         )}

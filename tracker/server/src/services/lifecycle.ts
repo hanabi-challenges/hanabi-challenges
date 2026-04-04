@@ -7,9 +7,6 @@ import { getTicketByIssueNodeId } from '../db/github.js';
 import { env } from '../env.js';
 import { logger } from '../logger.js';
 
-/** Fixed UUID for the GitHub bot system user (seeded in migration 20260328000000). */
-const GITHUB_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
-
 /**
  * Submits a new ticket.
  *
@@ -23,7 +20,7 @@ const GITHUB_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
  */
 export async function submitTicket(
   sql: Sql,
-  submittedBy: string,
+  submittedBy: number,
   input: CreateTicketInput,
 ): Promise<{ id: string }> {
   const submittedStatusId = await getStatusId(sql, 'submitted');
@@ -76,7 +73,7 @@ export async function transitionTicket(
   sql: Sql,
   ticketId: string,
   toStatusSlug: string,
-  changedBy: string,
+  changedBy: number,
   roleSlug: string,
   resolutionNote?: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -195,12 +192,12 @@ export async function transitionTicketFromGithub(
       WHERE id = ${ticketId}
     )
     INSERT INTO ticket_status_history (ticket_id, from_status_id, to_status_id, changed_by)
-    VALUES (${ticketId}, ${fromId}, ${toId}, ${GITHUB_BOT_USER_ID})
+    VALUES (${ticketId}, ${fromId}, ${toId}, NULL)
   `;
 
   logger.info({ ticketId, fromStatusSlug, toStatusSlug, nodeId }, 'ticket.transitioned_by_github');
 
-  void fanoutNotification(sql, ticketId, GITHUB_BOT_USER_ID, 'status_changed');
+  void fanoutNotification(sql, ticketId, null, 'status_changed');
 
   return { ok: true };
 }

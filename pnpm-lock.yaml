@@ -133,8 +133,8 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
       '@hanabi-challenges/design-system':
-        specifier: 1.0.0
-        version: 1.0.0(@mantine/core@8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react-router-dom@7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
+        specifier: 2.1.0
+        version: 2.1.0(@mantine/core@8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react-router-dom@7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
       '@mantine/core':
         specifier: ^8.3.15
         version: 8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -193,6 +193,9 @@ importers:
       '@types/d3':
         specifier: ^7.4.3
         version: 7.4.3
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: ^24.10.0
         version: 24.10.15
@@ -883,8 +886,8 @@ packages:
   '@gerrit0/mini-shiki@3.23.0':
     resolution: {integrity: sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg==}
 
-  '@hanabi-challenges/design-system@1.0.0':
-    resolution: {integrity: sha512-rFtJLLInjab4XzXK7/Y24xZbr9Yiaai5NeJVHI9IeAJtZHNL7eFcaOyXA5OVtnO4TolOt50evA5rFbG9CXIIhA==}
+  '@hanabi-challenges/design-system@2.1.0':
+    resolution: {integrity: sha512-gfVm5Dlq9p4kPWCpwqDCQ3YOL1R9LIsAP8wxPx7c7lvghXcQnNOGCkfnzkZcguX8ef1jUHQw5gUF70NH4pNXCQ==}
     peerDependencies:
       '@mantine/core': '>=8'
       react: '>=19'
@@ -6092,7 +6095,7 @@ snapshots:
       '@shikijs/types': 3.23.0
       '@shikijs/vscode-textmate': 10.0.2
 
-  '@hanabi-challenges/design-system@1.0.0(@mantine/core@8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react-router-dom@7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)':
+  '@hanabi-challenges/design-system@2.1.0(@mantine/core@8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react-router-dom@7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@mantine/core': 8.3.15(@mantine/hooks@8.3.15(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react: 19.2.4
@@ -7175,20 +7178,6 @@ snapshots:
       - utf-8-validate
       - vite
 
-  '@vitest/browser-playwright@4.0.18(playwright@1.58.2)(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
-    dependencies:
-      '@vitest/browser': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      playwright: 1.58.2
-      tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@24.10.15)(@vitest/browser-playwright@4.0.18)(happy-dom@15.11.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - msw
-      - utf-8-validate
-      - vite
-    optional: true
-
   '@vitest/browser@4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
     dependencies:
       '@vitest/mocker': 4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))
@@ -7205,24 +7194,6 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
-
-  '@vitest/browser@4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)':
-    dependencies:
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))
-      '@vitest/utils': 4.0.18
-      magic-string: 0.30.21
-      pixelmatch: 7.1.0
-      pngjs: 7.0.0
-      sirv: 3.0.2
-      tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@24.10.15)(@vitest/browser-playwright@4.0.18)(happy-dom@15.11.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
-      ws: 8.19.0
-    transitivePeerDependencies:
-      - bufferutil
-      - msw
-      - utf-8-validate
-      - vite
-    optional: true
 
   '@vitest/coverage-v8@4.0.18(@vitest/browser@4.0.18(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18))(vitest@4.0.18)':
     dependencies:
@@ -11425,7 +11396,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 24.10.15
-      '@vitest/browser-playwright': 4.0.18(playwright@1.58.2)(vite@7.3.1(@types/node@24.10.15)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
+      '@vitest/browser-playwright': 4.0.18(playwright@1.58.2)(rolldown-vite@7.2.2(@types/node@24.10.15)(tsx@4.21.0)(yaml@2.8.2))(vitest@4.0.18)
       happy-dom: 15.11.7
       jsdom: 27.4.0(@noble/hashes@1.8.0)
     transitivePeerDependencies:

@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import type { AssignRoleRequest, AssignRoleResponse, RoleSlug } from '@tracker/types';
 import { getPool } from '../db/pool.js';
 import { assignRole, revokeRole } from '../db/roles.js';
-import { listUsersWithRoles } from '../db/users.js';
+import { listUsersWithRoles, searchUsersForMention } from '../db/users.js';
 import {
   requireTrackerAuth,
   requirePermission,
@@ -12,6 +12,22 @@ import {
 const router = Router();
 
 const VALID_ROLES: ReadonlySet<string> = new Set(['moderator', 'committee']);
+
+/** GET /tracker/api/users/mentions?q= — search users for @mention autocomplete (auth required) */
+router.get(
+  '/mentions',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const q = typeof req.query['q'] === 'string' ? req.query['q'] : '';
+    try {
+      const sql = getPool();
+      const users = await searchUsersForMention(sql, q);
+      res.json({ users });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /** GET /tracker/api/users — list all users with role and Discord link status (committee only) */
 router.get(
@@ -35,8 +51,11 @@ router.post(
   requireTrackerAuth,
   requirePermission('user.role.assign'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.params['userId'] as string | undefined;
-    if (!userId) {
+    const userIdRaw = Array.isArray(req.params['userId'])
+      ? req.params['userId'][0]
+      : req.params['userId'];
+    const userId = userIdRaw ? parseInt(userIdRaw, 10) : NaN;
+    if (!userIdRaw || isNaN(userId)) {
       res.status(404).json({
         error: {
           code: 'NOT_FOUND',
@@ -95,10 +114,13 @@ router.delete(
   requireTrackerAuth,
   requirePermission('user.role.assign'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const userId = req.params['userId'] as string | undefined;
+    const userIdRaw = Array.isArray(req.params['userId'])
+      ? req.params['userId'][0]
+      : req.params['userId'];
+    const userId = userIdRaw ? parseInt(userIdRaw, 10) : NaN;
     const roleSlug = req.params['roleSlug'] as string | undefined;
 
-    if (!userId || !roleSlug || !VALID_ROLES.has(roleSlug)) {
+    if (!userIdRaw || isNaN(userId) || !roleSlug || !VALID_ROLES.has(roleSlug)) {
       res.status(422).json({
         error: {
           code: 'VALIDATION_ERROR',

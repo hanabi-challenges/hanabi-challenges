@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 // https://vite.dev/config/
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -30,10 +29,5 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-  },
-  test: {
-    // Basic Vitest config; tweak or remove if you're not using Vitest yet
-    environment: 'jsdom',
-    globals: true,
   },
 });

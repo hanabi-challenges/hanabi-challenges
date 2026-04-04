@@ -3,10 +3,16 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 type AuthUser = {
   id: number;
   display_name: string;
-  role: string;
+  roles: string[];
   color_hex: string;
   text_color: string;
 };
+
+/** Returns true if the user has the given role or is a SUPERADMIN. */
+export function hasRole(user: AuthUser | null, role: string): boolean {
+  if (!user) return false;
+  return user.roles.includes('SUPERADMIN') || user.roles.includes(role);
+}
 
 type AuthState = {
   user: AuthUser | null;
@@ -28,11 +34,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cookieToken = getCookie('hanabi_token');
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { user: null, token: null };
-      const parsed = JSON.parse(raw) as AuthState;
+      const parsed = JSON.parse(raw) as AuthState & { user: AuthUser & { role?: string } };
       return {
         user: parsed.user
           ? {
               ...parsed.user,
+              roles: Array.isArray(parsed.user.roles)
+                ? parsed.user.roles
+                : parsed.user.role
+                  ? ['USER', parsed.user.role]
+                  : ['USER'],
               color_hex: parsed.user.color_hex || '#777777',
               text_color: parsed.user.text_color || '#ffffff',
             }

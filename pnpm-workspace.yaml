@@ -1,3 +1,6 @@
 packages:
   - apps/*
-  - packages/*
+  - packages/hanabi-live-game
+  - packages/shared
+  - tracker/server
+  - tracker/types

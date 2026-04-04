@@ -43,7 +43,7 @@ Admin pages (`apps/web/src/pages/admin/`) use Core* components. Non-admin pages 
 
 ## No Native HTML as Substitutes
 
-Do not use raw HTML elements (`<button>`, `<input>`, `<select>`, `<div>`) where a design system component exists. This applies to both tiers.
+Do not use raw HTML elements (`<button>`, `<input>`, `<select>`, `<div>`, `<p>`, `<span>`) where a design system component exists. This applies to both tiers.
 
 **Wrong:**
 ```tsx
@@ -59,6 +59,27 @@ Do not use raw HTML elements (`<button>`, `<input>`, `<select>`, `<div>`) where 
 ```tsx
 <Button variant="default" onClick={handleClick}>Cancel</Button>
 ```
+
+## No Inline Styles on Design-System Components
+
+Do not pass `style={}` to Tier-1 design-system components (`Text`, `Heading`, `Badge`, `Button`, etc.) to override appearance, typography, or layout. Instead:
+
+- **Layout constraints** (`flex`, `minWidth`, `margin`, `padding`) — use an enclosing `Stack`, `Inline`, or `Grid`.
+- **Colour overrides** — all colours must reference design tokens (`var(--ds-color-…)`). Never hardcode hex values.
+- **Typography overrides** (`fontWeight`, `fontSize`, `lineHeight`) — use the component's declared props (e.g., `weight="semibold"` on `Text`) or add a new prop/variant.
+- **Text rendering modes** (`whiteSpace`, `overflow`, `-webkit-line-clamp`) — use `Text` props: `truncate`, `lineClamp`, `preWrap`.
+
+Layout primitives (`Stack`, `Inline`, `Grid`) accept `style` as an extension mechanism for one-off structural constraints (e.g., `borderRight`, `flex: 1`) that cannot be expressed via their existing props. This is acceptable. Content components do not.
+
+## No Structural CSS Class Files in Feature Code
+
+Local `.css` files in feature or page components must not encode structural layout rules (display, flex, grid, gap, margin) that are expressible with design-system layout components. Permitted uses:
+
+- Responsive breakpoint overrides requiring a media query (no DS equivalent).
+- Visual chrome (box-shadow, border-radius) not covered by design tokens.
+- Animation/transition rules.
+
+When a CSS class only sets `display: flex; gap: …`, replace it with `Stack` or `Inline`.
 
 ## Atomicity
 

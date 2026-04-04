@@ -96,7 +96,9 @@ export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resu
           {standings.map((row, idx) => (
             <Table.Tr key={row.user_id}>
               <Table.Td>{ranks[idx]}</Table.Td>
-              <Table.Td>{row.display_name}</Table.Td>
+              <Table.Td>
+                <UserPill name={row.display_name} />
+              </Table.Td>
               {summary.sessions.map((s) => {
                 const sessionData = sessionRowsByUser.get(row.user_id)?.get(s.id);
                 if (!sessionData) return <Table.Td key={`${row.user_id}-${s.id}`}>—</Table.Td>;
@@ -156,7 +158,9 @@ export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resu
           return (
             <Table.Tr key={`${row.user_id}-${session.id}`}>
               <Table.Td>{sessionRanks[idx]}</Table.Td>
-              <Table.Td>{row.display_name}</Table.Td>
+              <Table.Td>
+                <UserPill name={row.display_name} />
+              </Table.Td>
               <Table.Td>{row.starting_elo.toFixed(1)}</Table.Td>
               {Array.from({ length: session.round_count }, (_unused, roundIdx) => {
                 const placement = placementByUserRound.get(`${row.user_id}:${roundIdx + 1}`);

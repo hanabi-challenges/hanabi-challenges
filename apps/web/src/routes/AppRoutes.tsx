@@ -6,7 +6,9 @@ import { AboutPage } from '../pages/AboutPage';
 import { AboutFAQPage } from '../pages/AboutFAQPage';
 import { AboutContributingPage } from '../pages/AboutContributingPage';
 import { ContactPage } from '../pages/ContactPage';
-import { FeedbackPage } from '../pages/FeedbackPage';
+import { FeedbackIndexPage } from '../pages/FeedbackIndexPage';
+import { FeedbackDetailPage } from '../pages/FeedbackDetailPage';
+import { FeedbackNewPage } from '../pages/FeedbackNewPage';
 import { CodeOfConductPage } from '../pages/CodeOfConductPage';
 import { LegalPage } from '../pages/LegalPage';
 import { LegalTermsPage } from '../pages/LegalTermsPage';
@@ -132,7 +134,11 @@ export function AppRoutes() {
           <Route path="about/FAQ" element={<AboutFAQPage />} />
           <Route path="about/contributing" element={<AboutContributingPage />} />
           <Route path="contact" element={<ContactPage />} />
-          <Route path="feedback" element={<FeedbackPage />} />
+          <Route path="feedback">
+            <Route index element={<FeedbackIndexPage />} />
+            <Route path="new" element={<FeedbackNewPage />} />
+            <Route path=":id" element={<FeedbackDetailPage />} />
+          </Route>
           <Route path="code-of-conduct" element={<CodeOfConductPage />} />
           <Route path="legal" element={<LegalPage />} />
           <Route path="legal/terms" element={<LegalTermsPage />} />

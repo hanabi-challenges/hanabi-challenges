@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, ApiError, getJsonAuth } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 
 export type EventSummary = {
   id: number;
@@ -24,6 +24,8 @@ export type EventSummary = {
   stage_count: number;
   variant_rule_json: { type: 'specific'; variantId: number } | { type: 'none' } | null;
   seed_rule_json: { formula: string } | null;
+  event_format?: string;
+  event_status?: string;
 };
 
 type State = {
@@ -52,7 +54,7 @@ export function useEvents(options: Options = {}) {
     async function fetchEvents() {
       setState((prev) => ({ ...prev, loading: true, error: null }));
 
-      const isAdmin = user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN');
+      const isAdmin = hasRole(user, 'HOST');
       const shouldAuth = includeUnpublishedForAdmin && isAdmin && !!token;
 
       try {

@@ -1,0 +1,175 @@
+.md-editor {
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  overflow: hidden;
+}
+
+.md-editor--disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────────────── */
+
+.md-editor__tabs {
+  display: flex;
+  background: var(--ds-color-surface-muted);
+  border-bottom: 1px solid var(--ds-color-border);
+  padding: var(--ds-space-xs) var(--ds-space-xs) 0;
+  gap: 2px;
+}
+
+.md-editor__tab {
+  padding: var(--ds-space-xxs) var(--ds-space-sm);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--ds-radius-sm) var(--ds-radius-sm) 0 0;
+  background: none;
+  cursor: pointer;
+  color: var(--ds-color-text-muted);
+  font-size: var(--ds-textScale-3-fontSize, 0.8125rem);
+  font-family: inherit;
+  line-height: 1.5;
+  transition: color 0.1s;
+}
+
+.md-editor__tab:hover {
+  color: var(--ds-color-text);
+}
+
+/* Active tab sits "in front" by covering the strip's bottom border */
+.md-editor__tab--active {
+  background: var(--ds-color-surface);
+  border-color: var(--ds-color-border);
+  color: var(--ds-color-text);
+  margin-bottom: -1px;
+  padding-bottom: calc(var(--ds-space-xxs) + 1px);
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────────── */
+
+.md-editor__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-xs);
+  padding: var(--ds-space-xxs) var(--ds-space-xs);
+  background: var(--ds-color-surface-muted);
+  border-bottom: 1px solid var(--ds-color-border);
+}
+
+.md-editor__toolbar-group {
+  display: flex;
+  gap: 1px;
+}
+
+.md-editor__toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--ds-color-border);
+  flex-shrink: 0;
+}
+
+.md-editor__toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: var(--ds-radius-sm);
+  cursor: pointer;
+  color: var(--ds-color-text-muted);
+  transition:
+    background 0.1s,
+    color 0.1s;
+  flex-shrink: 0;
+}
+
+.md-editor__toolbar-btn:hover {
+  background: var(--ds-color-border);
+  color: var(--ds-color-text);
+}
+
+/* ── Textarea ───────────────────────────────────────────────────────────────── */
+
+.md-editor__textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  resize: vertical;
+  padding: var(--ds-space-sm);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-text);
+  font-family: inherit;
+  font-size: var(--ds-textScale-2-fontSize, 0.875rem);
+  line-height: 1.6;
+}
+
+.md-editor__textarea::placeholder {
+  color: var(--ds-color-text-muted);
+}
+
+/* ── Mention dropdown ───────────────────────────────────────────────────────── */
+
+.md-mention-dropdown {
+  position: fixed;
+  z-index: 9999;
+  background: var(--ds-color-surface);
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  min-width: 160px;
+  max-width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.md-mention-option {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-xs);
+  width: 100%;
+  padding: var(--ds-space-xs) var(--ds-space-sm);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  /* font-size intentionally omitted — inherits from the Text component */
+  color: var(--ds-color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.md-mention-option--active {
+  background: var(--ds-color-surface-muted);
+}
+
+/* Small coloured circle representing the user's pill color */
+.md-mention-avatar {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ds-color-surface-muted);
+  border: 1px solid var(--ds-color-border);
+}
+
+/* ── Preview ────────────────────────────────────────────────────────────────── */
+
+.md-editor__preview {
+  padding: var(--ds-space-sm);
+  background: var(--ds-color-surface);
+  min-height: 120px;
+}
+
+.md-editor__preview-empty {
+  color: var(--ds-color-text-muted);
+  font-style: italic;
+  font-size: var(--ds-textScale-2-fontSize, 0.875rem);
+}

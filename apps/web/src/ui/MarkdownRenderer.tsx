@@ -1,29 +1,36 @@
 import {
-  Anchor,
-  Blockquote,
-  Box,
-  Checkbox,
-  Code,
-  Divider,
-  Image,
+  Prose,
+  Heading,
+  Text,
   Link,
   List,
-  Stack,
   Table,
-  Text,
-} from '../mantine';
-import { Heading } from '../design-system';
+  Stack,
+  CoreBox,
+  CoreCode,
+  CoreDivider,
+  CoreAnchor,
+  CoreCheckbox,
+} from '../design-system';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import type { Root, Content, PhrasingContent, ListItem, Definition } from 'mdast';
 import type { ReactNode } from 'react';
 import { replaceEmojiShortcodes } from '../utils/emoji';
+import { UserPill } from '../features/users/UserPill';
 
 type DefinitionsMap = Map<string, Definition>;
 
+export type MentionColorMap = Record<
+  string,
+  { color_hex?: string | null; text_color?: string | null }
+>;
+
 type MarkdownRendererProps = {
   markdown: string;
+  /** Map of display_name → color data, used to colour @mention pills. */
+  mentionColors?: MentionColorMap;
 };
 
 function applyTypographyReplacementsToText(value: string): string {
@@ -87,10 +94,53 @@ function collectDefinitions(tree: Root): DefinitionsMap {
   return defs;
 }
 
+/** Regex that matches an @mention token. Must stay in sync with the editor trigger. */
+const MENTION_RE = /(@[\w.-]+)/;
+
+/**
+ * Splits a text value on @mention tokens and renders each piece as a proper
+ * design-system component:
+ *   - Text segments → <Text> (renders as <span>, valid inline anywhere)
+ *   - @mentions     → <UserPill as="span"> (inline-flex span, valid inside <p>)
+ *
+ * Returning a mix of block-level elements (e.g. Pill's default <div>) inside a
+ * paragraph causes browsers to silently restructure the DOM, which breaks both
+ * layout and inline styles. Using span-only elements avoids that entirely.
+ */
+function renderTextWithMentions(
+  text: string,
+  key: string,
+  mentionColors: MentionColorMap | undefined,
+): ReactNode {
+  const parts = text.split(MENTION_RE);
+  if (parts.length === 1) return text; // fast path — no mentions, stay a plain string
+
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (MENTION_RE.test(part)) {
+      const username = part.slice(1); // strip leading '@'
+      const colors = mentionColors?.[username];
+      return (
+        <UserPill
+          key={`${key}-m-${i}`}
+          as="span" // must be span so it stays inline inside <p>
+          name={username}
+          size="xs"
+          color={colors?.color_hex}
+          textColor={colors?.text_color}
+          style={{ verticalAlign: 'middle' }}
+        />
+      );
+    }
+    return <Text key={`${key}-t-${i}`}>{part}</Text>;
+  });
+}
+
 function renderInline(
   nodes: PhrasingContent[] | undefined,
   keyPrefix: string,
   definitions: DefinitionsMap,
+  mentionColors: MentionColorMap | undefined,
 ): ReactNode[] {
   if (!nodes || nodes.length === 0) return [];
 
@@ -98,53 +148,43 @@ function renderInline(
     const key = `${keyPrefix}-inl-${index}`;
     switch (node.type) {
       case 'text':
-        return node.value;
+        return renderTextWithMentions(node.value, key, mentionColors);
       case 'strong':
         return (
-          <Text key={key} span fw={700} inherit>
-            {renderInline(node.children, key, definitions)}
-          </Text>
+          <CoreBox key={key} component="span" fw={700}>
+            {renderInline(node.children, key, definitions, mentionColors)}
+          </CoreBox>
         );
       case 'emphasis':
         return (
-          <Text key={key} span fs="italic" inherit>
-            {renderInline(node.children, key, definitions)}
-          </Text>
+          <CoreBox key={key} component="span" fs="italic">
+            {renderInline(node.children, key, definitions, mentionColors)}
+          </CoreBox>
         );
       case 'delete':
         return (
-          <Text key={key} span td="line-through" inherit>
-            {renderInline(node.children, key, definitions)}
-          </Text>
+          <CoreBox key={key} component="span" td="line-through">
+            {renderInline(node.children, key, definitions, mentionColors)}
+          </CoreBox>
         );
       case 'inlineCode':
         return (
-          <Code key={key} fz="sm">
+          <CoreCode key={key} fz="sm">
             {node.value}
-          </Code>
+          </CoreCode>
         );
-      case 'image': {
-        if (!isSafeUrl(node.url)) return null;
-        return (
-          <Image
-            key={key}
-            src={node.url}
-            alt={node.alt ?? ''}
-            maw={480}
-            radius="sm"
-            mt="xs"
-            mb="xs"
-          />
-        );
-      }
+      case 'image':
+        // Images are not supported — no upload infrastructure exists and
+        // external hotlinking causes privacy and link-rot problems.
+        return null;
       case 'link': {
         if (!isSafeUrl(node.url)) return null;
-        const content = renderInline(node.children, key, definitions);
+        const content = renderInline(node.children, key, definitions, mentionColors);
         if (isExternalUrl(node.url)) {
           return (
-            <Anchor key={key} href={node.url} target="_blank" rel="noopener noreferrer">
+            <CoreAnchor key={key} href={node.url} target="_blank" rel="noopener noreferrer">
               {content}
-            </Anchor>
+            </CoreAnchor>
           );
         }
         return (
@@ -155,13 +195,14 @@ function renderInline(
       }
       case 'linkReference': {
         const def = definitions.get(normalizeDefinitionId(node.identifier));
-        if (!def || !isSafeUrl(def.url)) return renderInline(node.children, key, definitions);
-        const content = renderInline(node.children, key, definitions);
+        if (!def || !isSafeUrl(def.url))
+          return renderInline(node.children, key, definitions, mentionColors);
+        const content = renderInline(node.children, key, definitions, mentionColors);
         if (isExternalUrl(def.url)) {
           return (
-            <Anchor key={key} href={def.url} target="_blank" rel="noopener noreferrer">
+            <CoreAnchor key={key} href={def.url} target="_blank" rel="noopener noreferrer">
               {content}
-            </Anchor>
+            </CoreAnchor>
           );
         }
         return (
@@ -171,7 +212,7 @@ function renderInline(
         );
       }
       case 'break':
-        return <Box key={key} component="br" />;
+        return <CoreBox key={key} component="br" />;
       default:
         return null;
     }
@@ -198,15 +239,16 @@ function renderTable(
   },
   key: string,
   definitions: DefinitionsMap,
+  mentionColors: MentionColorMap | undefined,
 ): ReactNode {
   return (
-    <Box key={key} mb="sm" style={{ overflowX: 'auto' }}>
-      <Table withTableBorder withColumnBorders highlightOnHover={false}>
+    <CoreBox key={key} mb="sm" style={{ overflowX: 'auto' }}>
+      <Table>
         <Table.Thead>
           <Table.Tr>
             {(node.children[0]?.children ?? []).map((cell, i) => (
               <Table.Th key={`${key}-th-${i}`}>
-                {renderInline(cell.children, `${key}-th-${i}`, definitions)}
+                {renderInline(cell.children, `${key}-th-${i}`, definitions, mentionColors)}
               </Table.Th>
             ))}
           </Table.Tr>
@@ -216,14 +258,19 @@ function renderTable(
             <Table.Tr key={`${key}-tr-${rowIndex}`}>
               {row.children.map((cell, colIndex) => (
                 <Table.Td key={`${key}-td-${rowIndex}-${colIndex}`}>
-                  {renderInline(cell.children, `${key}-td-${rowIndex}-${colIndex}`, definitions)}
+                  {renderInline(
+                    cell.children,
+                    `${key}-td-${rowIndex}-${colIndex}`,
+                    definitions,
+                    mentionColors,
+                  )}
                 </Table.Td>
               ))}
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
-    </Box>
+    </CoreBox>
   );
 }
 
@@ -231,6 +278,7 @@ function renderBlocks(
   nodes: Content[] | undefined,
   keyPrefix: string,
   definitions: DefinitionsMap,
+  mentionColors: MentionColorMap | undefined,
 ): ReactNode[] {
   if (!nodes || nodes.length === 0) return [];
 
@@ -243,45 +291,46 @@ function renderBlocks(
         const depth = node.depth <= 1 ? 2 : node.depth;
         const level = Math.min(depth, 6) as 2 | 3 | 4 | 5 | 6;
         rendered.push(
-          <Box key={key} mb="xs">
+          <CoreBox key={key} mb="xs">
             <Heading level={level}>
-              {renderInline(node.children as PhrasingContent[], key, definitions)}
+              {renderInline(node.children as PhrasingContent[], key, definitions, mentionColors)}
             </Heading>
-          </Box>,
+          </CoreBox>,
         );
         return;
       }
       case 'paragraph':
         rendered.push(
-          <Text key={key} component="p" mb="sm">
-            {renderInline(node.children as PhrasingContent[], key, definitions)}
-          </Text>,
+          <CoreBox key={key} component="p" style={{ margin: '0 0 var(--ds-space-sm)' }}>
+            {renderInline(node.children as PhrasingContent[], key, definitions, mentionColors)}
+          </CoreBox>,
         );
         return;
-      case 'list':
+      case 'list': {
+        const items = node.children.map((item: ListItem, itemIndex: number) => ({
+          key: `${key}-li-${itemIndex}`,
+          content: renderBlocks(
+            item.children as Content[],
+            `${key}-li-${itemIndex}`,
+            definitions,
+            mentionColors,
+          ),
+          icon: isTaskListItem(item) ? (
+            <CoreCheckbox
+              checked={Boolean(listItemChecked(item))}
+              readOnly
+              tabIndex={-1}
+              size="xs"
+            />
+          ) : undefined,
+        }));
         rendered.push(
-          <List
-            key={key}
-            type={node.ordered ? 'ordered' : undefined}
-            spacing="xs"
-            mb="sm"
-            withPadding
-          >
-            {node.children.map((item: ListItem, itemIndex: number) => (
-              <List.Item
-                key={`${key}-li-${itemIndex}`}
-                icon={
-                  isTaskListItem(item) ? (
-                    <Checkbox checked={Boolean(listItemChecked(item))} readOnly tabIndex={-1} />
-                  ) : undefined
-                }
-              >
-                {renderBlocks(item.children as Content[], `${key}-li-${itemIndex}`, definitions)}
-              </List.Item>
-            ))}
-          </List>,
+          <CoreBox key={key} mb="sm">
+            <List items={items} type={node.ordered ? 'ordered' : 'unordered'} spacing="xs" />
+          </CoreBox>,
         );
         return;
+      }
       case 'table':
         rendered.push(
           renderTable(
@@ -295,25 +344,36 @@ function renderBlocks(
             },
             key,
             definitions,
+            mentionColors,
           ),
         );
         return;
       case 'blockquote':
         rendered.push(
-          <Blockquote key={key} mb="sm">
-            <Stack gap={0}>{renderBlocks(node.children, key, definitions)}</Stack>
-          </Blockquote>,
+          <CoreBox
+            key={key}
+            component="blockquote"
+            mb="sm"
+            style={{
+              borderLeft: '3px solid var(--ds-color-border)',
+              paddingLeft: 'var(--ds-space-sm)',
+              margin: '0 0 var(--ds-space-sm)',
+              color: 'var(--ds-color-text-muted)',
+            }}
+          >
+            <Stack gap="none">{renderBlocks(node.children, key, definitions, mentionColors)}</Stack>
+          </CoreBox>,
         );
         return;
       case 'code':
         rendered.push(
-          <Code key={key} block mb="sm">
+          <CoreCode key={key} block mb="sm">
             {node.value}
-          </Code>,
+          </CoreCode>,
         );
         return;
       case 'thematicBreak':
-        rendered.push(<Divider key={key} my="sm" />);
+        rendered.push(<CoreDivider key={key} my="sm" />);
         return;
       case 'definition':
       case 'html':
@@ -344,7 +404,11 @@ function parseMarkdown(markdown: string): ParsedMarkdown {
   return parsed;
 }
 
-export function MarkdownRenderer(props: MarkdownRendererProps) {
-  const { tree, definitions } = parseMarkdown(props.markdown);
-  return <Stack gap={0}>{renderBlocks(tree.children, 'md', definitions)}</Stack>;
+export function MarkdownRenderer({ markdown, mentionColors }: MarkdownRendererProps) {
+  const { tree, definitions } = parseMarkdown(markdown);
+  return (
+    <Prose>
+      <Stack gap="none">{renderBlocks(tree.children, 'md', definitions, mentionColors)}</Stack>
+    </Prose>
+  );
 }

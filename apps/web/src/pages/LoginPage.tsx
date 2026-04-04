@@ -26,7 +26,7 @@ type LoginResponse = {
   user: {
     id: number;
     display_name: string;
-    role: string;
+    roles: string[];
     created_at: string;
     color_hex: string;
     text_color: string;

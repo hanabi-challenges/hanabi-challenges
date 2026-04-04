@@ -1,8 +1,6 @@
 // frontend/src/features/events/EventCard.tsx
 import React from 'react';
-import { CoreBox as Box } from '../../design-system';
-import { Card, CardBody, CardHeader, Heading, Inline, Pill, Stack } from '../../design-system';
-import './EventCard.css';
+import { Badge, Card, CardBody, CardHeader, Heading, Inline, Stack } from '../../design-system';
 import { MarkdownRenderer } from '../../ui/MarkdownRenderer';
 
 type DescriptionKind = 'short' | 'long';
@@ -18,8 +16,8 @@ type EventLike = {
   registration_cutoff?: string | null;
   allow_late_registration?: boolean;
   published?: boolean;
-  event_format?: 'challenge' | 'tournament' | 'session_ladder';
-  event_status?: 'DORMANT' | 'LIVE' | 'COMPLETE';
+  event_format?: string;
+  event_status?: string;
 };
 
 type EventCardProps = {
@@ -73,7 +71,7 @@ export function EventCard({
             <Heading level={3}>{event.name}</Heading>
             {headerAction || secondaryAction ? (
               <Inline
-                className="event-card__action"
+                gap="xs"
                 onMouseEnter={() => setSuppressHover(true)}
                 onMouseLeave={() => setSuppressHover(false)}
                 onClick={(e) => e.stopPropagation()}
@@ -83,15 +81,17 @@ export function EventCard({
               </Inline>
             ) : null}
           </Inline>
-          <Inline gap="xs" wrap align="center" className="event-card__pills">
+          <Inline gap="xs" wrap align="center">
             {showDatePill && renderDatePill(event, now)}
             {showRegPill && renderRegPill(event, now)}
           </Inline>
         </Stack>
       </CardHeader>
       <CardBody>
-        {body ? body : <MarkdownRenderer markdown={bodyText} />}
-        {footer ? <Box className="event-card__footer">{footer}</Box> : null}
+        <Stack gap="sm">
+          {body ? body : <MarkdownRenderer markdown={bodyText} />}
+          {footer}
+        </Stack>
       </CardBody>
     </Card>
   );
@@ -102,9 +102,9 @@ function renderDatePill(event: EventLike, nowMs: number) {
   const startMs = event.starts_at ? new Date(event.starts_at).getTime() : null;
   if (startMs && startMs > nowMs) return null;
   return (
-    <Pill size="sm" variant="accent">
-      {formatDateRange(event.starts_at, event.ends_at)}
-    </Pill>
+    <Badge size="sm" tone="info">
+      {formatDateRange(event.starts_at, event.ends_at) ?? ''}
+    </Badge>
   );
 }
 
@@ -112,17 +112,13 @@ function renderRegPill(event: EventLike, nowMs: number) {
   if (event.event_format === 'session_ladder') {
     if (event.event_status === 'LIVE') {
       return (
-        <Pill size="sm" variant="accent">
+        <Badge size="sm" tone="success">
           Live
-        </Pill>
+        </Badge>
       );
     }
     if (event.event_status === 'COMPLETE') {
-      return (
-        <Pill size="sm" variant="default">
-          Completed
-        </Pill>
-      );
+      return <Badge size="sm">Completed</Badge>;
     }
     return null;
   }
@@ -139,25 +135,17 @@ function renderRegPill(event: EventLike, nowMs: number) {
       : null;
 
   if (regOpens && nowMs < regOpens) {
-    return (
-      <Pill size="sm" variant="default">
-        Registration opens in {formatCountdown(regOpens - nowMs)}
-      </Pill>
-    );
+    return <Badge size="sm">Registration opens in {formatCountdown(regOpens - nowMs)}</Badge>;
   }
   if (cutoff && nowMs < cutoff) {
     return (
-      <Pill size="sm" variant="accent">
+      <Badge size="sm" tone="warning">
         Registration closes in {formatCountdown(cutoff - nowMs)}
-      </Pill>
+      </Badge>
     );
   }
   if (cutoff && nowMs >= cutoff && !event.allow_late_registration) {
-    return (
-      <Pill size="sm" variant="default">
-        Registration closed
-      </Pill>
-    );
+    return <Badge size="sm">Registration closed</Badge>;
   }
   return null;
 }

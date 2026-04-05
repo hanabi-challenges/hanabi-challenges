@@ -6,6 +6,18 @@
   color: var(--ds-color-text);
 }
 
+.main-layout__wordmark-bar {
+  padding: var(--ds-space-sm) 0 var(--ds-space-xs);
+  background: var(--ds-color-surface);
+}
+
+.main-layout__wordmark {
+  font-family: var(--ds-typography-fontFamily-display);
+  font-size: 1.5rem;
+  color: var(--ds-color-text);
+  line-height: 1;
+}
+
 .main-layout__header {
   border-bottom: 1px solid var(--ds-color-border);
   background: var(--ds-color-surface);

@@ -19,10 +19,13 @@ import { get, post, patch, put } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -108,7 +111,7 @@ beforeEach(async () => {
 describe('E2E MATCH_PLAY — single-elimination bracket with award evaluation', () => {
   it('runs a 4-team bracket to completion and grants champion award', async () => {
     // 1. Create event and stage
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 

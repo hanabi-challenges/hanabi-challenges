@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Link } from '../mantine';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 import {
   Button,
   Inline,
@@ -50,12 +50,17 @@ export const MainLayout: React.FC = () => {
     {
       to: '/admin',
       label: 'Admin',
-      show: !!user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN'),
+      show: hasRole(user, 'HOST') || hasRole(user, 'SITE_ADMIN'),
     },
   ];
 
   return (
     <Box className="app-root">
+      <Box className="main-layout__wordmark-bar">
+        <PageContainer>
+          <span className="main-layout__wordmark">Hanabi Challenges</span>
+        </PageContainer>
+      </Box>
       <Box component="header" className="main-layout__header">
         <PageContainer>
           <Box className="main-layout__nav">

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import {
   Card,
   CardBody,
@@ -46,8 +46,8 @@ export function AdminEntityCard({
           </Inline>
           {actions ? (
             <Box
-              onClick={(event) => event.stopPropagation()}
-              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event: MouseEvent) => event.stopPropagation()}
+              onMouseDown={(event: MouseEvent) => event.stopPropagation()}
               role="presentation"
             >
               {actions}

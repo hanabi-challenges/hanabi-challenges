@@ -7,10 +7,13 @@ import { get, post, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -88,7 +91,7 @@ beforeEach(async () => {
 
 describe('POST /stages/:stageId/games/:gameId/results', () => {
   it('submits a result successfully', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -111,7 +114,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('returns 400 when score exceeds max_score', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -131,7 +134,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('returns 400 when score is 0 without zero_reason', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -151,7 +154,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('accepts score of 0 with zero_reason', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -172,7 +175,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('returns 409 on duplicate submission', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -196,7 +199,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('returns 403 when submitter is not on the team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -219,7 +222,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('admin can submit a result for any team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -245,7 +248,7 @@ describe('POST /stages/:stageId/games/:gameId/results', () => {
 
 describe('GET /stages/:stageId/games/:gameId/results', () => {
   it('admin sees all results', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -294,7 +297,7 @@ describe('GET /stages/:stageId/games/:gameId/results', () => {
   });
 
   it('regular user sees only their own result', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -326,7 +329,7 @@ describe('GET /stages/:stageId/games/:gameId/results', () => {
 
 describe('GET /stages/:stageId/results', () => {
   it('admin sees all results for the stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 25);
@@ -359,7 +362,7 @@ describe('GET /stages/:stageId/results', () => {
   });
 
   it('user sees only their own stage results', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);

@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { authOptional, type AuthenticatedRequest } from '../../middleware/authMiddleware';
+import { authOptional, hasRole, type AuthenticatedRequest } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
 import { getStage } from './stages.service';
 import {
@@ -22,7 +22,7 @@ router.get('/leaderboard', authOptional, async (req: AuthenticatedRequest, res: 
     return res.status(400).json({ error: 'Invalid stageId' });
   }
 
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 

@@ -7,10 +7,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -48,7 +51,7 @@ beforeEach(async () => {
 
 describe('POST /api/events/:slug/teams', () => {
   it('creates a team — initiator confirmed, invitee pending', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken, userId: aliceId } = await createUser('alice');
     const { userId: bobId } = await createUser('bob');
@@ -74,7 +77,7 @@ describe('POST /api/events/:slug/teams', () => {
   });
 
   it('returns 400 when team size is not in allowed_team_sizes', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     await register(aliceToken);
@@ -88,7 +91,7 @@ describe('POST /api/events/:slug/teams', () => {
   });
 
   it('auto-registers an invited user who is not yet registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { userId: bobId } = await createUser('bob');
@@ -103,7 +106,7 @@ describe('POST /api/events/:slug/teams', () => {
   });
 
   it('returns 409 when a member is already on a confirmed team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -143,7 +146,7 @@ describe('POST /api/events/:slug/teams', () => {
 
 describe('POST /api/events/:slug/teams/:teamId/confirm', () => {
   it('confirms an invited member', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -174,7 +177,7 @@ describe('POST /api/events/:slug/teams/:teamId/confirm', () => {
   });
 
   it('returns 404 when user is not invited to the team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -203,7 +206,7 @@ describe('POST /api/events/:slug/teams/:teamId/confirm', () => {
   });
 
   it('returns 409 when already confirmed', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -237,7 +240,7 @@ describe('POST /api/events/:slug/teams/:teamId/confirm', () => {
 
 describe('DELETE /api/events/:slug/teams/:teamId/members/:userId', () => {
   it('member can remove themselves', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -265,7 +268,7 @@ describe('DELETE /api/events/:slug/teams/:teamId/members/:userId', () => {
   });
 
   it('event admin can remove a member', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -292,7 +295,7 @@ describe('DELETE /api/events/:slug/teams/:teamId/members/:userId', () => {
   });
 
   it('returns 403 when non-admin tries to remove another user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -322,7 +325,7 @@ describe('DELETE /api/events/:slug/teams/:teamId/members/:userId', () => {
   });
 
   it('returns 404 for non-member userId', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -355,7 +358,7 @@ describe('DELETE /api/events/:slug/teams/:teamId/members/:userId', () => {
 
 describe('GET /api/events/:slug/teams', () => {
   it('admin sees all teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -377,7 +380,7 @@ describe('GET /api/events/:slug/teams', () => {
   });
 
   it('regular user sees only their own teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -418,7 +421,7 @@ describe('GET /api/events/:slug/teams', () => {
 
 describe('GET /api/events/:slug/teams/:teamId', () => {
   it('returns team with derived display_name', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
@@ -448,7 +451,7 @@ describe('GET /api/events/:slug/teams/:teamId', () => {
   });
 
   it('returns 404 for unknown team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
 
     const res = await get('/api/events/test-event/teams/9999').set(

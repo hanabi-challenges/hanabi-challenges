@@ -1,12 +1,12 @@
 import React from 'react';
 import {
   Alert,
+  Badge,
   Button,
   Heading,
   Inline,
   Main,
   PageContainer,
-  Pill,
   Popover,
   Section,
   Select,
@@ -35,8 +35,10 @@ function displayStatus(status: EventStatus): string {
   }
 }
 
-function statusVariant(status: EventStatus): 'default' | 'accent' {
-  return status === 'IN_PROGRESS' || status === 'LIVE' ? 'accent' : 'default';
+function statusTone(status: EventStatus): 'info' | 'success' | undefined {
+  if (status === 'IN_PROGRESS') return 'info';
+  if (status === 'LIVE') return 'success';
+  return undefined;
 }
 
 // Each filter value maps to one or more backend statuses.
@@ -123,13 +125,11 @@ export const EventsPage: React.FC = () => {
                     now={now}
                     footer={
                       <Inline gap="xs" wrap>
-                        <Pill size="sm" variant={statusVariant(event.status)}>
+                        <Badge size="sm" tone={statusTone(event.status)}>
                           {displayStatus(event.status)}
-                        </Pill>
+                        </Badge>
                         {event.status === 'COMPLETE' && event.allow_late_registration ? (
-                          <Pill size="sm" variant="default">
-                            Late submissions open
-                          </Pill>
+                          <Badge size="sm">Late submissions open</Badge>
                         ) : null}
                       </Inline>
                     }

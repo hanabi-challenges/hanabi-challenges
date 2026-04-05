@@ -26,6 +26,9 @@ services:
         source: /ws/*
         destination: wss://api.hanabi-challenges.com/ws/*
       - type: rewrite
+        source: /tracker/api/*
+        destination: https://api.hanabi-challenges.com/tracker/api/*
+      - type: rewrite
         source: /*
         destination: /index.html
 
@@ -52,8 +55,11 @@ services:
           property: connectionString
       - key: JWT_SECRET
         sync: false
+      - key: TRACKER_DATABASE_SSL
+        value: true
       # SIMULATION_MODE intentionally absent — defaults to false
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
+      # TRACKER_DATABASE_URL intentionally absent — falls back to DATABASE_URL
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... --filter @tracker/server... && pnpm -C apps/api run build && pnpm -C tracker/server run build
     startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:
@@ -85,6 +91,9 @@ services:
       - type: rewrite
         source: /ws/*
         destination: wss://hanabi-challenges-api-test.onrender.com/ws/*
+      - type: rewrite
+        source: /tracker/api/*
+        destination: https://hanabi-challenges-api-test.onrender.com/tracker/api/*
       - type: rewrite
         source: /*
         destination: /index.html
@@ -122,7 +131,9 @@ services:
         generateValue: true
       - key: SIMULATION_MODE
         value: true
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
+      # TRACKER_DATABASE_SSL intentionally absent in test — DB doesn't require SSL
+      # TRACKER_DATABASE_URL intentionally absent — falls back to DATABASE_URL
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... --filter @tracker/server... && pnpm -C apps/api run build && pnpm -C tracker/server run build
     startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
     healthCheckPath: /health
 

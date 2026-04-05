@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 // https://vite.dev/config/
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -24,11 +23,11 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // Tracker API (runs as subprocess on port 4001)
+      '/tracker/api': {
+        target: 'http://localhost:4001',
+        changeOrigin: true,
+      },
     },
-  },
-  test: {
-    // Basic Vitest config; tweak or remove if you're not using Vitest yet
-    environment: 'jsdom',
-    globals: true,
   },
 });

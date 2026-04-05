@@ -92,8 +92,17 @@ BEGIN
       ('Delphi', 'USER',       'infrequent', 'novice',  '#cfd8dc', '#000000')
   )
   , inserted AS (
-    INSERT INTO users (display_name, password_hash, role, color_hex, text_color)
-    SELECT display_name, base_hash, role, color_hex, text_color
+    INSERT INTO users (display_name, password_hash, roles, color_hex, text_color)
+    SELECT
+      display_name,
+      base_hash,
+      CASE role
+        WHEN 'SUPERADMIN' THEN ARRAY['USER', 'SUPERADMIN']::TEXT[]
+        WHEN 'ADMIN'      THEN ARRAY['USER', 'HOST', 'SITE_ADMIN']::TEXT[]
+        ELSE                   ARRAY['USER']::TEXT[]
+      END,
+      color_hex,
+      text_color
     FROM base
     RETURNING id, display_name
   )

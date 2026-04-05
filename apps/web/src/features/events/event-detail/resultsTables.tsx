@@ -1,11 +1,12 @@
 import {
   Card,
   CardBody,
+  EloDelta,
+  Grid,
   Inline,
+  Table,
   Text,
   CoreAnchor as Anchor,
-  CoreBox as Box,
-  CoreTable as Table,
 } from '../../../design-system';
 import { UserPill } from '../../users/UserPill';
 import type { LeagueResultsSummary, SessionRound } from './types';
@@ -23,31 +24,6 @@ function rankByValue<T>(rows: T[], valueOf: (row: T) => number): number[] {
     ranks.push(previousRank);
   });
   return ranks;
-}
-
-function EloDeltaCaret(props: { delta: number }) {
-  const { delta } = props;
-  if (delta > 0) {
-    return (
-      <Text
-        span
-        style={{ color: '#15803d', fontWeight: 600 }}
-      >{`▲ ${Math.abs(delta).toFixed(1)}`}</Text>
-    );
-  }
-  if (delta < 0) {
-    return (
-      <Text
-        span
-        style={{ color: '#b91c1c', fontWeight: 600 }}
-      >{`▼ ${Math.abs(delta).toFixed(1)}`}</Text>
-    );
-  }
-  return (
-    <Text span style={{ color: 'var(--ds-color-text-muted)' }}>
-      {'■ 0.0'}
-    </Text>
-  );
 }
 
 export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resultsTab: string }) {
@@ -96,17 +72,19 @@ export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resu
           {standings.map((row, idx) => (
             <Table.Tr key={row.user_id}>
               <Table.Td>{ranks[idx]}</Table.Td>
-              <Table.Td>{row.display_name}</Table.Td>
+              <Table.Td>
+                <UserPill name={row.display_name} />
+              </Table.Td>
               {summary.sessions.map((s) => {
                 const sessionData = sessionRowsByUser.get(row.user_id)?.get(s.id);
                 if (!sessionData) return <Table.Td key={`${row.user_id}-${s.id}`}>—</Table.Td>;
                 return (
                   <Table.Td key={`${row.user_id}-${s.id}`}>
                     <Inline gap="xs" align="center">
-                      <Text span>{sessionData.rank}</Text>
-                      <Text span>(</Text>
-                      <EloDeltaCaret delta={sessionData.elo_delta} />
-                      <Text span>)</Text>
+                      <Text>{sessionData.rank}</Text>
+                      <Text>(</Text>
+                      <EloDelta delta={sessionData.elo_delta} />
+                      <Text>)</Text>
                     </Inline>
                   </Table.Td>
                 );
@@ -156,7 +134,9 @@ export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resu
           return (
             <Table.Tr key={`${row.user_id}-${session.id}`}>
               <Table.Td>{sessionRanks[idx]}</Table.Td>
-              <Table.Td>{row.display_name}</Table.Td>
+              <Table.Td>
+                <UserPill name={row.display_name} />
+              </Table.Td>
               <Table.Td>{row.starting_elo.toFixed(1)}</Table.Td>
               {Array.from({ length: session.round_count }, (_unused, roundIdx) => {
                 const placement = placementByUserRound.get(`${row.user_id}:${roundIdx + 1}`);
@@ -166,7 +146,7 @@ export function LeagueResultsTables(props: { summary: LeagueResultsSummary; resu
               })}
               <Table.Td>{row.final_elo.toFixed(1)}</Table.Td>
               <Table.Td>
-                <EloDeltaCaret delta={row.elo_delta} />
+                <EloDelta delta={row.elo_delta} />
               </Table.Td>
             </Table.Tr>
           );
@@ -237,13 +217,7 @@ export function LeagueGameBlocks(props: {
     });
 
   return (
-    <Box
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: 'var(--ds-space-sm)',
-      }}
-    >
+    <Grid columns="repeat(3, minmax(0, 1fr))" gap="md">
       {orderedTeamNos.map((teamNo) => {
         const players = (teams.get(teamNo) ?? []).sort((a, b) =>
           a.display_name.localeCompare(b.display_name),
@@ -301,10 +275,10 @@ export function LeagueGameBlocks(props: {
                         >
                           {rating ? (
                             <Inline gap="xs" align="center">
-                              <Text span>{rating.new_rating.toFixed(1)}</Text>
-                              <Text span>(</Text>
-                              <EloDeltaCaret delta={rating.delta} />
-                              <Text span>)</Text>
+                              <Text>{rating.new_rating.toFixed(1)}</Text>
+                              <Text>(</Text>
+                              <EloDelta delta={rating.delta} />
+                              <Text>)</Text>
                             </Inline>
                           ) : (
                             '—'
@@ -319,6 +293,6 @@ export function LeagueGameBlocks(props: {
           </Card>
         );
       })}
-    </Box>
+    </Grid>
   );
 }

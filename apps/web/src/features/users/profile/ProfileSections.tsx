@@ -31,7 +31,11 @@ export function ProfileHeaderMeta(props: { profile: UserProfileRecord; displayNa
         {displayName}
       </Text>
       <Group gap="xs" wrap="wrap">
-        <Badge variant="light">{profile.role}</Badge>
+        {profile.roles.map((r) => (
+          <Badge key={r} variant="light">
+            {r}
+          </Badge>
+        ))}
         <Text size="sm" c="dimmed">
           Joined {new Date(profile.created_at).toLocaleDateString()}
         </Text>
@@ -216,14 +220,15 @@ export function OverviewSections(props: {
 }
 
 export function SettingsSection(props: {
-  role: string | undefined;
+  roles: string[] | undefined;
   adminRequestStatus: AdminAccessRequestRecord | null;
   adminRequestLoading: boolean;
   onOpenPassword: () => void;
   onOpenAdminRequest: () => void;
 }) {
-  const { role, adminRequestStatus, adminRequestLoading, onOpenPassword, onOpenAdminRequest } =
+  const { roles, adminRequestStatus, adminRequestLoading, onOpenPassword, onOpenAdminRequest } =
     props;
+  const isBasicUser = !roles || roles.every((r) => r === 'USER');
   return (
     <Stack
       gap="sm"
@@ -235,7 +240,7 @@ export function SettingsSection(props: {
           Change Password
         </Button>
 
-        {role === 'USER' ? (
+        {isBasicUser ? (
           <Button
             variant="light"
             onClick={onOpenAdminRequest}
@@ -246,18 +251,18 @@ export function SettingsSection(props: {
         ) : null}
       </Group>
 
-      {role === 'USER' && adminRequestStatus?.status === 'pending' ? (
+      {isBasicUser && adminRequestStatus?.status === 'pending' ? (
         <Text size="sm" c="dimmed">
           Admin access request pending since{' '}
           {new Date(adminRequestStatus.created_at).toLocaleDateString()}.
         </Text>
       ) : null}
-      {role === 'USER' && adminRequestStatus?.status === 'denied' ? (
+      {isBasicUser && adminRequestStatus?.status === 'denied' ? (
         <Text size="sm" c="dimmed">
           Previous admin request was denied.
         </Text>
       ) : null}
-      {role === 'USER' && adminRequestStatus?.status === 'approved' ? (
+      {isBasicUser && adminRequestStatus?.status === 'approved' ? (
         <Text size="sm" c="dimmed">
           Your admin request was approved.
         </Text>

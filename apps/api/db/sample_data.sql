@@ -32,12 +32,12 @@ RESTART IDENTITY CASCADE;
 -- USERS
 -- Passwords are all "password" (bcrypt, cost 12)
 ------------------------------------------------------------
-INSERT INTO users (display_name, password_hash, role, color_hex, text_color)
+INSERT INTO users (display_name, password_hash, roles, color_hex, text_color)
 VALUES
-  ('alice',   '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', 'SUPERADMIN', '#7aa6ff', '#000000'),
-  ('bob',     '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', 'ADMIN',      '#f6a5c0', '#000000'),
-  ('cathy',   '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', 'USER',        '#5fd0b8', '#000000'),
-  ('donald',  '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', 'USER',        '#ffcc80', '#000000');
+  ('alice',   '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', ARRAY['USER', 'SUPERADMIN']::TEXT[],             '#7aa6ff', '#000000'),
+  ('bob',     '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', ARRAY['USER', 'HOST', 'SITE_ADMIN']::TEXT[],     '#f6a5c0', '#000000'),
+  ('cathy',   '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', ARRAY['USER']::TEXT[],                           '#5fd0b8', '#000000'),
+  ('donald',  '$2b$12$qgQ62eU7pi8lzSHJkZgFGOXfArenCOPHJS.peakPCiAmgSCkBESUu', ARRAY['USER']::TEXT[],                           '#ffcc80', '#000000');
 
 -- user ids: 1=alice  2=bob  3=cathy  4=donald
 

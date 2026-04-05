@@ -7,10 +7,13 @@ import { get, post, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -85,14 +88,14 @@ beforeEach(async () => {
 
 describe('POST /api/events/:slug/awards/evaluate', () => {
   it('returns 401 for unauthenticated', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const res = await post('/api/events/test-event/awards/evaluate').send({});
     expect(res.status).toBe(401);
   });
 
   it('returns empty grants when no qualifying scores', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     await publishEvent(token);
 
@@ -114,7 +117,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
   });
 
   it('grants RANK_POSITION award to top team members', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
     await setupEvent(adminToken);
@@ -156,7 +159,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
   });
 
   it('is idempotent — second evaluate creates no new grants', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
     await setupEvent(adminToken);
@@ -200,7 +203,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
   });
 
   it('grants SCORE_THRESHOLD award to teams meeting min_score', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
     await setupEvent(adminToken);
@@ -238,7 +241,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
   });
 
   it('does not grant SCORE_THRESHOLD to teams below threshold', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
     await setupEvent(adminToken);
@@ -276,7 +279,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
   });
 
   it('does not auto-evaluate MANUAL awards', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken } = await createUser('alice');
     const { token: bobToken, userId: bobId } = await createUser('bob');
     await setupEvent(adminToken);
@@ -315,7 +318,7 @@ describe('POST /api/events/:slug/awards/evaluate', () => {
 
 describe('GET /api/events/:slug/awards/:awardId/grants', () => {
   it('returns empty list when no grants', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     await publishEvent(token);
     const awardRes = await post('/api/events/test-event/awards')
@@ -328,7 +331,7 @@ describe('GET /api/events/:slug/awards/:awardId/grants', () => {
   });
 
   it('returns grants after manual grant', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { userId: aliceId } = await createUser('alice');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
@@ -355,7 +358,7 @@ describe('GET /api/events/:slug/awards/:awardId/grants', () => {
 
 describe('GET /api/events/:slug/awards/me/grants', () => {
   it('returns 401 for unauthenticated', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     await publishEvent(token);
     const res = await get('/api/events/test-event/awards/me/grants');
@@ -363,7 +366,7 @@ describe('GET /api/events/:slug/awards/me/grants', () => {
   });
 
   it('returns current user grants', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { token: aliceToken, userId: aliceId } = await createUser('alice');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
@@ -393,7 +396,7 @@ describe('GET /api/events/:slug/awards/me/grants', () => {
 
 describe('POST /api/events/:slug/awards/:awardId/grants', () => {
   it('rejects manual grant for non-MANUAL award', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { userId: aliceId } = await createUser('alice');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
@@ -416,7 +419,7 @@ describe('POST /api/events/:slug/awards/:awardId/grants', () => {
   });
 
   it('rejects duplicate grant', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { userId: aliceId } = await createUser('alice');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
@@ -443,7 +446,7 @@ describe('POST /api/events/:slug/awards/:awardId/grants', () => {
 
 describe('DELETE /api/events/:slug/awards/:awardId/grants/:grantId', () => {
   it('revokes a grant', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     const { userId: aliceId } = await createUser('alice');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
@@ -469,7 +472,7 @@ describe('DELETE /api/events/:slug/awards/:awardId/grants/:grantId', () => {
   });
 
   it('returns 404 for unknown grant', async () => {
-    const { token: adminToken } = await createUser('owner', 'ADMIN');
+    const { token: adminToken } = await createUser('owner', 'HOST');
     await setupEvent(adminToken);
     await publishEvent(adminToken);
 

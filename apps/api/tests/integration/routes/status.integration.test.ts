@@ -7,10 +7,13 @@ import { get, post, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -58,7 +61,7 @@ describe('GET /api/events/:slug/status', () => {
   });
 
   it('returns 404 for unpublished event to unauthenticated user', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await post('/api/events')
       .set('Authorization', `Bearer ${token}`)
       .send({
@@ -72,7 +75,7 @@ describe('GET /api/events/:slug/status', () => {
   });
 
   it('returns status for a published event', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/status');
     expect(res.status).toBe(200);
@@ -84,7 +87,7 @@ describe('GET /api/events/:slug/status', () => {
   });
 
   it('admin can see unpublished event status', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await post('/api/events')
       .set('Authorization', `Bearer ${token}`)
       .send({
@@ -105,14 +108,14 @@ describe('GET /api/events/:slug/status', () => {
 
 describe('GET /api/events/:slug/stages/:stageId/status', () => {
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/stages/999/status');
     expect(res.status).toBe(404);
   });
 
   it('returns status for a stage without dates (ANNOUNCED)', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createSeededStage(token);
     const res = await get(`/api/events/test-event/stages/${stage.id}/status`);
@@ -123,7 +126,7 @@ describe('GET /api/events/:slug/stages/:stageId/status', () => {
   });
 
   it('returns COMPLETE for stage whose end date is in the past', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createSeededStage(token);
 
@@ -148,7 +151,7 @@ describe('GET /api/events/:slug/stages/:stageId/status', () => {
 
 describe('GET /stages/:stageId/leaderboard?team_size=N', () => {
   it('filters entries by team_size', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     // Create event allowing sizes 2 and 3
     await post('/api/events')
       .set('Authorization', `Bearer ${ownerToken}`)

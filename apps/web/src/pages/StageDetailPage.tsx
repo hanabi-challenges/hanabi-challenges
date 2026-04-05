@@ -6,11 +6,11 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Badge,
   Heading,
   Inline,
   Main,
   PageContainer,
-  Pill,
   SearchSelect,
   Section,
   Stack,
@@ -427,9 +427,7 @@ function StageParticipation({
             </Text>
             <Inline gap="xs" wrap>
               {stageTeam.members.map((m) => (
-                <Pill key={m.user_id} size="sm" variant="default">
-                  {m.display_name}
-                </Pill>
+                <UserPill key={m.user_id} name={m.display_name} />
               ))}
             </Inline>
           </Stack>
@@ -767,9 +765,9 @@ function GauntletSection({
                       Game {idx + 1}
                       {game.seed_payload ? ` — Seed: ${game.seed_payload}` : ''}
                     </Text>
-                    <Pill size="sm" variant={submitted ? 'accent' : 'default'}>
+                    <Badge size="sm" tone={submitted ? 'success' : undefined}>
                       {submitted ? 'Submitted' : isNext ? 'Up next' : 'Locked'}
-                    </Pill>
+                    </Badge>
                   </Inline>
                 </CardHeader>
                 {isNext && myTeamId ? (
@@ -887,13 +885,13 @@ function MatchPlaySection({ standings, userId, hideStandings }: MatchPlaySection
                         {' vs '}
                         <strong>{match.team2.display_name}</strong>
                       </Text>
-                      <Pill size="sm" variant={match.status === 'COMPLETE' ? 'default' : 'accent'}>
+                      <Badge size="sm" tone={match.status === 'IN_PROGRESS' ? 'info' : undefined}>
                         {match.status === 'COMPLETE'
                           ? 'Complete'
                           : match.status === 'IN_PROGRESS'
                             ? 'In Progress'
                             : 'Pending'}
-                      </Pill>
+                      </Badge>
                     </Inline>
 
                     {match.game_results.length > 0 ? (
@@ -1297,16 +1295,14 @@ export function StageDetailPage() {
           <Stack gap="sm">
             <Heading level={1}>{stage.label}</Heading>
             <Inline gap="xs" wrap>
-              <Pill size="sm" variant="default">
-                {stage.status}
-              </Pill>
-              <Pill size="sm" variant="default">
+              <Badge size="sm">{stage.status}</Badge>
+              <Badge size="sm">
                 {stage.mechanism === 'SEEDED_LEADERBOARD'
                   ? 'Leaderboard'
                   : stage.mechanism === 'GAUNTLET'
                     ? 'Gauntlet'
                     : 'Match Play'}
-              </Pill>
+              </Badge>
             </Inline>
             {dateRange ? <Text variant="caption">{dateRange}</Text> : null}
           </Stack>
@@ -1346,9 +1342,7 @@ export function StageDetailPage() {
                             {game.max_score != null ? ` (max ${game.max_score})` : ''}
                           </Text>
                           {game.team_size != null ? (
-                            <Pill size="sm" variant="default">
-                              {game.team_size}-player
-                            </Pill>
+                            <Badge size="sm">{game.team_size}-player</Badge>
                           ) : null}
                         </Inline>
                       </CardHeader>

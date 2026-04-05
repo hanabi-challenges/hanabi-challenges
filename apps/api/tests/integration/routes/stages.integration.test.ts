@@ -7,10 +7,13 @@ import { get, post, put, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -53,7 +56,7 @@ beforeEach(async () => {
 
 describe('GET /api/events/:slug/stages', () => {
   it('returns empty array for event with no stages', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await get('/api/events/test-event/stages').set('Authorization', `Bearer ${token}`);
@@ -62,7 +65,7 @@ describe('GET /api/events/:slug/stages', () => {
   });
 
   it('returns stages ordered by stage_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     await post('/api/events/test-event/stages')
@@ -93,7 +96,7 @@ describe('GET /api/events/:slug/stages', () => {
 
 describe('GET /api/events/:slug/stages/:stageId', () => {
   it('returns a single stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${token}`)
@@ -110,7 +113,7 @@ describe('GET /api/events/:slug/stages/:stageId', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await get('/api/events/test-event/stages/9999');
@@ -124,7 +127,7 @@ describe('GET /api/events/:slug/stages/:stageId', () => {
 
 describe('POST /api/events/:slug/stages', () => {
   it('creates a stage with auto-assigned stage_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await post('/api/events/test-event/stages')
@@ -139,7 +142,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('assigns sequential stage_index for multiple stages', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     await post('/api/events/test-event/stages')
@@ -153,7 +156,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('returns 400 for missing required fields', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await post('/api/events/test-event/stages')
@@ -164,7 +167,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('returns 400 for invalid mechanism', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await post('/api/events/test-event/stages')
@@ -175,7 +178,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('returns 401 without auth', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await post('/api/events/test-event/stages').send(VALID_STAGE);
@@ -183,7 +186,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('returns 403 for non-admin user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('other', 'USER');
 
@@ -195,7 +198,7 @@ describe('POST /api/events/:slug/stages', () => {
   });
 
   it('co-admin can also create stages', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: coAdminId, token: coAdminToken } = await createUser('coadmin', 'USER');
 
@@ -217,7 +220,7 @@ describe('POST /api/events/:slug/stages', () => {
 
 describe('PUT /api/events/:slug/stages/:stageId', () => {
   it('updates stage label and dates', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${token}`)
@@ -238,7 +241,7 @@ describe('PUT /api/events/:slug/stages/:stageId', () => {
   });
 
   it('returns 400 for invalid time_policy', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${token}`)
@@ -252,7 +255,7 @@ describe('PUT /api/events/:slug/stages/:stageId', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await put('/api/events/test-event/stages/9999')
@@ -269,7 +272,7 @@ describe('PUT /api/events/:slug/stages/:stageId', () => {
 
 describe('PATCH /api/events/:slug/stages/:stageId/reorder', () => {
   it('reorders stages correctly', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const s0 = await post('/api/events/test-event/stages')
@@ -300,7 +303,7 @@ describe('PATCH /api/events/:slug/stages/:stageId/reorder', () => {
   });
 
   it('returns 400 for invalid stage_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${token}`)
@@ -320,7 +323,7 @@ describe('PATCH /api/events/:slug/stages/:stageId/reorder', () => {
 
 describe('DELETE /api/events/:slug/stages/:stageId', () => {
   it('deletes a stage with no results', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${token}`)
@@ -342,7 +345,7 @@ describe('DELETE /api/events/:slug/stages/:stageId', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await del('/api/events/test-event/stages/9999').set(
@@ -354,7 +357,7 @@ describe('DELETE /api/events/:slug/stages/:stageId', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const created = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -376,7 +379,7 @@ describe('DELETE /api/events/:slug/stages/:stageId', () => {
 
 describe('superadmin bypass', () => {
   it('superadmin can create and delete stages', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: saToken } = await createUser('sa', 'SUPERADMIN');
 

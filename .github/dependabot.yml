@@ -6,3 +6,12 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
+
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-name: "@hanabi-challenges/design-system"
+    commit-message:
+      prefix: "chore"

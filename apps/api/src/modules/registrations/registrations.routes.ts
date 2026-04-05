@@ -44,7 +44,7 @@ async function requireEventAdmin(
   res: Response,
   eventId: number,
 ): Promise<boolean> {
-  const isSuperadmin = req.user?.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   if (isSuperadmin) return true;
   const role = await getEventAdminRole(eventId, req.user!.userId);
   if (!role) {
@@ -193,7 +193,7 @@ router.get(
     if (!ctx) return;
 
     const mine = req.query.mine === 'true';
-    const isSuperadmin = req.user!.role === 'SUPERADMIN';
+    const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
     const role = isSuperadmin
       ? 'SUPERADMIN'
       : await getEventAdminRole(ctx.eventId, req.user!.userId);
@@ -323,7 +323,7 @@ router.delete(
     }
 
     // Only the target user themselves, or an event admin, can remove a member
-    const isSuperadmin = req.user!.role === 'SUPERADMIN';
+    const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
     const isSelf = req.user!.userId === targetUserId;
     if (!isSelf && !isSuperadmin) {
       const role = await getEventAdminRole(ctx.eventId, req.user!.userId);

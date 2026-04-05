@@ -3,7 +3,7 @@ import { getJson } from '../../lib/api';
 export type UserProfileRecord = {
   id: number;
   display_name: string;
-  role: string;
+  roles: string[];
   color_hex: string;
   text_color: string;
   created_at: string;

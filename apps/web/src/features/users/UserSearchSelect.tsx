@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react';
 import { Inline, SearchSelect, CoreBox as Box, CoreText as Text } from '../../design-system';
-import type { SearchSuggestion } from '../../design-system/components/inputs/SearchSelect/SearchSelect';
+import type { SearchSuggestion } from '../../design-system';
 
 export type UserSuggestion = {
   id: number;

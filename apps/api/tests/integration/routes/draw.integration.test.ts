@@ -7,10 +7,13 @@ import { post, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -82,7 +85,7 @@ beforeEach(async () => {
 
 describe('POST /stages/:stageId/draw', () => {
   it('returns a draw proposal with proposed pairs', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -105,7 +108,7 @@ describe('POST /stages/:stageId/draw', () => {
   });
 
   it('shows confirmed pair when both sides opted in with each other', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -126,7 +129,7 @@ describe('POST /stages/:stageId/draw', () => {
   });
 
   it('does not persist teams (preview only)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -151,7 +154,7 @@ describe('POST /stages/:stageId/draw', () => {
   });
 
   it('returns 409 when teams already exist', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -178,7 +181,7 @@ describe('POST /stages/:stageId/draw', () => {
   });
 
   it('returns 403 for a regular user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -200,7 +203,7 @@ describe('POST /stages/:stageId/draw', () => {
 
 describe('POST /stages/:stageId/draw/confirm', () => {
   it('creates QUEUED teams from opt-ins', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -223,7 +226,7 @@ describe('POST /stages/:stageId/draw/confirm', () => {
   });
 
   it('returns 409 when teams already exist', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -248,7 +251,7 @@ describe('POST /stages/:stageId/draw/confirm', () => {
   });
 
   it('returns 409 for non-QUEUED stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSelfFormedStage(ownerToken);
 
@@ -267,7 +270,7 @@ describe('POST /stages/:stageId/draw/confirm', () => {
 
 describe('POST /stages/:stageId/draw/reset', () => {
   it('deletes QUEUED teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -300,7 +303,7 @@ describe('POST /stages/:stageId/draw/reset', () => {
   });
 
   it('returns 0 when no QUEUED teams exist', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -314,7 +317,7 @@ describe('POST /stages/:stageId/draw/reset', () => {
   });
 
   it('does not delete REGISTERED-source teams for the same stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 

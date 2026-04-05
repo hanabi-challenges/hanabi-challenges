@@ -7,10 +7,13 @@ import { post, put, del, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -95,7 +98,7 @@ beforeEach(async () => {
 
 describe('PUT /events/:slug/results/:resultId', () => {
   it('admin updates a result score', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -118,7 +121,7 @@ describe('PUT /events/:slug/results/:resultId', () => {
   });
 
   it('preserves unchanged fields when only updating score', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -147,7 +150,7 @@ describe('PUT /events/:slug/results/:resultId', () => {
   });
 
   it('returns 400 when score exceeds max_score', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -167,7 +170,7 @@ describe('PUT /events/:slug/results/:resultId', () => {
   });
 
   it('returns 404 for a non-existent result', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
 
     const res = await put('/api/events/test-event/results/9999')
@@ -178,7 +181,7 @@ describe('PUT /events/:slug/results/:resultId', () => {
   });
 
   it('returns 403 for a regular user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -204,7 +207,7 @@ describe('PUT /events/:slug/results/:resultId', () => {
 
 describe('DELETE /events/:slug/results/:resultId', () => {
   it('admin deletes a result', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);
@@ -232,7 +235,7 @@ describe('DELETE /events/:slug/results/:resultId', () => {
   });
 
   it('returns 404 for a non-existent result', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
 
     const res = await del('/api/events/test-event/results/9999').set(
@@ -244,7 +247,7 @@ describe('DELETE /events/:slug/results/:resultId', () => {
   });
 
   it('returns 403 for a regular user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 25);

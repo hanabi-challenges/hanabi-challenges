@@ -7,10 +7,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -113,7 +116,7 @@ beforeEach(async () => {
 
 describe('POST /stages/:stageId/attempts', () => {
   it('starts a new attempt', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -134,7 +137,7 @@ describe('POST /stages/:stageId/attempts', () => {
   });
 
   it('returns 409 if an in-progress attempt already exists', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -158,7 +161,7 @@ describe('POST /stages/:stageId/attempts', () => {
   });
 
   it('returns 409 for non-GAUNTLET stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await (async () => {
       const res = await post('/api/events/test-event/stages')
@@ -186,7 +189,7 @@ describe('POST /stages/:stageId/attempts', () => {
   });
 
   it('can start a second attempt after completing the first', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1, 25);
@@ -220,7 +223,7 @@ describe('POST /stages/:stageId/attempts', () => {
 
 describe('Game ordering in gauntlet attempts', () => {
   it('rejects submitting game 2 before game 1', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     await createGame(ownerToken, stage.id, 1, 25);
@@ -239,7 +242,7 @@ describe('Game ordering in gauntlet attempts', () => {
   });
 
   it('allows submitting game 2 after game 1', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 1, 25);
@@ -264,7 +267,7 @@ describe('Game ordering in gauntlet attempts', () => {
 
 describe('GET /stages/:stageId/attempts', () => {
   it('returns own team attempts', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -287,7 +290,7 @@ describe('GET /stages/:stageId/attempts', () => {
   });
 
   it('admin sees all teams attempts', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -328,7 +331,7 @@ describe('GET /stages/:stageId/attempts', () => {
 
 describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
   it('completes an attempt and computes total_score', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 1, 25);
@@ -355,7 +358,7 @@ describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
   });
 
   it('returns 409 if not all games submitted', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 1, 25);
@@ -379,7 +382,7 @@ describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
   });
 
   it('is idempotent when already completed — returns 200 with the attempt', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1, 25);
@@ -413,7 +416,7 @@ describe('POST /stages/:stageId/attempts/:attemptId/complete', () => {
 
 describe('GET /stages/:stageId/attempts/:attemptId', () => {
   it('returns attempt detail with results', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1, 25);
@@ -439,7 +442,7 @@ describe('GET /stages/:stageId/attempts/:attemptId', () => {
   });
 
   it('returns 404 for unknown attempt', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -461,7 +464,7 @@ describe('GET /stages/:stageId/attempts/:attemptId', () => {
 
 describe('DELETE /stages/:stageId/attempts/:attemptId (abandon)', () => {
   it('marks an in-progress attempt as abandoned', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -480,7 +483,7 @@ describe('DELETE /stages/:stageId/attempts/:attemptId (abandon)', () => {
   });
 
   it('returns 409 if attempt is already completed', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -505,7 +508,7 @@ describe('DELETE /stages/:stageId/attempts/:attemptId (abandon)', () => {
   });
 
   it('returns 404 for unknown attempt', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const { token: aliceToken } = await createUser('alice');
@@ -525,7 +528,7 @@ describe('DELETE /stages/:stageId/attempts/:attemptId (abandon)', () => {
 
 describe('GET /stages/:stageId/attempts/leaderboard', () => {
   it('returns best-attempt standings after completion', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -549,7 +552,7 @@ describe('GET /stages/:stageId/attempts/leaderboard', () => {
   });
 
   it('returns empty leaderboard for stage with no completed attempts', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
 
@@ -561,7 +564,7 @@ describe('GET /stages/:stageId/attempts/leaderboard', () => {
 
 describe('BEST_OF_N attempt limit', () => {
   it('allows starting a new attempt after abandoning (abandoned does not count toward limit)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     // BEST_OF_N with n=1 in config_json
     const stageRes = await post('/api/events/test-event/stages')
@@ -599,7 +602,7 @@ describe('BEST_OF_N attempt limit', () => {
   });
 
   it('blocks attempt when BEST_OF_N limit reached', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stageRes = await post('/api/events/test-event/stages')
       .set('Authorization', `Bearer ${ownerToken}`)

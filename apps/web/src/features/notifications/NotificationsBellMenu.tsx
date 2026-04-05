@@ -3,8 +3,8 @@ import {
   CoreIndicator as Indicator,
   CoreMenu as Menu,
   CoreScrollArea as ScrollArea,
-  Stack as MStack,
-  Text as MText,
+  CoreStack as MStack,
+  CoreText as MText,
   CoreUnstyledButton as UnstyledButton,
 } from '../../design-system';
 import { type UserNotification } from './notificationsApi';

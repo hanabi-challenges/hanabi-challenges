@@ -676,7 +676,7 @@ export function AdminStageEditorPage() {
               { token: '{aID}', desc: 'Attempt ID (empty when absent)' },
               { token: '{tID}', desc: 'Team ID (empty when absent)' },
             ].map(({ token, desc }) => (
-              <Group key={token} gap="sm" wrap={false}>
+              <Group key={token} gap="sm" wrap="nowrap">
                 <Text size="sm" ff="monospace" style={{ minWidth: 60 }}>
                   {token}
                 </Text>

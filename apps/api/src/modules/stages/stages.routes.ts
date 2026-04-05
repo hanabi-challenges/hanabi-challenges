@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import {
   authOptional,
   authRequired,
+  hasRole,
   type AuthenticatedRequest,
 } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
@@ -79,7 +80,7 @@ async function resolveEventAndAdminCheck(
   res: Response,
 ): Promise<{ eventId: number } | null> {
   const slug = String(req.params.slug);
-  const isSuperadmin = req.user?.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -106,7 +107,7 @@ async function resolveEventAndAdminCheck(
 // GET /api/events/:slug/stages — list stages (public for published events, admin sees all)
 router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
   const stages = await listStages(event.id);
@@ -120,7 +121,7 @@ router.get('/:stageId/status', authOptional, async (req: AuthenticatedRequest, r
   if (!Number.isInteger(stageId) || stageId <= 0) {
     return res.status(400).json({ error: 'Invalid stageId' });
   }
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
   const stage = await getStage(event.id, stageId);
@@ -135,7 +136,7 @@ router.get('/:stageId', authOptional, async (req: AuthenticatedRequest, res: Res
   if (!Number.isInteger(stageId) || stageId <= 0) {
     return res.status(400).json({ error: 'Invalid stageId' });
   }
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
   const stage = await getStage(event.id, stageId);

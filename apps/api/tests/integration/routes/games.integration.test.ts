@@ -7,10 +7,13 @@ import { get, post, put, del, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -59,7 +62,7 @@ beforeEach(async () => {
 
 describe('GET /stages/:stageId/games', () => {
   it('returns empty array for a stage with no games', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -69,7 +72,7 @@ describe('GET /stages/:stageId/games', () => {
   });
 
   it('returns game slots ordered by game_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -84,7 +87,7 @@ describe('GET /stages/:stageId/games', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await get('/api/events/test-event/stages/9999/games').set(
@@ -101,7 +104,7 @@ describe('GET /stages/:stageId/games', () => {
 
 describe('POST /stages/:stageId/games', () => {
   it('creates a game slot with auto-assigned game_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -116,7 +119,7 @@ describe('POST /stages/:stageId/games', () => {
   });
 
   it('creates multiple slots with sequential game_index', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -130,7 +133,7 @@ describe('POST /stages/:stageId/games', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -149,7 +152,7 @@ describe('POST /stages/:stageId/games', () => {
 
 describe('POST /stages/:stageId/games/bulk', () => {
   it('creates multiple slots at once', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -165,7 +168,7 @@ describe('POST /stages/:stageId/games/bulk', () => {
   });
 
   it('creates multiple slots with seeds', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -179,7 +182,7 @@ describe('POST /stages/:stageId/games/bulk', () => {
   });
 
   it('returns 400 for invalid count', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -197,7 +200,7 @@ describe('POST /stages/:stageId/games/bulk', () => {
 
 describe('PUT /stages/:stageId/games/:gameId', () => {
   it('updates seed_payload and nickname', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -215,7 +218,7 @@ describe('PUT /stages/:stageId/games/:gameId', () => {
   });
 
   it('returns 404 for unknown game slot', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -233,7 +236,7 @@ describe('PUT /stages/:stageId/games/:gameId', () => {
 
 describe('DELETE /stages/:stageId/games/:gameId', () => {
   it('deletes a game slot with no results', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -250,7 +253,7 @@ describe('DELETE /stages/:stageId/games/:gameId', () => {
   });
 
   it('returns 404 for unknown game slot', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -266,7 +269,7 @@ describe('DELETE /stages/:stageId/games/:gameId', () => {
 
 describe('PATCH /stages/:stageId/games/:gameId/reorder', () => {
   it('reorders a game slot', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const stage = await createStage(token);
 
@@ -289,7 +292,7 @@ describe('PATCH /stages/:stageId/games/:gameId/reorder', () => {
 
 describe('effective_seed from stage/event formula', () => {
   it('resolves seed from event-level formula', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
 
     // Create event with a seed formula
     await post('/api/events')

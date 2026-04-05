@@ -7,10 +7,13 @@ import { get, post, patch, put } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -104,14 +107,14 @@ beforeEach(async () => {
 
 describe('GET /stages/:stageId/leaderboard', () => {
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/stages/999/leaderboard');
     expect(res.status).toBe(404);
   });
 
   it('returns empty entries when no results submitted', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createSeededStage(token);
     await createGame(token, stage.id, 1);
@@ -123,7 +126,7 @@ describe('GET /stages/:stageId/leaderboard', () => {
   });
 
   it('returns ranked entries after results are submitted', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSeededStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -145,7 +148,7 @@ describe('GET /stages/:stageId/leaderboard', () => {
   });
 
   it('sums game scores across multiple games', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSeededStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 1);
@@ -167,7 +170,7 @@ describe('GET /stages/:stageId/leaderboard', () => {
   });
 
   it('ranks multiple teams correctly', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSeededStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -258,7 +261,7 @@ async function startAndCompleteAttempt(
 
 describe('GET /stages/:stageId/leaderboard (GAUNTLET)', () => {
   it('returns empty entries when no attempts', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createGauntletStage(token);
 
@@ -268,7 +271,7 @@ describe('GET /stages/:stageId/leaderboard (GAUNTLET)', () => {
   });
 
   it('ranks team with completed attempt', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -291,7 +294,7 @@ describe('GET /stages/:stageId/leaderboard (GAUNTLET)', () => {
   });
 
   it('shows only best attempt per team (multiple attempts)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -313,7 +316,7 @@ describe('GET /stages/:stageId/leaderboard (GAUNTLET)', () => {
   });
 
   it('shows DNF team at bottom (in-progress attempt, no complete)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     await createGame(ownerToken, stage.id, 1);
@@ -374,7 +377,7 @@ async function insertMatch(stageId: number, team1Id: number, team2Id: number, ro
 
 describe('GET /stages/:stageId/leaderboard (MATCH_PLAY)', () => {
   it('returns empty state when no matches exist', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createMatchPlayStage(token);
 
@@ -386,7 +389,7 @@ describe('GET /stages/:stageId/leaderboard (MATCH_PLAY)', () => {
   });
 
   it('returns round data with pending match and active teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -414,7 +417,7 @@ describe('GET /stages/:stageId/leaderboard (MATCH_PLAY)', () => {
   });
 
   it('marks eliminated and champion after completed bracket', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -458,7 +461,7 @@ describe('GET /stages/:stageId/leaderboard (MATCH_PLAY)', () => {
   });
 
   it('handles in-progress round (some matches complete, some pending)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -525,7 +528,7 @@ describe('GET /api/events/:slug/leaderboard', () => {
   });
 
   it('returns empty tracks for event with no stages', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/leaderboard');
     expect(res.status).toBe(200);
@@ -533,7 +536,7 @@ describe('GET /api/events/:slug/leaderboard', () => {
   });
 
   it('returns empty tracks for event with stages but no results', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     await createSeededStage(token);
     const res = await get('/api/events/test-event/leaderboard');
@@ -542,7 +545,7 @@ describe('GET /api/events/:slug/leaderboard', () => {
   });
 
   it('aggregates scores across a single SEEDED_LEADERBOARD stage (sum method)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSeededStage(ownerToken);
     const game = await createGame(ownerToken, stage.id, 1);
@@ -564,7 +567,7 @@ describe('GET /api/events/:slug/leaderboard', () => {
   });
 
   it('ranks teams by total score across multiple stages', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     // Use team_scope: EVENT so the same team ID is used across both stages
     const stage1 = await createSeededStage(ownerToken, 'test-event', { team_scope: 'EVENT' });

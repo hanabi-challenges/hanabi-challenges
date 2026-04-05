@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { authOptional, type AuthenticatedRequest } from '../../middleware/authMiddleware';
+import { authOptional, hasRole, type AuthenticatedRequest } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
 import { getEventAggregate } from './leaderboards.service';
 
@@ -11,7 +11,7 @@ const router = Router({ mergeParams: true });
 // GET /api/events/:slug/leaderboard
 router.get('/leaderboard', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 

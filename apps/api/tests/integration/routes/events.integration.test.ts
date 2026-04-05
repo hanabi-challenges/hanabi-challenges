@@ -7,10 +7,13 @@ import { get, post, put, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return elevated.token;
   }
@@ -38,7 +41,7 @@ beforeEach(async () => {
 
 describe('POST /api/events', () => {
   it('creates an event and returns 201 with inferred status', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
 
     const res = await post('/api/events')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -67,7 +70,7 @@ describe('POST /api/events', () => {
   });
 
   it('returns 400 when required fields are missing', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
 
     const res = await post('/api/events')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -77,7 +80,7 @@ describe('POST /api/events', () => {
   });
 
   it('returns 409 when slug or name already exists', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
 
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
@@ -95,7 +98,7 @@ describe('POST /api/events', () => {
 
 describe('GET /api/events', () => {
   it('returns only published events for public requests', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
 
     // Create one published and one unpublished event
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
@@ -127,7 +130,7 @@ describe('GET /api/events', () => {
 
 describe('GET /api/events/:slug', () => {
   it('returns a published event', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
 
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
     await patch('/api/events/test-event-2026/publish').set('Authorization', `Bearer ${adminToken}`);
@@ -138,7 +141,7 @@ describe('GET /api/events/:slug', () => {
   });
 
   it('returns 404 for an unpublished event when not authenticated', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
     const res = await get('/api/events/test-event-2026');
@@ -146,7 +149,7 @@ describe('GET /api/events/:slug', () => {
   });
 
   it('returns an unpublished event for an admin', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
     const res = await get('/api/events/test-event-2026').set(
@@ -169,7 +172,7 @@ describe('GET /api/events/:slug', () => {
 
 describe('PUT /api/events/:slug', () => {
   it('updates event fields and returns the updated event', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
     const res = await put('/api/events/test-event-2026')
@@ -183,7 +186,7 @@ describe('PUT /api/events/:slug', () => {
   });
 
   it('returns 404 for a non-existent event', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     const res = await put('/api/events/no-such-event')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ name: 'x' });
@@ -202,7 +205,7 @@ describe('PUT /api/events/:slug', () => {
 
 describe('PATCH /api/events/:slug/publish', () => {
   it('toggles published from false to true', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
     const res = await patch('/api/events/test-event-2026/publish').set(
@@ -215,7 +218,7 @@ describe('PATCH /api/events/:slug/publish', () => {
   });
 
   it('toggles published from true back to false', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
     await patch('/api/events/test-event-2026/publish').set('Authorization', `Bearer ${adminToken}`);
 
@@ -229,7 +232,7 @@ describe('PATCH /api/events/:slug/publish', () => {
   });
 
   it('returns 404 for a non-existent event', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     const res = await patch('/api/events/no-such-event/publish').set(
       'Authorization',
       `Bearer ${adminToken}`,
@@ -262,7 +265,7 @@ describe('DELETE /api/events/:slug', () => {
   });
 
   it('returns 403 for an admin (not superadmin)', async () => {
-    const adminToken = await createUser('admin', 'ADMIN');
+    const adminToken = await createUser('admin', 'HOST');
     await post('/api/events').set('Authorization', `Bearer ${adminToken}`).send(baseEvent);
 
     const res = await del('/api/events/test-event-2026').set(

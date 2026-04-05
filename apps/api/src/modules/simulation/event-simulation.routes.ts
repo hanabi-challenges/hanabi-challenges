@@ -42,7 +42,7 @@ async function resolveEventSimContext(
     return null;
   }
 
-  const isSuperadmin = req.user!.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   const event = await getEventBySlug(slug, true);
   if (!event) {
     res.status(404).json({ error: 'Event not found' });

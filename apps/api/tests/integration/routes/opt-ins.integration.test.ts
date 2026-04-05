@@ -7,10 +7,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -76,7 +79,7 @@ beforeEach(async () => {
 
 describe('POST /stages/:stageId/opt-in', () => {
   it('opts in to a QUEUED stage (solo)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -94,7 +97,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('opts in with a partner', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -113,7 +116,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('pair is confirmed when both sides opt in with each other', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -136,7 +139,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('returns 409 when user is not registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -151,7 +154,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('returns 409 when partner is not registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -168,7 +171,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('returns 409 when stage is not QUEUED policy', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createSelfFormedStage(ownerToken);
 
@@ -183,7 +186,7 @@ describe('POST /stages/:stageId/opt-in', () => {
   });
 
   it('returns 409 when user opts in twice', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -208,7 +211,7 @@ describe('POST /stages/:stageId/opt-in', () => {
 
 describe('DELETE /stages/:stageId/opt-in', () => {
   it('removes an opt-in', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -228,7 +231,7 @@ describe('DELETE /stages/:stageId/opt-in', () => {
   });
 
   it('returns 404 when not opted in', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -250,7 +253,7 @@ describe('DELETE /stages/:stageId/opt-in', () => {
 
 describe('GET /stages/:stageId/opt-ins', () => {
   it('admin can list all opt-ins', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -276,7 +279,7 @@ describe('GET /stages/:stageId/opt-ins', () => {
   });
 
   it('returns 403 for a regular user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -298,7 +301,7 @@ describe('GET /stages/:stageId/opt-ins', () => {
 
 describe('GET /stages/:stageId/opt-ins/me', () => {
   it('returns the current user opt-in', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 
@@ -319,7 +322,7 @@ describe('GET /stages/:stageId/opt-ins/me', () => {
   });
 
   it('returns 404 when user has not opted in', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createQueuedStage(ownerToken);
 

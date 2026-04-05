@@ -71,9 +71,9 @@ export async function createAdminAccessRequest(input: {
 }): Promise<AdminAccessRequest> {
   await ensureAdminAccessSchema();
 
-  const requester = await pool.query<{ role: string }>(
+  const requester = await pool.query<{ roles: string[] }>(
     `
-    SELECT role
+    SELECT roles
     FROM users
     WHERE id = $1
     `,
@@ -85,8 +85,8 @@ export async function createAdminAccessRequest(input: {
     (err as { code?: string }).code = 'USER_NOT_FOUND';
     throw err;
   }
-  const role = String(requester.rows[0].role ?? '');
-  if (role === 'ADMIN' || role === 'SUPERADMIN') {
+  const roles: string[] = requester.rows[0].roles ?? ['USER'];
+  if (roles.some((r) => r !== 'USER')) {
     const err = new Error('ALREADY_ADMIN');
     (err as { code?: string }).code = 'ALREADY_ADMIN';
     throw err;

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authRouter from '../modules/auth/auth.routes';
 import discordRouter from '../modules/auth/discord.routes';
+import botRouter from '../modules/bot/bot.routes';
 import eventsRouter from '../modules/events/events.routes';
 import registrationsRouter from '../modules/registrations/registrations.routes';
 import resultsRouter from '../modules/results/results.routes';
@@ -28,5 +29,6 @@ router.use('/api', siteContentRouter);
 router.use('/api', badgesRouter);
 router.use('/api', notificationsRouter);
 router.use('/api', adminAccessRouter);
+router.use('/api/bot', botRouter);
 
 export default router;

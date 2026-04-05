@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import {
   authOptional,
   authRequired,
+  hasRole,
   type AuthenticatedRequest,
 } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
@@ -43,8 +44,8 @@ async function resolveStageAndAdminCheck(
     return null;
   }
 
-  const isSuperadmin = req.user?.role === 'SUPERADMIN';
-  const isGlobalAdmin = req.user?.role === 'ADMIN' || isSuperadmin;
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
+  const isGlobalAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, requireAdmin || isGlobalAdmin);
   if (!event) {
     res.status(404).json({ error: 'Event not found' });

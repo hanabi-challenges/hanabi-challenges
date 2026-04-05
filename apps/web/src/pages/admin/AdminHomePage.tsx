@@ -1,8 +1,8 @@
 import { AdminHomeScreen } from '../../features/admin/screens/AdminHomeScreen';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, hasRole } from '../../context/AuthContext';
 
 export function AdminHomePage() {
   const { user } = useAuth();
 
-  return <AdminHomeScreen isSuperAdmin={user?.role === 'SUPERADMIN'} />;
+  return <AdminHomeScreen isSuperAdmin={hasRole(user, 'SUPERADMIN')} />;
 }

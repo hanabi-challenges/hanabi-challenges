@@ -51,7 +51,7 @@ import { AdminContentEditorScreen } from '../features/admin/screens/content/Admi
 import { AdminUsersLayoutScreen } from '../features/admin/screens/users/AdminUsersLayoutScreen';
 import { AdminSystemLayoutScreen } from '../features/admin/screens/system/AdminSystemLayoutScreen';
 import { AdminSystemHomeScreen } from '../features/admin/screens/system/AdminSystemHomeScreen';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 
 function AdminRoutes() {
   const { user } = useAuth();
@@ -61,7 +61,7 @@ function AdminRoutes() {
       path="admin"
       element={
         <RequireAdmin>
-          <AdminLayoutScreen isSuperAdmin={user?.role === 'SUPERADMIN'} />
+          <AdminLayoutScreen isSuperAdmin={hasRole(user, 'SUPERADMIN')} />
         </RequireAdmin>
       }
     >

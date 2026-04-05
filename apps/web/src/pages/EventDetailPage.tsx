@@ -6,12 +6,12 @@ import {
   Card,
   CardBody,
   CardHeader,
+  Badge,
   Heading,
   Inline,
   Main,
   MaterialIcon,
   PageContainer,
-  Pill,
   Section,
   Stack,
   Tabs,
@@ -128,12 +128,10 @@ function statusBannerText(event: EventSummary): string | null {
   }
 }
 
-function statusBannerVariant(event: EventSummary): 'default' | 'accent' {
-  return event.status === 'REGISTRATION_OPEN' ||
-    event.status === 'IN_PROGRESS' ||
-    event.status === 'LIVE'
-    ? 'accent'
-    : 'default';
+function statusBannerTone(event: EventSummary): 'info' | 'success' | undefined {
+  if (event.status === 'REGISTRATION_OPEN' || event.status === 'IN_PROGRESS') return 'info';
+  if (event.status === 'LIVE') return 'success';
+  return undefined;
 }
 
 function stageDateRange(stage: StageSummary): string | null {
@@ -478,18 +476,18 @@ export function EventDetailPage() {
               <Heading level={1}>{event.name}</Heading>
               <Inline gap="xs" wrap>
                 {bannerText ? (
-                  <Pill size="sm" variant={statusBannerVariant(event)}>
+                  <Badge size="sm" tone={statusBannerTone(event)}>
                     {bannerText}
-                  </Pill>
+                  </Badge>
                 ) : null}
                 {event.starts_at || event.ends_at ? (
-                  <Pill size="sm" variant="default">
+                  <Badge size="sm" tone="info">
                     {event.starts_at && event.ends_at
                       ? `${formatDate(event.starts_at)} – ${formatDate(event.ends_at)}`
                       : event.starts_at
                         ? `Starts ${formatDate(event.starts_at)}`
                         : `Ends ${formatDate(event.ends_at)}`}
-                  </Pill>
+                  </Badge>
                 ) : null}
               </Inline>
             </Stack>
@@ -525,9 +523,9 @@ export function EventDetailPage() {
                               </Inline>
                               <Inline gap="xs" align="center">
                                 {dateRange ? (
-                                  <Pill size="sm" variant={active ? 'accent' : 'default'}>
+                                  <Badge size="sm" tone={active ? 'info' : undefined}>
                                     {dateRange}
-                                  </Pill>
+                                  </Badge>
                                 ) : null}
                                 {!locked ? (
                                   <MaterialIcon
@@ -595,15 +593,14 @@ export function EventDetailPage() {
                                 {grants.map((g) => {
                                   const u = allUsers.find((x) => x.id === g.user_id);
                                   const name = u?.display_name ?? `User ${g.user_id}`;
-                                  const isMe = g.user_id === user?.id;
                                   return (
-                                    <Pill
+                                    <UserPill
                                       key={g.id}
+                                      name={name}
+                                      color={u?.color_hex}
+                                      textColor={u?.text_color}
                                       size="sm"
-                                      variant={isMe ? 'accent' : 'default'}
-                                    >
-                                      {name}
-                                    </Pill>
+                                    />
                                   );
                                 })}
                               </Inline>
@@ -640,15 +637,14 @@ export function EventDetailPage() {
                                 {grants.map((g) => {
                                   const u = allUsers.find((x) => x.id === g.user_id);
                                   const name = u?.display_name ?? `User ${g.user_id}`;
-                                  const isMe = g.user_id === user?.id;
                                   return (
-                                    <Pill
+                                    <UserPill
                                       key={g.id}
+                                      name={name}
+                                      color={u?.color_hex}
+                                      textColor={u?.text_color}
                                       size="sm"
-                                      variant={isMe ? 'accent' : 'default'}
-                                    >
-                                      {name}
-                                    </Pill>
+                                    />
                                   );
                                 })}
                               </Inline>

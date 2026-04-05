@@ -4,7 +4,7 @@ import { ApiError, getJson } from '../lib/api';
 export type UserSummary = {
   id: number;
   display_name: string;
-  role: 'SUPERADMIN' | 'ADMIN' | 'USER';
+  roles: string[];
   color_hex?: string;
   text_color?: string;
 };

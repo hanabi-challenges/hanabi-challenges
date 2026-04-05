@@ -21,7 +21,7 @@ import {
 } from '../design-system';
 import { UserPill } from '../features/users/UserPill';
 import { getJson, getJsonAuth, postJsonAuth, ApiError } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 import { NotFoundPage } from './NotFoundPage';
 import { PageStateNotice } from '../features/shared/PageStateNotice';
 import { SpoilerGatePage } from './SpoilerGatePage';
@@ -323,7 +323,7 @@ export function EventTeamResultsPage() {
   const { team, stages } = data;
   const activeStage = stages.find((s) => s.id === activeStageId) ?? stages[0] ?? null;
 
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(user, 'HOST');
   const isMember = team.members.some((m) => m.user_id === user?.id);
   const canSubmit = (isAdmin || isMember) && !!token;
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getJson, ApiError, getJsonAuth } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, hasRole } from '../context/AuthContext';
 
 export type EventDetail = {
   id: number;
@@ -68,7 +68,7 @@ export function useEventDetail(slug: string | undefined) {
       try {
         // getJson will add /api → /api/events/:slug
         const encodedSlug = encodeURIComponent(slug as string);
-        const isAdmin = user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN');
+        const isAdmin = hasRole(user, 'HOST');
         const shouldAuth = isAdmin && !!token;
 
         let data: EventDetail;

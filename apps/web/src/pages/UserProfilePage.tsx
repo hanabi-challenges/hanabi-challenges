@@ -242,7 +242,7 @@ export function UserProfilePage() {
 
       {isOwnProfile && activeTab === 'settings' ? (
         <SettingsSection
-          role={authUser?.role}
+          roles={authUser?.roles}
           adminRequestStatus={adminRequestStatus}
           adminRequestLoading={adminRequestLoading}
           onOpenPassword={() => {
@@ -307,7 +307,9 @@ export function UserProfilePage() {
       </Modal>
 
       <Modal
-        opened={adminRequestModalOpen && authUser?.role === 'USER'}
+        opened={
+          adminRequestModalOpen && (!authUser?.roles || authUser.roles.every((r) => r === 'USER'))
+        }
         onClose={() => setAdminRequestModalOpen(false)}
         title="Request Admin Access"
         centered

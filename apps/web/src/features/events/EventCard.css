@@ -1,17 +1,1 @@
-.event-card__action {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ds-space-xxs);
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-
-.event-card__pills {
-  gap: var(--ds-space-xs);
-  margin-top: var(--ds-space-xxs);
-}
-
-.event-card__footer {
-  margin-top: var(--ds-space-sm);
-}
+/* Removed — all layout previously in this file is now handled via design-system components. */

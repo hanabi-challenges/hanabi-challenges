@@ -5,17 +5,18 @@ import {
   CoreButton as Button,
   SectionCard,
   CoreGroup as Group,
-  CoreSelect as Select,
   CoreStack as Stack,
   CoreText as Text,
   CoreTextInput as TextInput,
+  CoreCheckbox as Checkbox,
 } from '../../design-system';
 import { useAuth } from '../../context/AuthContext';
 import { useUsers, type UserSummary } from '../../hooks/useUsers';
 import { ApiError, postJsonAuth } from '../../lib/api';
 import { UserPill } from '../../features/users/UserPill';
 
-type AdminRole = 'USER' | 'ADMIN' | 'SUPERADMIN';
+const ASSIGNABLE_ROLES = ['HOST', 'MOD', 'SITE_ADMIN', 'SUPERADMIN'] as const;
+type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 export function AdminManageUsersPage() {
   const { user, token } = useAuth();
@@ -26,7 +27,7 @@ export function AdminManageUsersPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [updatingById, setUpdatingById] = useState<Record<number, boolean>>({});
-  const [roleOverrides, setRoleOverrides] = useState<Record<number, AdminRole>>({});
+  const [rolesOverrides, setRolesOverrides] = useState<Record<number, string[]>>({});
 
   const suggestions = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -52,7 +53,7 @@ export function AdminManageUsersPage() {
       .slice(0, 25);
   }, [selectedId, query, users, user?.id]);
 
-  async function handleRoleChange(targetUser: UserSummary, nextRole: AdminRole) {
+  async function handleRoleToggle(targetUser: UserSummary, role: AssignableRole, checked: boolean) {
     if (!token) return;
 
     setStatusMessage(null);
@@ -60,15 +61,21 @@ export function AdminManageUsersPage() {
     setUpdatingById((prev) => ({ ...prev, [targetUser.id]: true }));
 
     try {
-      await postJsonAuth(`/users/${targetUser.id}/role`, token, { role: nextRole });
-      setStatusMessage(`Updated ${targetUser.display_name} to ${nextRole}.`);
-      setRoleOverrides((prev) => ({ ...prev, [targetUser.id]: nextRole }));
+      const result = await postJsonAuth<{ id: number; roles: string[] }>(
+        `/users/${targetUser.id}/roles`,
+        token,
+        { role, action: checked ? 'add' : 'remove' },
+      );
+      setStatusMessage(
+        `Updated ${targetUser.display_name}: ${result.roles.filter((r) => r !== 'USER').join(', ') || 'USER only'}.`,
+      );
+      setRolesOverrides((prev) => ({ ...prev, [targetUser.id]: result.roles }));
       refetch();
     } catch (err) {
       if (err instanceof ApiError) {
-        setStatusError((err.body as { error?: string })?.error ?? 'Failed to update role');
+        setStatusError((err.body as { error?: string })?.error ?? 'Failed to update roles');
       } else {
-        setStatusError('Failed to update role');
+        setStatusError('Failed to update roles');
       }
     } finally {
       setUpdatingById((prev) => ({ ...prev, [targetUser.id]: false }));
@@ -78,7 +85,7 @@ export function AdminManageUsersPage() {
   return (
     <Stack gap="md">
       <Text c="dimmed" size="sm">
-        Search users and manage role access. You cannot change your own role.
+        Search users and manage role access. You cannot change your own roles.
       </Text>
 
       {error ? (
@@ -141,7 +148,7 @@ export function AdminManageUsersPage() {
         <Stack gap="sm">
           {candidateUsers.map((candidate) => {
             const busy = Boolean(updatingById[candidate.id]);
-            const currentRole = roleOverrides[candidate.id] ?? candidate.role;
+            const currentRoles = rolesOverrides[candidate.id] ?? candidate.roles;
             return (
               <SectionCard key={candidate.id}>
                 <Group justify="space-between" align="flex-start" wrap="wrap">
@@ -152,27 +159,23 @@ export function AdminManageUsersPage() {
                       textColor={candidate.text_color || '#ffffff'}
                     />
                     <Text size="xs" c="dimmed" mt={4}>
-                      Current role: {currentRole}
+                      {currentRoles.join(', ')}
                     </Text>
                   </Box>
 
-                  <Select
-                    aria-label={`Role for ${candidate.display_name}`}
-                    data={[
-                      { value: 'USER', label: 'User' },
-                      { value: 'ADMIN', label: 'Admin' },
-                      { value: 'SUPERADMIN', label: 'Super Admin' },
-                    ]}
-                    value={currentRole}
-                    onChange={(value) => {
-                      if (!value) return;
-                      const next = value as AdminRole;
-                      if (next === currentRole) return;
-                      void handleRoleChange(candidate, next);
-                    }}
-                    disabled={busy}
-                    w={180}
-                  />
+                  <Group gap="sm" wrap="wrap">
+                    {ASSIGNABLE_ROLES.map((role) => (
+                      <Checkbox
+                        key={role}
+                        label={role}
+                        checked={currentRoles.includes(role)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          void handleRoleToggle(candidate, role, e.currentTarget.checked)
+                        }
+                      />
+                    ))}
+                  </Group>
                 </Group>
               </SectionCard>
             );

@@ -7,6 +7,7 @@ import { SpoilerGatePage } from './SpoilerGatePage';
 import { useEventDetail } from '../hooks/useEventDetail';
 import {
   Alert,
+  Badge,
   Button,
   Card,
   CardBody,
@@ -15,7 +16,6 @@ import {
   Inline,
   Main,
   PageContainer,
-  Pill,
   Section,
   Stack,
   Tabs,
@@ -359,20 +359,16 @@ export function EventStatsPage() {
               <Heading level={1}>{event?.name ?? 'Event'}</Heading>
               <Inline gap="xs" wrap align="center">
                 {event ? (
-                  <Pill size="sm" variant="accent">
+                  <Badge size="sm" tone="info">
                     {formatDateRange(event.starts_at ?? null, event.ends_at ?? null)}
-                  </Pill>
+                  </Badge>
                 ) : null}
                 {event?.event_status === 'LIVE' ? (
-                  <Pill size="sm" variant="accent">
+                  <Badge size="sm" tone="success">
                     Live
-                  </Pill>
+                  </Badge>
                 ) : null}
-                {event?.event_status === 'COMPLETE' ? (
-                  <Pill size="sm" variant="default">
-                    Complete
-                  </Pill>
-                ) : null}
+                {event?.event_status === 'COMPLETE' ? <Badge size="sm">Complete</Badge> : null}
               </Inline>
               <Tabs
                 items={[

@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import {
   authOptional,
   authRequired,
+  hasRole,
   type AuthenticatedRequest,
 } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
@@ -46,7 +47,7 @@ async function resolveEventAndAdminCheck(
   res: Response,
 ): Promise<{ eventId: number } | null> {
   const slug = String(req.params.slug);
-  const isSuperadmin = req.user?.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -76,7 +77,7 @@ async function resolveEventAndAdminCheck(
 
 router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'SITE_ADMIN');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -246,7 +247,7 @@ router.post('/evaluate', authRequired, async (req: AuthenticatedRequest, res: Re
 
 router.get('/me/grants', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'SITE_ADMIN');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -265,7 +266,7 @@ router.get('/:awardId/grants', authOptional, async (req: AuthenticatedRequest, r
     return res.status(400).json({ error: 'Invalid awardId' });
   }
 
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'SITE_ADMIN');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 

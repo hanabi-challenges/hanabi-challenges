@@ -1,5 +1,9 @@
 import { Router, type Response } from 'express';
-import { authRequired, AuthenticatedRequest, requireAdmin } from '../../middleware/authMiddleware';
+import {
+  authRequired,
+  AuthenticatedRequest,
+  requireSiteAdmin,
+} from '../../middleware/authMiddleware';
 import {
   createBadgeSet,
   deleteBadgeSetById,
@@ -42,7 +46,7 @@ function isValidTierConfig(input: unknown): input is BadgeTierConfig {
 router.get(
   '/badge-sets',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const sets = await listBadgeSets();
@@ -57,7 +61,7 @@ router.get(
 router.get(
   '/badge-sets/:id',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -78,7 +82,7 @@ router.get(
 router.post(
   '/badge-sets',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     const shape = normalizeShape(req.body?.shape);
@@ -124,7 +128,7 @@ router.post(
 router.put(
   '/badge-sets/:id',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -203,7 +207,7 @@ router.put(
 router.delete(
   '/badge-sets/:id',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {

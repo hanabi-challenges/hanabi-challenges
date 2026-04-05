@@ -18,10 +18,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -132,7 +135,7 @@ beforeEach(async () => {
 describe('E2E GAUNTLET — sequential games, multiple attempts, abandon', () => {
   it('runs the full scenario: attempt1 → attempt2 (better) → attempt3 abandoned', async () => {
     // 1. Create event with 3-game gauntlet stage
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createGauntletStage(ownerToken);
     const game1 = await createGame(ownerToken, stage.id, 1);

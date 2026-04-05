@@ -7,10 +7,13 @@ import { get, post, put, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token };
   }
@@ -57,7 +60,7 @@ describe('GET /api/events/:slug/awards', () => {
   });
 
   it('returns empty grouped response for event with no awards', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await get('/api/events/test-event/awards');
     expect(res.status).toBe(200);
@@ -66,7 +69,7 @@ describe('GET /api/events/:slug/awards', () => {
   });
 
   it('returns awards grouped by event vs stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createStage(token);
 
@@ -99,7 +102,7 @@ describe('GET /api/events/:slug/awards', () => {
 
 describe('POST /api/events/:slug/awards', () => {
   it('rejects unauthenticated', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards').send({
       name: 'X',
@@ -109,7 +112,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('rejects non-admin', async () => {
-    const { token: admin } = await createUser('owner', 'ADMIN');
+    const { token: admin } = await createUser('owner', 'HOST');
     const { token: user } = await createUser('user');
     await createAndPublishEvent(admin);
     const res = await post('/api/events/test-event/awards')
@@ -119,7 +122,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('rejects missing name', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -128,7 +131,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('rejects invalid criteria_type', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -137,7 +140,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('rejects RANK_POSITION without positions', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -146,7 +149,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('rejects stage_id from another event', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -156,7 +159,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('creates a MANUAL award successfully', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -167,7 +170,7 @@ describe('POST /api/events/:slug/awards', () => {
   });
 
   it('creates a RANK_POSITION award with criteria_value', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const stage = await createStage(token);
     const res = await post('/api/events/test-event/awards')
@@ -189,7 +192,7 @@ describe('POST /api/events/:slug/awards', () => {
 
 describe('PUT /api/events/:slug/awards/:awardId', () => {
   it('returns 404 for unknown award', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await put('/api/events/test-event/awards/9999')
       .set('Authorization', `Bearer ${token}`)
@@ -198,7 +201,7 @@ describe('PUT /api/events/:slug/awards/:awardId', () => {
   });
 
   it('updates award name and description', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const create = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -214,7 +217,7 @@ describe('PUT /api/events/:slug/awards/:awardId', () => {
   });
 
   it('rejects invalid criteria_type on update', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const create = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -234,7 +237,7 @@ describe('PUT /api/events/:slug/awards/:awardId', () => {
 
 describe('PATCH /api/events/:slug/awards/reorder', () => {
   it('reorders awards', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const a1 = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -260,7 +263,7 @@ describe('PATCH /api/events/:slug/awards/reorder', () => {
   });
 
   it('rejects award_ids from a different event', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await patch('/api/events/test-event/awards/reorder')
       .set('Authorization', `Bearer ${token}`)
@@ -275,7 +278,7 @@ describe('PATCH /api/events/:slug/awards/reorder', () => {
 
 describe('DELETE /api/events/:slug/awards/:awardId', () => {
   it('returns 404 for unknown award', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const res = await del('/api/events/test-event/awards/9999').set(
       'Authorization',
@@ -285,7 +288,7 @@ describe('DELETE /api/events/:slug/awards/:awardId', () => {
   });
 
   it('deletes an award with no grants', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const create = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)
@@ -303,7 +306,7 @@ describe('DELETE /api/events/:slug/awards/:awardId', () => {
   });
 
   it('blocks deletion if award has grants', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createAndPublishEvent(token);
     const create = await post('/api/events/test-event/awards')
       .set('Authorization', `Bearer ${token}`)

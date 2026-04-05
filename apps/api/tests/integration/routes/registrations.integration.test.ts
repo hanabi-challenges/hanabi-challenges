@@ -7,10 +7,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -52,7 +55,7 @@ beforeEach(async () => {
 
 describe('POST /api/events/:slug/register', () => {
   it('registers a user and returns ACTIVE registration', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -67,7 +70,7 @@ describe('POST /api/events/:slug/register', () => {
   });
 
   it('re-registers a previously withdrawn user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -84,7 +87,7 @@ describe('POST /api/events/:slug/register', () => {
   });
 
   it('is idempotent for already-registered users', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -99,7 +102,7 @@ describe('POST /api/events/:slug/register', () => {
   });
 
   it('returns 409 when cutoff has passed and late registration is disabled', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken, 'test-event', {
       registration_cutoff: '2020-01-01T00:00:00Z',
       allow_late_registration: false,
@@ -115,7 +118,7 @@ describe('POST /api/events/:slug/register', () => {
   });
 
   it('allows registration after cutoff when allow_late_registration is true', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken, 'test-event', {
       registration_cutoff: '2020-01-01T00:00:00Z',
       allow_late_registration: true,
@@ -131,7 +134,7 @@ describe('POST /api/events/:slug/register', () => {
   });
 
   it('returns 401 without auth', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await post('/api/events/test-event/register');
@@ -156,7 +159,7 @@ describe('POST /api/events/:slug/register', () => {
 
 describe('DELETE /api/events/:slug/register', () => {
   it('withdraws a registration', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -172,7 +175,7 @@ describe('DELETE /api/events/:slug/register', () => {
   });
 
   it('returns 404 when not registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -191,7 +194,7 @@ describe('DELETE /api/events/:slug/register', () => {
 
 describe('GET /api/events/:slug/registrations/me', () => {
   it('returns the current user registration', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -207,7 +210,7 @@ describe('GET /api/events/:slug/registrations/me', () => {
   });
 
   it('returns 404 when not registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -226,7 +229,7 @@ describe('GET /api/events/:slug/registrations/me', () => {
 
 describe('GET /api/events/:slug/registrations', () => {
   it('returns all registrations (admin only)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -243,7 +246,7 @@ describe('GET /api/events/:slug/registrations', () => {
   });
 
   it('returns 403 for non-admin user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('alice', 'USER');
 
@@ -262,7 +265,7 @@ describe('GET /api/events/:slug/registrations', () => {
 
 describe('PATCH /api/events/:slug/registrations/:userId', () => {
   it('admin can change registration status', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken, userId } = await createUser('alice', 'USER');
 
@@ -277,7 +280,7 @@ describe('PATCH /api/events/:slug/registrations/:userId', () => {
   });
 
   it('returns 400 for invalid status', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken, userId } = await createUser('alice', 'USER');
 
@@ -291,7 +294,7 @@ describe('PATCH /api/events/:slug/registrations/:userId', () => {
   });
 
   it('returns 404 for unregistered user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await patch('/api/events/test-event/registrations/9999')
@@ -302,7 +305,7 @@ describe('PATCH /api/events/:slug/registrations/:userId', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken, userId } = await createUser('alice', 'USER');
 

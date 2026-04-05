@@ -2,8 +2,9 @@ import { Router, type Response } from 'express';
 import {
   authOptional,
   authRequired,
-  requireAdmin,
+  requireHost,
   requireSuperadmin,
+  hasRole,
   type AuthenticatedRequest,
 } from '../../middleware/authMiddleware';
 import {
@@ -48,7 +49,7 @@ router.get(
   authRequired,
   async (req: AuthenticatedRequest, res: Response) => {
     const slug = String(req.params.slug);
-    const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+    const isAdmin = hasRole(req.user, 'HOST');
     const event = await getEventBySlug(slug, isAdmin);
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -106,7 +107,7 @@ router.post(
   authRequired,
   async (req: AuthenticatedRequest, res: Response) => {
     const slug = String(req.params.slug);
-    const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+    const isAdmin = hasRole(req.user, 'HOST');
     const event = await getEventBySlug(slug, isAdmin);
     if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -121,7 +122,7 @@ router.post(
 // POST /api/events/:slug/forfeit — player forfeits eligibility to view spoilers
 router.post('/:slug/forfeit', authRequired, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -134,7 +135,7 @@ router.post('/:slug/forfeit', authRequired, async (req: AuthenticatedRequest, re
 
 // GET /api/events — list events; admins see drafts too
 router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) => {
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const events = await listEvents(isAdmin);
   res.json(events);
 });
@@ -142,7 +143,7 @@ router.get('/', authOptional, async (req: AuthenticatedRequest, res: Response) =
 // GET /api/events/:slug/status — inferred event status + dates
 router.get('/:slug/status', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
   res.json({
@@ -157,14 +158,14 @@ router.get('/:slug/status', authOptional, async (req: AuthenticatedRequest, res:
 // GET /api/events/:slug — single event; admins can see unpublished
 router.get('/:slug', authOptional, async (req: AuthenticatedRequest, res: Response) => {
   const slug = String(req.params.slug);
-  const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPERADMIN';
+  const isAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isAdmin);
   if (!event) return res.status(404).json({ error: 'Event not found' });
   res.json(event);
 });
 
 // POST /api/events — create event (admin)
-router.post('/', authRequired, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/', authRequired, requireHost, async (req: AuthenticatedRequest, res: Response) => {
   const body = req.body as CreateEventBody;
 
   if (!body.slug || typeof body.slug !== 'string') {
@@ -196,7 +197,7 @@ router.post('/', authRequired, requireAdmin, async (req: AuthenticatedRequest, r
 router.put(
   '/:slug',
   authRequired,
-  requireAdmin,
+  requireHost,
   async (req: AuthenticatedRequest, res: Response) => {
     const slug = String(req.params.slug);
     const body = req.body as UpdateEventBody;
@@ -210,7 +211,7 @@ router.put(
 router.patch(
   '/:slug/publish',
   authRequired,
-  requireAdmin,
+  requireHost,
   async (req: AuthenticatedRequest, res: Response) => {
     const slug = String(req.params.slug);
     const event = await togglePublished(slug);
@@ -223,7 +224,7 @@ router.patch(
 router.post(
   '/:slug/clone',
   authRequired,
-  requireAdmin,
+  requireHost,
   async (req: AuthenticatedRequest, res: Response) => {
     const slug = String(req.params.slug);
     const result = await cloneEvent(slug, req.user!.userId);

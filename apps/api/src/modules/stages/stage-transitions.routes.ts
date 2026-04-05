@@ -35,7 +35,7 @@ async function resolveEventAndAdminCheck(
     return null;
   }
 
-  if (req.user?.role === 'SUPERADMIN') return { eventId: event.id };
+  if (req.user?.roles?.includes('SUPERADMIN')) return { eventId: event.id };
 
   const role = await getEventAdminRole(event.id, userId);
   if (!role) {

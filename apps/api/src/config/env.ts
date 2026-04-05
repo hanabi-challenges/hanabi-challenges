@@ -18,9 +18,14 @@ if (!JWT_SECRET) {
 // simulation scripts can write games via simulateGame().  Never set in prod.
 const SIMULATION_MODE = process.env.SIMULATION_MODE === 'true';
 
+// Shared secret used by the Discord bot to authenticate role-update calls.
+// Optional — bot endpoint returns 503 if unset.
+const BOT_SECRET = process.env.BOT_SECRET ?? null;
+
 export const env = {
   BACKEND_PORT,
   DATABASE_URL,
   JWT_SECRET,
+  BOT_SECRET,
   SIMULATION_MODE,
 };

@@ -3,7 +3,7 @@ import {
   authOptional,
   authRequired,
   AuthenticatedRequest,
-  requireAdmin,
+  requireSiteAdmin,
 } from '../../middleware/authMiddleware';
 import { getVariantSyncState, listHanabiVariants, syncHanabiVariants } from './variants.service';
 
@@ -25,7 +25,7 @@ router.get('/variants', authOptional, async (_req, res: Response) => {
 router.post(
   '/variants/sync',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const result = await syncHanabiVariants();

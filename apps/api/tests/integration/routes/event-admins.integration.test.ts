@@ -7,10 +7,13 @@ import { get, post, patch, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -44,7 +47,7 @@ beforeEach(async () => {
 
 describe('GET /api/events/:slug/admins', () => {
   it('returns admins for an event owner', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await get('/api/events/test-event/admins').set(
@@ -60,7 +63,7 @@ describe('GET /api/events/:slug/admins', () => {
   });
 
   it('returns 403 for a non-admin user', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('other', 'USER');
 
@@ -73,7 +76,7 @@ describe('GET /api/events/:slug/admins', () => {
   });
 
   it('returns 401 without auth', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await get('/api/events/test-event/admins');
@@ -87,7 +90,7 @@ describe('GET /api/events/:slug/admins', () => {
 
 describe('POST /api/events/:slug/admins', () => {
   it('adds an admin (owner only)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: newAdminId } = await createUser('newadmin', 'USER');
 
@@ -101,7 +104,7 @@ describe('POST /api/events/:slug/admins', () => {
   });
 
   it('returns 403 when called by a non-owner admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: adminId, token: adminToken } = await createUser('coadmin', 'USER');
 
@@ -119,7 +122,7 @@ describe('POST /api/events/:slug/admins', () => {
   });
 
   it('returns 400 when user_id is missing', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await post('/api/events/test-event/admins')
@@ -130,7 +133,7 @@ describe('POST /api/events/:slug/admins', () => {
   });
 
   it('returns 404 when target user does not exist', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await post('/api/events/test-event/admins')
@@ -147,7 +150,7 @@ describe('POST /api/events/:slug/admins', () => {
 
 describe('PATCH /api/events/:slug/admins/:userId/role', () => {
   it('transfers ownership atomically — new owner is OWNER, old owner becomes ADMIN', async () => {
-    const { token: ownerToken, userId: ownerId } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken, userId: ownerId } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: newOwnerId } = await createUser('newowner', 'USER');
 
@@ -174,7 +177,7 @@ describe('PATCH /api/events/:slug/admins/:userId/role', () => {
   });
 
   it('returns 400 for an invalid role value', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: adminId } = await createUser('coadmin', 'USER');
     await post('/api/events/test-event/admins')
@@ -195,7 +198,7 @@ describe('PATCH /api/events/:slug/admins/:userId/role', () => {
 
 describe('DELETE /api/events/:slug/admins/:userId', () => {
   it('removes an admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { userId: adminId } = await createUser('coadmin', 'USER');
     await post('/api/events/test-event/admins')
@@ -217,7 +220,7 @@ describe('DELETE /api/events/:slug/admins/:userId', () => {
   });
 
   it('prevents OWNER from removing themselves', async () => {
-    const { token: ownerToken, userId: ownerId } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken, userId: ownerId } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
 
     const res = await del(`/api/events/test-event/admins/${ownerId}`).set(
@@ -229,7 +232,7 @@ describe('DELETE /api/events/:slug/admins/:userId', () => {
   });
 
   it('returns 403 for a non-owner', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: adminToken, userId: adminId } = await createUser('coadmin', 'USER');
     await post('/api/events/test-event/admins')
@@ -257,7 +260,7 @@ describe('DELETE /api/events/:slug/admins/:userId', () => {
 
 describe('superadmin bypass', () => {
   it('superadmin can list admins without being an event admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: saToken } = await createUser('superadmin', 'SUPERADMIN');
 
@@ -270,7 +273,7 @@ describe('superadmin bypass', () => {
   });
 
   it('superadmin can add an admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: saToken } = await createUser('superadmin', 'SUPERADMIN');
     const { userId: newId } = await createUser('newguy', 'USER');

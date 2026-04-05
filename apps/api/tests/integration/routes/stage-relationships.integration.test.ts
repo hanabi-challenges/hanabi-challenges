@@ -7,10 +7,13 @@ import { get, post, put, del } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -58,7 +61,7 @@ beforeEach(async () => {
 
 describe('GET /api/events/:slug/transitions', () => {
   it('returns empty array when no transitions exist', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await get('/api/events/test-event/transitions').set(
@@ -71,7 +74,7 @@ describe('GET /api/events/:slug/transitions', () => {
   });
 
   it('returns existing transitions', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Stage 1');
 
@@ -91,7 +94,7 @@ describe('GET /api/events/:slug/transitions', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const { token: userToken } = await createUser('other', 'USER');
 
@@ -110,7 +113,7 @@ describe('GET /api/events/:slug/transitions', () => {
 
 describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   it('creates a transition with filter_type ALL', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -126,7 +129,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('creates a transition with filter_type TOP_N', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -140,7 +143,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('returns 400 when filter_value missing for TOP_N', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -152,7 +155,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('returns 400 when filter_value missing for THRESHOLD', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -164,7 +167,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('returns 400 for invalid filter_type', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -176,7 +179,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('upserts an existing transition', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -201,7 +204,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await put('/api/events/test-event/transitions/after-stage/9999')
@@ -212,7 +215,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const s1 = await createStage(ownerToken, 'test-event', 'Qual');
     const { token: userToken } = await createUser('other', 'USER');
@@ -231,7 +234,7 @@ describe('PUT /api/events/:slug/transitions/after-stage/:stageId', () => {
 
 describe('DELETE /api/events/:slug/transitions/:id', () => {
   it('deletes a transition', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
     const s1 = await createStage(token, 'test-event', 'Qual');
 
@@ -254,7 +257,7 @@ describe('DELETE /api/events/:slug/transitions/:id', () => {
   });
 
   it('returns 404 for unknown id', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await createEvent(token);
 
     const res = await del('/api/events/test-event/transitions/9999').set(
@@ -266,7 +269,7 @@ describe('DELETE /api/events/:slug/transitions/:id', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createEvent(ownerToken);
     const s1 = await createStage(ownerToken, 'test-event', 'Qual');
 

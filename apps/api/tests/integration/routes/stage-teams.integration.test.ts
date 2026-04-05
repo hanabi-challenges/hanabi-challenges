@@ -7,10 +7,13 @@ import { get, post, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -62,7 +65,7 @@ beforeEach(async () => {
 
 describe('POST /stages/:stageId/teams', () => {
   it('creates a stage-scoped team', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -83,7 +86,7 @@ describe('POST /stages/:stageId/teams', () => {
   });
 
   it('a user can be on different teams in different stages', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage1 = await createStage(ownerToken);
     const stage2 = await post('/api/events/test-event/stages')
@@ -119,7 +122,7 @@ describe('POST /stages/:stageId/teams', () => {
   });
 
   it('returns 409 when a member already has a confirmed team in this stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -150,7 +153,7 @@ describe('POST /stages/:stageId/teams', () => {
   });
 
   it('auto-registers an invited member who is not yet registered', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -173,7 +176,7 @@ describe('POST /stages/:stageId/teams', () => {
 
 describe('GET /stages/:stageId/teams', () => {
   it('admin sees all stage teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -197,7 +200,7 @@ describe('GET /stages/:stageId/teams', () => {
   });
 
   it('regular user sees only their own stage teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -233,7 +236,7 @@ describe('GET /stages/:stageId/teams', () => {
   });
 
   it('returns 404 for unknown stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
 
     const res = await get('/api/events/test-event/stages/9999/teams').set(
@@ -251,7 +254,7 @@ describe('GET /stages/:stageId/teams', () => {
 
 describe('GET /stages/:stageId/teams/me', () => {
   it('returns the current user team for this stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 
@@ -274,7 +277,7 @@ describe('GET /stages/:stageId/teams/me', () => {
   });
 
   it('returns 404 when user has no team in this stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createStage(ownerToken);
 

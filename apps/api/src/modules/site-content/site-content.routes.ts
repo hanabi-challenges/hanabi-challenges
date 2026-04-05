@@ -3,7 +3,7 @@ import {
   authOptional,
   authRequired,
   AuthenticatedRequest,
-  requireAdmin,
+  requireSiteAdmin,
 } from '../../middleware/authMiddleware';
 import {
   getSiteContentPage,
@@ -16,7 +16,7 @@ const router = Router();
 router.get(
   '/content/pages',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (_req: AuthenticatedRequest, res: Response) => {
     try {
       const pages = await listSiteContentPages();
@@ -48,7 +48,7 @@ router.get(
 router.put(
   '/content/pages/:slug',
   authRequired,
-  requireAdmin,
+  requireSiteAdmin,
   async (req: AuthenticatedRequest, res: Response) => {
     const title = typeof req.body?.title === 'string' ? req.body.title : '';
     const markdown = typeof req.body?.markdown === 'string' ? req.body.markdown : '';

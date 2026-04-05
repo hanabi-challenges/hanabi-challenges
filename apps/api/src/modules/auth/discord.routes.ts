@@ -1,15 +1,12 @@
-// Discord OAuth2 link/unlink + role-sync routes.
+// Discord OAuth2 link/unlink routes.
 //
-// GET  /auth/discord                → redirect to Discord OAuth2
-// GET  /auth/discord/callback       → handle OAuth2 callback, link discord_id
-// DELETE /auth/discord              → unlink Discord account (authenticated)
-// POST /auth/discord/sync           → manually trigger role sync (SUPERADMIN only)
-//
-// Admin UI for managing discord_role_grants is via the system admin page.
+// GET    /auth/discord          → redirect to Discord OAuth2
+// GET    /auth/discord/callback → handle OAuth2 callback, link discord_id
+// DELETE /auth/discord          → unlink Discord account (authenticated)
 
 import crypto from 'crypto';
 import { Router, type Response } from 'express';
-import { authRequired, requireSuperadmin } from '../../middleware/authMiddleware';
+import { authRequired } from '../../middleware/authMiddleware';
 import type { AuthenticatedRequest } from '../../middleware/authMiddleware';
 import { pool } from '../../config/db';
 import {
@@ -17,7 +14,6 @@ import {
   exchangeDiscordCode,
   fetchDiscordUser,
   setUserDiscordId,
-  syncDiscordRoles,
 } from './discord.service';
 
 const router = Router();
@@ -92,21 +88,5 @@ router.delete('/discord', authRequired, async (req: AuthenticatedRequest, res: R
   await setUserDiscordId(req.user!.userId, null);
   res.json({ ok: true });
 });
-
-// POST /auth/discord/sync — trigger sync for all linked users (SUPERADMIN only)
-router.post(
-  '/discord/sync',
-  authRequired,
-  requireSuperadmin,
-  async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const result = await syncDiscordRoles();
-      res.json(result);
-    } catch (err) {
-      console.error('[discord/sync]', err);
-      res.status(500).json({ error: String(err) });
-    }
-  },
-);
 
 export default router;

@@ -7,10 +7,13 @@ import { get, post, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -98,7 +101,7 @@ beforeEach(async () => {
 
 describe('bracket draw creates game skeletons', () => {
   it('creates 1 game skeleton per match when games_count=1', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const { stage, draw } = await setupBracketWithDraw(token, 1);
 
@@ -112,7 +115,7 @@ describe('bracket draw creates game skeletons', () => {
   });
 
   it('creates 3 game skeletons per match when games_count=3', async () => {
-    const { token } = await createUser('owner2', 'ADMIN');
+    const { token } = await createUser('owner2', 'HOST');
     await setupEvent(token);
     const { stage, draw } = await setupBracketWithDraw(token, 3);
 
@@ -132,7 +135,7 @@ describe('bracket draw creates game skeletons', () => {
 
 describe('PATCH /matches/:matchId/games/:gameIndex', () => {
   it('admin can set variant_id and seed_payload on a skeleton', async () => {
-    const { token } = await createUser('owner3', 'ADMIN');
+    const { token } = await createUser('owner3', 'HOST');
     await setupEvent(token);
     const { stage, draw } = await setupBracketWithDraw(token, 1);
 
@@ -146,7 +149,7 @@ describe('PATCH /matches/:matchId/games/:gameIndex', () => {
   });
 
   it('returns 404 for unknown match', async () => {
-    const { token } = await createUser('owner4', 'ADMIN');
+    const { token } = await createUser('owner4', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -157,7 +160,7 @@ describe('PATCH /matches/:matchId/games/:gameIndex', () => {
   });
 
   it('non-admin gets 403', async () => {
-    const { token: adminToken } = await createUser('owner5', 'ADMIN');
+    const { token: adminToken } = await createUser('owner5', 'HOST');
     await setupEvent(adminToken);
     const { stage, draw } = await setupBracketWithDraw(adminToken, 1);
     const { token: userToken } = await createUser('regular5');
@@ -170,7 +173,7 @@ describe('PATCH /matches/:matchId/games/:gameIndex', () => {
   });
 
   it('upserts skeleton when game_index has no row yet', async () => {
-    const { token } = await createUser('owner6', 'ADMIN');
+    const { token } = await createUser('owner6', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token, 'test-event', { match_format: { games_count: 1 } });
     const team = await createTeam(token, 'test-event', stage.id, 'u6a', 'u6b');

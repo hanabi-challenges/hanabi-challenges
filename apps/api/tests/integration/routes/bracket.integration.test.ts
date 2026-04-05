@@ -7,10 +7,13 @@ import { get, post, del, patch, put } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -74,7 +77,7 @@ beforeEach(async () => {
 
 describe('GET /entries', () => {
   it('returns empty list when no entries', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
     const res = await get(`/api/events/test-event/stages/${stage.id}/entries`);
@@ -89,7 +92,7 @@ describe('GET /entries', () => {
 
 describe('POST /entries', () => {
   it('manually adds a team to bracket', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
     const team = await createTeam(token, 'test-event', stage.id, 'alice', 'bob');
@@ -103,7 +106,7 @@ describe('POST /entries', () => {
   });
 
   it('rejects team from another event', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -114,7 +117,7 @@ describe('POST /entries', () => {
   });
 
   it('rejects duplicate enrollment', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
     const team = await createTeam(token, 'test-event', stage.id, 'alice2', 'bob2');
@@ -136,7 +139,7 @@ describe('POST /entries', () => {
 
 describe('DELETE /entries/:entryId', () => {
   it('removes an entry', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
     const team = await createTeam(token, 'test-event', stage.id, 'alice3', 'bob3');
@@ -157,7 +160,7 @@ describe('DELETE /entries/:entryId', () => {
   });
 
   it('returns 404 for unknown entry', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -175,7 +178,7 @@ describe('DELETE /entries/:entryId', () => {
 
 describe('POST /draw', () => {
   it('generates round-1 matches for 4 teams', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -197,7 +200,7 @@ describe('POST /draw', () => {
   });
 
   it('handles byes for 6 teams', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -218,7 +221,7 @@ describe('POST /draw', () => {
   });
 
   it('blocks second draw', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -248,7 +251,7 @@ describe('POST /draw', () => {
 
 describe('POST /advance', () => {
   it('advances to round 2 after round 1 complete (4 teams)', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 
@@ -287,7 +290,7 @@ describe('POST /advance', () => {
   });
 
   it('returns 409 when round not complete', async () => {
-    const { token } = await createUser('owner', 'ADMIN');
+    const { token } = await createUser('owner', 'HOST');
     await setupEvent(token);
     const stage = await createStage(token);
 

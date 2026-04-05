@@ -7,10 +7,13 @@ import { get, post, put, patch } from '../../support/api';
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function createUser(displayName: string, role: 'ADMIN' | 'SUPERADMIN' | 'USER' = 'USER') {
+async function createUser(displayName: string, role: 'HOST' | 'SUPERADMIN' | 'USER' = 'USER') {
   const { token } = await loginOrCreateUser(displayName, 'password');
   if (role !== 'USER') {
-    await pool.query(`UPDATE users SET role = $1 WHERE display_name = $2`, [role, displayName]);
+    await pool.query(`UPDATE users SET roles = ARRAY['USER', $1::TEXT] WHERE display_name = $2`, [
+      role,
+      displayName,
+    ]);
     const elevated = await loginOrCreateUser(displayName, 'password');
     return { token: elevated.token, userId: elevated.user.id };
   }
@@ -84,7 +87,7 @@ beforeEach(async () => {
 
 describe('GET /stages/:stageId/matches', () => {
   it('lists all matches for a stage', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -120,7 +123,7 @@ describe('GET /stages/:stageId/matches', () => {
   });
 
   it('returns empty array when no matches exist', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -140,7 +143,7 @@ describe('GET /stages/:stageId/matches', () => {
 
 describe('GET /stages/:stageId/matches/:matchId', () => {
   it('returns match detail with game_results array', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -173,7 +176,7 @@ describe('GET /stages/:stageId/matches/:matchId', () => {
   });
 
   it('returns 404 for unknown match', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -192,7 +195,7 @@ describe('GET /stages/:stageId/matches/:matchId', () => {
 
 describe('PUT /stages/:stageId/matches/:matchId/status', () => {
   it('transitions PENDING → IN_PROGRESS → COMPLETE', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -227,7 +230,7 @@ describe('PUT /stages/:stageId/matches/:matchId/status', () => {
   });
 
   it('returns 409 for backward transition (COMPLETE → PENDING)', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -265,7 +268,7 @@ describe('PUT /stages/:stageId/matches/:matchId/status', () => {
   });
 
   it('returns 403 for non-admin', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -300,7 +303,7 @@ describe('PUT /stages/:stageId/matches/:matchId/status', () => {
 
 describe('POST /stages/:stageId/matches/:matchId/results', () => {
   it('submits a game result and auto-computes winner', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -332,7 +335,7 @@ describe('POST /stages/:stageId/matches/:matchId/results', () => {
   });
 
   it('winner is null when scores are tied', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -368,7 +371,7 @@ describe('POST /stages/:stageId/matches/:matchId/results', () => {
 
 describe('PATCH /stages/:stageId/matches/:matchId/winner', () => {
   it('admin can override the winner', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 
@@ -398,7 +401,7 @@ describe('PATCH /stages/:stageId/matches/:matchId/winner', () => {
   });
 
   it('returns 400 when winner_team_id is not one of the match teams', async () => {
-    const { token: ownerToken } = await createUser('owner', 'ADMIN');
+    const { token: ownerToken } = await createUser('owner', 'HOST');
     await createAndPublishEvent(ownerToken);
     const stage = await createMatchPlayStage(ownerToken);
 

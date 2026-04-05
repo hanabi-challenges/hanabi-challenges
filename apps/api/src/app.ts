@@ -1,4 +1,5 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
+import http from 'http';
 import { pool } from './config/db';
 import { env } from './config/env';
 import routes from './routes';
@@ -47,6 +48,57 @@ if (env.SIMULATION_MODE) {
 
 // Mount API routes
 app.use(routes);
+
+// Proxy /tracker/* requests to the tracker service running on TRACKER_PORT (default 4001).
+// The tracker is spawned as a subprocess from index.ts on startup.
+// Note: GitHub webhook routes (/tracker/api/webhooks/github) require raw body for HMAC
+// verification; re-serialisation here means webhook signatures will not verify.
+app.use('/tracker', (req: Request, res: Response) => {
+  const trackerPort = parseInt(process.env['TRACKER_PORT'] ?? '4001', 10);
+
+  const body =
+    req.body && typeof req.body === 'object' && Object.keys(req.body as object).length > 0
+      ? JSON.stringify(req.body)
+      : undefined;
+
+  const proxyHeaders: Record<string, string | string[]> = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (v !== undefined) proxyHeaders[k] = v as string | string[];
+  }
+  if (body) {
+    proxyHeaders['content-type'] = 'application/json';
+    proxyHeaders['content-length'] = String(Buffer.byteLength(body));
+  } else {
+    delete proxyHeaders['content-length'];
+  }
+  delete proxyHeaders['transfer-encoding'];
+
+  const proxyReq = http.request(
+    {
+      hostname: '127.0.0.1',
+      port: trackerPort,
+      path: req.originalUrl,
+      method: req.method,
+      headers: proxyHeaders,
+    },
+    (proxyRes) => {
+      res.statusCode = proxyRes.statusCode ?? 502;
+      for (const [k, v] of Object.entries(proxyRes.headers)) {
+        if (v !== undefined) res.setHeader(k, v);
+      }
+      proxyRes.pipe(res);
+    },
+  );
+
+  proxyReq.on('error', () => {
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Tracker service unavailable' });
+    }
+  });
+
+  if (body) proxyReq.write(body);
+  proxyReq.end();
+});
 
 // Global error handler (for any thrown errors)
 app.use(errorHandler);

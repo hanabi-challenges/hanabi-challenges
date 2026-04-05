@@ -9,14 +9,15 @@ class InvalidCredentialsError extends Error {
   code = 'INVALID_CREDENTIALS';
 }
 
-export type Role = UserRole; // "SUPERADMIN" | "ADMIN" | "USER"
+export type Role = UserRole;
 
 export interface AuthUser {
   id: number;
   display_name: string;
-  role: Role;
+  roles: UserRole[];
   color_hex: string;
   text_color: string;
+  token_version: number;
   created_at: string;
 }
 
@@ -36,7 +37,7 @@ export interface TokenIdentityResult {
   canonical_display_name: string;
 }
 
-class UserNotFoundError extends Error {
+export class UserNotFoundError extends Error {
   code = 'USER_NOT_FOUND';
 }
 
@@ -49,9 +50,10 @@ function createToken(user: AuthUser): string {
     {
       userId: user.id,
       displayName: user.display_name,
-      role: user.role,
+      roles: user.roles,
       color_hex: user.color_hex,
       text_color: user.text_color,
+      token_version: user.token_version,
     },
     env.JWT_SECRET,
     { expiresIn: '7d' },
@@ -69,7 +71,7 @@ export async function loginOrCreateUser(
   // 1) Look up the user
   const result = await pool.query(
     `
-    SELECT id, display_name, password_hash, role, color_hex, text_color, created_at
+    SELECT id, display_name, password_hash, roles, token_version, color_hex, text_color, created_at
     FROM users
     WHERE display_name = $1;
     `,
@@ -87,7 +89,7 @@ export async function loginOrCreateUser(
       `
       INSERT INTO users (display_name, password_hash, color_hex, text_color)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, display_name, role, color_hex, text_color, created_at;
+      RETURNING id, display_name, roles, token_version, color_hex, text_color, created_at;
       `,
       [display_name, passwordHash, color_hex, text_color],
     );
@@ -107,7 +109,8 @@ export async function loginOrCreateUser(
     id: number;
     display_name: string;
     password_hash: string;
-    role: Role;
+    roles: UserRole[];
+    token_version: number;
     color_hex: string | null;
     text_color: string | null;
     created_at: string;
@@ -145,9 +148,10 @@ export async function loginOrCreateUser(
   const user: AuthUser = {
     id: userRow.id,
     display_name: userRow.display_name,
-    role: userRow.role,
-    color_hex: userRow.color_hex,
-    text_color: userRow.text_color,
+    roles: userRow.roles,
+    token_version: userRow.token_version,
+    color_hex: userRow.color_hex ?? '#777777',
+    text_color: userRow.text_color ?? '#ffffff',
     created_at: userRow.created_at,
   };
 
@@ -163,7 +167,8 @@ export async function loginOrCreateUser(
 async function normalizeAuthUserFromRow(userRow: {
   id: number;
   display_name: string;
-  role: Role;
+  roles: UserRole[];
+  token_version: number;
   color_hex: string | null;
   text_color: string | null;
   created_at: string;
@@ -187,9 +192,10 @@ async function normalizeAuthUserFromRow(userRow: {
   return {
     id: userRow.id,
     display_name: userRow.display_name,
-    role: userRow.role,
-    color_hex: userRow.color_hex,
-    text_color: userRow.text_color,
+    roles: userRow.roles,
+    token_version: userRow.token_version,
+    color_hex: userRow.color_hex ?? '#777777',
+    text_color: userRow.text_color ?? '#ffffff',
     created_at: userRow.created_at,
   };
 }
@@ -200,7 +206,7 @@ export async function loginExistingUser(
 ): Promise<LoginOnlyResult> {
   const result = await pool.query(
     `
-    SELECT id, display_name, password_hash, role, color_hex, text_color, created_at
+    SELECT id, display_name, password_hash, roles, token_version, color_hex, text_color, created_at
     FROM users
     WHERE display_name = $1;
     `,
@@ -215,7 +221,8 @@ export async function loginExistingUser(
     id: number;
     display_name: string;
     password_hash: string | null;
-    role: Role;
+    roles: UserRole[];
+    token_version: number;
     color_hex: string | null;
     text_color: string | null;
     created_at: string;
@@ -338,12 +345,13 @@ export async function registerUserWithIdentityToken(input: {
     id: number;
     display_name: string;
     password_hash: string | null;
-    role: Role;
+    roles: UserRole[];
+    token_version: number;
     color_hex: string | null;
     text_color: string | null;
     created_at: string;
   }>(
-    `SELECT id, display_name, password_hash, role, color_hex, text_color, created_at
+    `SELECT id, display_name, password_hash, roles, token_version, color_hex, text_color, created_at
      FROM users WHERE display_name = $1 LIMIT 1`,
     [canonicalDisplayName],
   );
@@ -366,7 +374,8 @@ export async function registerUserWithIdentityToken(input: {
     const user: AuthUser = {
       id: row.id,
       display_name: row.display_name,
-      role: row.role,
+      roles: row.roles,
+      token_version: row.token_version,
       color_hex,
       text_color,
       created_at: row.created_at,
@@ -380,7 +389,7 @@ export async function registerUserWithIdentityToken(input: {
   const insertResult = await pool.query(
     `INSERT INTO users (display_name, password_hash, color_hex, text_color)
      VALUES ($1, $2, $3, $4)
-     RETURNING id, display_name, role, color_hex, text_color, created_at`,
+     RETURNING id, display_name, roles, token_version, color_hex, text_color, created_at`,
     [canonicalDisplayName, passwordHash, color_hex, text_color],
   );
 
@@ -418,7 +427,7 @@ export async function recoverPasswordWithIdentityToken(input: {
 
   const existing = await pool.query(
     `
-    SELECT id, display_name, role, color_hex, text_color, created_at
+    SELECT id, display_name, roles, token_version, color_hex, text_color, created_at
     FROM users
     WHERE display_name = $1
     LIMIT 1;
@@ -432,7 +441,8 @@ export async function recoverPasswordWithIdentityToken(input: {
   const userRow = existing.rows[0] as {
     id: number;
     display_name: string;
-    role: Role;
+    roles: UserRole[];
+    token_version: number;
     color_hex: string | null;
     text_color: string | null;
     created_at: string;
@@ -451,6 +461,31 @@ export async function recoverPasswordWithIdentityToken(input: {
   const user = await normalizeAuthUserFromRow(userRow);
   const token = createToken(user);
   return { mode: 'login', user, token };
+}
+
+/**
+ * Update a user's roles and atomically increment token_version,
+ * invalidating any existing sessions for that user.
+ *
+ * This is the single write path for role changes — used by both the
+ * SUPERADMIN admin UI route and the Discord bot webhook.
+ */
+export async function updateUserRolesAndBumpVersion(
+  userId: number,
+  newRoles: UserRole[],
+): Promise<{ roles: UserRole[]; token_version: number }> {
+  const result = await pool.query<{ roles: string[]; token_version: number }>(
+    `UPDATE users
+     SET roles = $1, token_version = token_version + 1
+     WHERE id = $2
+     RETURNING roles, token_version`,
+    [newRoles, userId],
+  );
+  if (!result.rowCount) throw new UserNotFoundError('User not found');
+  return {
+    roles: result.rows[0].roles as UserRole[],
+    token_version: result.rows[0].token_version,
+  };
 }
 
 export function randomHexColor(): string {

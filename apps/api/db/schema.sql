@@ -35,6 +35,7 @@ DROP TABLE IF EXISTS hanabi_variants CASCADE;
 DROP TABLE IF EXISTS simulation_games CASCADE;
 DROP SEQUENCE IF EXISTS simulation_game_id_seq CASCADE;
 DROP TABLE IF EXISTS event_forfeitures CASCADE;
+DROP TABLE IF EXISTS discord_pending_roles CASCADE;
 DROP TABLE IF EXISTS discord_role_grants CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS schema_migrations CASCADE;
@@ -45,36 +46,50 @@ DROP FUNCTION IF EXISTS notify_badge_award_insert() CASCADE;
 ------------------------------------------------------------
 
 CREATE TABLE users (
-  id           SERIAL PRIMARY KEY,
-  display_name CITEXT NOT NULL UNIQUE,
+  id            SERIAL PRIMARY KEY,
+  display_name  CITEXT NOT NULL UNIQUE,
   password_hash TEXT,  -- NULL for shadow accounts created by the replay ingestor
-  role         TEXT NOT NULL DEFAULT 'USER'
-                 CHECK (role IN ('SUPERADMIN', 'ADMIN', 'USER')),
-  color_hex    TEXT NOT NULL DEFAULT '#777777',
-  text_color   TEXT NOT NULL DEFAULT '#ffffff'
-                 CHECK (text_color IN ('#000000', '#ffffff')),
-  discord_id   TEXT,
-  created_at   TIMESTAMPTZ DEFAULT NOW()
+  roles         TEXT[] NOT NULL DEFAULT ARRAY['USER']::TEXT[]
+                  CHECK (roles <@ ARRAY['USER', 'HOST', 'MOD', 'SITE_ADMIN', 'SUPERADMIN']::TEXT[])
+                  CHECK ('USER' = ANY(roles)),
+  color_hex     TEXT NOT NULL DEFAULT '#777777',
+  text_color    TEXT NOT NULL DEFAULT '#ffffff'
+                  CHECK (text_color IN ('#000000', '#ffffff')),
+  token_version INTEGER NOT NULL DEFAULT 1,
+  discord_id    TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_discord_id
   ON users (discord_id) WHERE discord_id IS NOT NULL;
 
 ------------------------------------------------------------
 -- DISCORD ROLE GRANTS
--- Maps (Discord guild_id, role_id) → app role ('ADMIN').
--- When a linked user holds a matching Discord role their app
--- role is promoted to ADMIN during the periodic sync.
+-- Maps (Discord guild_id, role_id) → site app_role.
+-- The Discord bot reads this table to translate Discord roles
+-- into site roles and pushes updates via POST /api/bot/roles.
 ------------------------------------------------------------
 
 CREATE TABLE discord_role_grants (
   id          SERIAL      NOT NULL PRIMARY KEY,
   guild_id    TEXT        NOT NULL,
   role_id     TEXT        NOT NULL,
-  app_role    TEXT        NOT NULL DEFAULT 'ADMIN'
-                CHECK (app_role IN ('ADMIN')),
+  app_role    TEXT        NOT NULL
+                CHECK (app_role IN ('USER', 'HOST', 'MOD', 'SITE_ADMIN', 'SUPERADMIN')),
   description TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (guild_id, role_id)
+);
+
+------------------------------------------------------------
+-- DISCORD PENDING ROLES
+-- Stores role grants for Discord members who haven't yet linked a site account.
+-- Applied and deleted when the user links their Discord account.
+------------------------------------------------------------
+
+CREATE TABLE discord_pending_roles (
+  discord_id TEXT PRIMARY KEY,
+  roles      TEXT[] NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ------------------------------------------------------------
@@ -709,5 +724,9 @@ INSERT INTO schema_migrations (name) VALUES
   ('027_discord_role_grants.sql'),
   ('028_simulation_games.sql'),
   ('029_simulation_ingest_outcome.sql'),
-  ('030_game_metric.sql')
+  ('030_game_metric.sql'),
+  ('031_roles_array.sql'),
+  ('032_token_version.sql'),
+  ('033_discord_role_grants_app_role.sql'),
+  ('034_discord_pending_roles.sql')
 ON CONFLICT (name) DO NOTHING;

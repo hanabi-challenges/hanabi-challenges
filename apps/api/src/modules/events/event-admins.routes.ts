@@ -24,7 +24,7 @@ async function resolveEventAndPermission(
   requiredLevel: 'VIEW' | 'OWNER',
 ): Promise<{ eventId: number; callerRole: EventAdminRole | 'SUPERADMIN' } | null> {
   const slug = String(req.params.slug);
-  const isSuperadmin = req.user?.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: 'Unauthorized' });

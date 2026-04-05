@@ -16,18 +16,18 @@ describe('loginOrCreateUser (integration)', () => {
 
     expect(result.mode).toBe('created');
     expect(result.user.display_name).toBe(TEST_DISPLAY_NAME);
-    expect(result.user.role).toBe('USER'); // default role from your schema
+    expect(result.user.roles).toEqual(['USER']); // default roles from schema
     expect(typeof result.token).toBe('string');
     expect(result.token.length).toBeGreaterThan(0);
 
     // Verify it really hit the DB, using only the user we just created
     const dbCheck = await pool.query(
-      'SELECT display_name, role FROM users WHERE display_name = $1',
+      'SELECT display_name, roles FROM users WHERE display_name = $1',
       [TEST_DISPLAY_NAME],
     );
     expect(dbCheck.rowCount).toBe(1);
     expect(dbCheck.rows[0].display_name).toBe(TEST_DISPLAY_NAME);
-    expect(dbCheck.rows[0].role).toBe('USER');
+    expect(dbCheck.rows[0].roles).toEqual(['USER']);
   });
 
   it('logs in an existing user with correct password', async () => {

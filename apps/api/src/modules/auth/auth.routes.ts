@@ -13,6 +13,7 @@ import {
   recoverPasswordWithIdentityToken,
   registerUserWithIdentityToken,
   resolveHanabIdentityToken,
+  updateUserRolesAndBumpVersion,
   userExistsByDisplayName,
 } from './auth.service';
 import { pool } from '../../config/db';
@@ -192,7 +193,7 @@ router.get('/users/:display_name', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, display_name, role, color_hex, text_color, created_at
+      SELECT id, display_name, roles, color_hex, text_color, created_at
       FROM users
       WHERE display_name = $1;
       `,
@@ -281,7 +282,7 @@ router.get('/users', async (_req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, display_name, color_hex, text_color, role
+      SELECT id, display_name, color_hex, text_color, roles
       FROM users
       ORDER BY display_name;
       `,
@@ -293,71 +294,86 @@ router.get('/users', async (_req: Request, res: Response) => {
   }
 });
 
-async function updateUserRole(req: AuthenticatedRequest, res: Response) {
+const VALID_ROLES = ['USER', 'HOST', 'MOD', 'SITE_ADMIN', 'SUPERADMIN'] as const;
+type GrantableRole = (typeof VALID_ROLES)[number];
+
+async function updateUserRoles(req: AuthenticatedRequest, res: Response) {
   const userId = Number(req.params.id);
-  const { role } = req.body as { role?: string };
+  // Accept either { roles: string[] } (grant full set) or { role: string, action: 'add'|'remove' }
+  const body = req.body as { roles?: string[]; role?: string; action?: string };
   const actor = req.user;
 
   if (Number.isNaN(userId)) {
     return res.status(400).json({ error: 'Invalid user id' });
   }
-  if (role !== 'SUPERADMIN' && role !== 'ADMIN' && role !== 'USER') {
-    return res.status(400).json({ error: 'role must be SUPERADMIN, ADMIN, or USER' });
-  }
   if (actor && actor.userId === userId) {
-    return res.status(400).json({ error: 'You cannot change your own role' });
+    return res.status(400).json({ error: 'You cannot change your own roles' });
   }
+
+  // Determine the new roles array
+  let newRoles: GrantableRole[];
+  if (Array.isArray(body.roles)) {
+    if (!body.roles.every((r) => VALID_ROLES.includes(r as GrantableRole))) {
+      return res
+        .status(400)
+        .json({ error: `roles must be a subset of: ${VALID_ROLES.join(', ')}` });
+    }
+    newRoles = body.roles as GrantableRole[];
+  } else if (typeof body.role === 'string' && (body.action === 'add' || body.action === 'remove')) {
+    if (!VALID_ROLES.includes(body.role as GrantableRole)) {
+      return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
+    }
+    const current = await pool.query<{ roles: string[] }>(`SELECT roles FROM users WHERE id = $1`, [
+      userId,
+    ]);
+    if (!current.rowCount) return res.status(404).json({ error: 'User not found' });
+    const existing = current.rows[0].roles as GrantableRole[];
+    if (body.action === 'add') {
+      newRoles = [...new Set([...existing, body.role as GrantableRole])];
+    } else {
+      newRoles = existing.filter((r) => r !== body.role);
+    }
+  } else {
+    return res.status(400).json({
+      error: 'Provide either { roles: string[] } or { role: string, action: "add"|"remove" }',
+    });
+  }
+
+  // USER must always be present
+  if (!newRoles.includes('USER')) newRoles = ['USER', ...newRoles];
 
   try {
-    const targetResult = await pool.query(
-      `
-      SELECT id, role
-      FROM users
-      WHERE id = $1;
-      `,
+    const targetResult = await pool.query<{ roles: string[] }>(
+      `SELECT roles FROM users WHERE id = $1`,
       [userId],
     );
+    if (!targetResult.rowCount) return res.status(404).json({ error: 'User not found' });
 
-    if (targetResult.rowCount === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    const currentRoles = targetResult.rows[0].roles;
+    const removingSuperadmin =
+      currentRoles.includes('SUPERADMIN') && !newRoles.includes('SUPERADMIN');
 
-    const target = targetResult.rows[0] as { id: number; role: string };
-
-    if (target.role === 'SUPERADMIN' && role !== 'SUPERADMIN') {
+    if (removingSuperadmin) {
       const superadminCountResult = await pool.query<{ count: string }>(
-        `
-        SELECT COUNT(*)::text AS count
-        FROM users
-        WHERE role = 'SUPERADMIN';
-        `,
+        `SELECT COUNT(*)::text AS count FROM users WHERE 'SUPERADMIN' = ANY(roles)`,
       );
-
       const superadminCount = Number(superadminCountResult.rows[0]?.count ?? '0');
       if (superadminCount <= 1) {
-        return res.status(400).json({ error: 'Cannot demote the last SUPERADMIN' });
+        return res.status(400).json({ error: 'Cannot remove SUPERADMIN from the last superadmin' });
       }
     }
 
-    await pool.query(
-      `
-      UPDATE users
-      SET role = $1
-      WHERE id = $2;
-      `,
-      [role, userId],
-    );
-
-    res.json({ id: userId, role });
+    const updated = await updateUserRolesAndBumpVersion(userId, newRoles);
+    res.json({ id: userId, roles: updated.roles });
   } catch (err) {
-    console.error('Error updating role:', err);
-    res.status(500).json({ error: 'Failed to update role' });
+    console.error('Error updating roles:', err);
+    res.status(500).json({ error: 'Failed to update roles' });
   }
 }
 
-// PATCH /api/users/:id/role (SUPERADMIN only)
-router.patch('/users/:id/role', authRequired, requireSuperadmin, updateUserRole);
-// POST alias for convenience
-router.post('/users/:id/role', authRequired, requireSuperadmin, updateUserRole);
+// PATCH /api/users/:id/roles (SUPERADMIN only)
+router.patch('/users/:id/roles', authRequired, requireSuperadmin, updateUserRoles);
+// Legacy path kept for compatibility
+router.patch('/users/:id/role', authRequired, requireSuperadmin, updateUserRoles);
 
 export default router;

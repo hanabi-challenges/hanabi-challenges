@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { authRequired, type AuthenticatedRequest } from '../../middleware/authMiddleware';
+import { authRequired, hasRole, type AuthenticatedRequest } from '../../middleware/authMiddleware';
 import { getEventBySlug } from '../events/events.service';
 import { getEventAdminRole } from '../events/event-admins.service';
 import { getStage } from './stages.service';
@@ -61,7 +61,7 @@ async function resolveContext(
     return null;
   }
 
-  const isGlobalAdmin = req.user!.role === 'ADMIN' || req.user!.role === 'SUPERADMIN';
+  const isGlobalAdmin = hasRole(req.user, 'HOST');
   const event = await getEventBySlug(slug, isGlobalAdmin);
   if (!event) {
     res.status(404).json({ error: 'Event not found' });
@@ -80,7 +80,7 @@ async function resolveContext(
     return null;
   }
 
-  const isSuperadmin = req.user!.role === 'SUPERADMIN';
+  const isSuperadmin = req.user?.roles?.includes('SUPERADMIN') ?? false;
   const role = isSuperadmin ? 'SUPERADMIN' : await getEventAdminRole(event.id, userId);
   const isAdmin = role !== null;
 

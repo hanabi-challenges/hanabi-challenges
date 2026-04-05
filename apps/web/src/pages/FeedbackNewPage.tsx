@@ -15,7 +15,8 @@ import {
   Text,
 } from '../design-system';
 import { useAuth } from '../context/AuthContext';
-import { getLookups, createTicket } from '../features/feedback/api';
+import { getLookups, createTicket, searchMentionUsers } from '../features/feedback/api';
+import { MarkdownEditor } from '../ui/MarkdownEditor';
 import {
   DOMAIN_LABELS,
   TYPE_LABELS,
@@ -239,17 +240,18 @@ export function FeedbackNewPage() {
               error={errors.description}
               helperText="Include as much detail as you can: steps to reproduce, expected vs. actual behavior, etc."
             >
-              <Input
-                multiline
+              <MarkdownEditor
                 rows={7}
                 placeholder="Describe the issue or request in detail…"
                 value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
+                onChange={(v) => {
+                  setDescription(v);
                   if (errors.description)
                     setErrors((prev) => ({ ...prev, description: undefined }));
                 }}
-                fullWidth
+                onMentionSearch={
+                  token ? (q) => searchMentionUsers(q, token).then((r) => r.users) : undefined
+                }
               />
             </InputContainer>
 

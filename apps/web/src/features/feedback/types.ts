@@ -106,23 +106,61 @@ export interface TransitionTicketResponse {
   status_slug: StatusSlug;
 }
 
-export interface TicketHistoryEntry {
+export interface MetadataFieldChange {
+  from: string | null;
+  to: string | null;
+}
+
+export interface MetadataChanges {
+  type?: MetadataFieldChange;
+  domain?: MetadataFieldChange;
+  severity?: MetadataFieldChange;
+  reproducibility?: MetadataFieldChange;
+}
+
+export interface StatusHistoryEntry {
+  kind: 'status';
   id: string;
   from_status_slug: StatusSlug | null;
   to_status_slug: StatusSlug;
   changed_by_display_name: string;
+  changed_by_color_hex?: string | null;
+  changed_by_text_color?: string | null;
   resolution_note: string | null;
   created_at: string;
 }
+
+export interface MetadataHistoryEntry {
+  kind: 'metadata';
+  id: string;
+  changed_by_display_name: string;
+  changed_by_color_hex?: string | null;
+  changed_by_text_color?: string | null;
+  changes: MetadataChanges;
+  created_at: string;
+}
+
+export type TicketHistoryEntry = StatusHistoryEntry | MetadataHistoryEntry;
 
 export interface GetTicketHistoryResponse {
   history: TicketHistoryEntry[];
 }
 
+export interface UpdateTicketMetadataRequest {
+  type_slug?: TicketTypeSlug;
+  domain_slug?: DomainSlug;
+  severity?: BugSeverity | null;
+  reproducibility?: BugReproducibility | null;
+}
+
+export type UpdateTicketMetadataResponse = TicketDetail;
+
 export interface TicketComment {
   id: string;
   ticket_id: string;
   author_display_name: string;
+  author_color_hex?: string | null;
+  author_text_color?: string | null;
   body: string;
   is_internal: boolean;
   created_at: string;
@@ -146,4 +184,14 @@ export interface TicketVoteState {
   ticket_id: string;
   vote_count: number;
   user_has_voted: boolean;
+}
+
+export interface TicketPinState {
+  ticket_id: string;
+  is_pinned: boolean;
+}
+
+export interface TicketSubscriptionState {
+  ticket_id: string;
+  is_subscribed: boolean;
 }

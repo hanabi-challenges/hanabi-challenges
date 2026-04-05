@@ -48,8 +48,19 @@ export const REPRODUCIBILITY_LABELS: Record<string, string> = {
   once: 'Once',
 };
 
-// Valid next statuses for each current status (admin-only transitions)
-export const VALID_NEXT_STATUSES: Record<StatusSlug, StatusSlug[]> = {
+// Valid next statuses by role. Committee can do everything; moderators cannot act from in_review.
+const MODERATOR_TRANSITIONS: Record<StatusSlug, StatusSlug[]> = {
+  submitted: ['triaged', 'rejected', 'closed'],
+  triaged: ['in_review', 'rejected', 'closed'],
+  in_review: [],
+  in_progress: ['resolved', 'rejected', 'closed'],
+  decided: ['in_progress', 'resolved', 'rejected', 'closed'],
+  resolved: [],
+  rejected: [],
+  closed: [],
+};
+
+const COMMITTEE_TRANSITIONS: Record<StatusSlug, StatusSlug[]> = {
   submitted: ['triaged', 'rejected', 'closed'],
   triaged: ['in_review', 'rejected', 'closed'],
   in_review: ['decided', 'rejected', 'closed'],
@@ -59,3 +70,11 @@ export const VALID_NEXT_STATUSES: Record<StatusSlug, StatusSlug[]> = {
   rejected: [],
   closed: [],
 };
+
+/** Returns valid next statuses for a given current status, based on main-app roles. */
+export function getValidNextStatuses(current: StatusSlug, roles: string[]): StatusSlug[] {
+  const isCommittee = roles.includes('SUPERADMIN') || roles.includes('SITE_ADMIN');
+  if (isCommittee) return COMMITTEE_TRANSITIONS[current];
+  if (roles.includes('MOD')) return MODERATOR_TRANSITIONS[current];
+  return [];
+}

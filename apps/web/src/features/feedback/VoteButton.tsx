@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
-import { Button, Inline, MaterialIcon, Text } from '../../design-system';
+import { Button, MaterialIcon, Stack, Text } from '../../design-system';
 import { castVote, removeVote } from './api';
 import type { TicketVoteState } from './types';
 
@@ -8,13 +8,23 @@ type VoteButtonProps = {
   voteState: TicketVoteState;
   token: string | null;
   onVoteChange: (next: TicketVoteState) => void;
+  onLoginRequired: () => void;
 };
 
-export function VoteButton({ voteState, token, onVoteChange }: VoteButtonProps): ReactElement {
+export function VoteButton({
+  voteState,
+  token,
+  onVoteChange,
+  onLoginRequired,
+}: VoteButtonProps): ReactElement {
   const [busy, setBusy] = useState(false);
 
   const handleClick = async () => {
-    if (!token || busy) return;
+    if (!token) {
+      onLoginRequired();
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     try {
       const next = voteState.user_has_voted
@@ -27,20 +37,28 @@ export function VoteButton({ voteState, token, onVoteChange }: VoteButtonProps):
   };
 
   return (
-    <Inline gap="sm" align="center">
+    <Stack gap="xs" align="center">
       <Button
-        variant={voteState.user_has_voted ? 'primary' : 'secondary'}
+        variant="ghost"
         size="sm"
+        icon
         onClick={() => void handleClick()}
-        disabled={!token || busy}
-        aria-label={voteState.user_has_voted ? 'Remove upvote' : 'Upvote'}
+        disabled={busy}
+        aria-label={voteState.user_has_voted ? 'Remove vote' : 'Upvote'}
       >
-        <Inline gap="xs" align="center">
-          <MaterialIcon name="arrow_upward" size={14} />
-          Upvote
-        </Inline>
+        <MaterialIcon
+          name="arrow_shape_up"
+          size={20}
+          style={
+            voteState.user_has_voted
+              ? { color: 'var(--ds-color-accent-strong)', fontVariationSettings: "'FILL' 1" }
+              : undefined
+          }
+        />
       </Button>
-      <Text variant="muted">{voteState.vote_count}</Text>
-    </Inline>
+      <Text variant="body" weight="bold">
+        {voteState.vote_count}
+      </Text>
+    </Stack>
   );
 }

@@ -30,7 +30,6 @@ const contentGroups: ContentGroup[] = [
     title: 'Community',
     links: [
       { label: 'Contact', to: '/admin/content/contact', pathLabel: '/contact' },
-      { label: 'Feedback', to: '/admin/content/feedback', pathLabel: '/feedback' },
       {
         label: 'Code of Conduct',
         to: '/admin/content/code-of-conduct',

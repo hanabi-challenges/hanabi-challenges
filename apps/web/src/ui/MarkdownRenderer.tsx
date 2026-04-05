@@ -330,7 +330,7 @@ type ParsedMarkdown = { tree: Root; definitions: DefinitionsMap };
 
 let lastParsed: { markdown: string; parsed: ParsedMarkdown } | null = null;
 function parseMarkdown(markdown: string): ParsedMarkdown {
-  if (lastParsed?.markdown === markdown) return lastParsed.parsed;
+  if (lastParsed !== null && lastParsed.markdown === markdown) return lastParsed.parsed;
 
   const parsedTree = applyTypographyReplacements(
     unified().use(remarkParse).use(remarkGfm).parse(replaceEmojiShortcodes(markdown)) as Root,

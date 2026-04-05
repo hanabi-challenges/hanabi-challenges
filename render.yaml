@@ -2,7 +2,10 @@ services:
   # ---------------------------------------------------------------------------
   # Production — web (static)
   #
+  # Serves both the main site and the tracker client (merged into /tracker/).
   # Rewrites /api/* and /ws/* to the production API.
+  # Rewrites /tracker/api/* to the tracker API service.
+  # Rewrites /tracker/* to the tracker client SPA's index.html.
   # No preview environments — prod is only deployed from main.
   # ---------------------------------------------------------------------------
   - type: web
@@ -13,7 +16,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/web... && pnpm -C apps/web run build
+    buildCommand: bash scripts/build-with-tracker.sh
     staticPublishPath: ./apps/web/dist
     domains:
       - hanabi-challenges.com
@@ -26,11 +29,20 @@ services:
         source: /ws/*
         destination: wss://api.hanabi-challenges.com/ws/*
       - type: rewrite
+        source: /tracker/api/*
+        destination: https://api.hanabi-challenges.com/tracker/api/*
+      - type: rewrite
+        source: /tracker/health*
+        destination: https://api.hanabi-challenges.com/tracker/health*
+      - type: rewrite
+        source: /tracker/*
+        destination: /tracker/index.html
+      - type: rewrite
         source: /*
         destination: /index.html
 
   # ---------------------------------------------------------------------------
-  # Production — API
+  # Production — API (includes tracker server as co-located subprocess)
   #
   # No preview environments — prod is only deployed from main.
   # ---------------------------------------------------------------------------
@@ -53,8 +65,42 @@ services:
       - key: JWT_SECRET
         sync: false
       # SIMULATION_MODE intentionally absent — defaults to false
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
-    startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
+      # Tracker server (runs on port 4001 internally, proxied from /tracker/**)
+      - key: TRACKER_DATABASE_URL
+        fromDatabase:
+          name: hanabi-challenges-db
+          property: connectionString
+      - key: TRACKER_PORT
+        value: "4001"
+      - key: TRACKER_LOG_LEVEL
+        value: info
+      - key: TRACKER_BASE_URL
+        value: https://hanabi-challenges.com
+      # GitHub App integration
+      - key: GITHUB_APP_ID
+        value: "3209877"
+      - key: GITHUB_APP_INSTALLATION_ID
+        value: "119668621"
+      - key: GITHUB_REPO_OWNER
+        value: hanabi-challenges
+      - key: GITHUB_REPO_NAME
+        value: hanabi-challenges
+      # Sensitive — set manually in Render dashboard
+      - key: GITHUB_APP_PRIVATE_KEY
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      # Discord integrations — set manually in Render dashboard before go-live
+      # - key: DISCORD_MOD_WEBHOOK_URL
+      #   sync: false
+      # - key: DISCORD_BOT_TOKEN
+      #   sync: false
+      # - key: DISCORD_GUILD_ID
+      #   value: ...
+      # - key: DISCORD_MOD_ROLE_NAME
+      #   value: ...
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... --filter @tracker/server... && pnpm -C apps/api run build && pnpm -C tracker/types run build && pnpm -C tracker/server run build
+    startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && pnpm tracker:db:migrate && node apps/api/dist/src/index.js
     healthCheckPath: /health
     domains:
       - api.hanabi-challenges.com
@@ -76,7 +122,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/web... && pnpm -C apps/web run build
+    buildCommand: bash scripts/build-with-tracker.sh
     staticPublishPath: ./apps/web/dist
     routes:
       - type: rewrite
@@ -86,11 +132,20 @@ services:
         source: /ws/*
         destination: wss://hanabi-challenges-api-test.onrender.com/ws/*
       - type: rewrite
+        source: /tracker/api/*
+        destination: https://hanabi-challenges-api-test.onrender.com/tracker/api/*
+      - type: rewrite
+        source: /tracker/health*
+        destination: https://hanabi-challenges-api-test.onrender.com/tracker/health*
+      - type: rewrite
+        source: /tracker/*
+        destination: /tracker/index.html
+      - type: rewrite
         source: /*
         destination: /index.html
 
   # ---------------------------------------------------------------------------
-  # Test — API (permanent + PR previews)
+  # Test — API (permanent + PR previews, includes tracker as co-located subprocess)
   #
   # SIMULATION_MODE=true mounts mock hanab-live routes on this server.
   # The hanab-live client auto-routes to http://localhost:$PORT (same process).
@@ -122,8 +177,19 @@ services:
         generateValue: true
       - key: SIMULATION_MODE
         value: true
-    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... && pnpm -C apps/api run build
-    startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && node apps/api/dist/src/index.js
+      # Tracker server (runs on port 4001 internally, proxied from /tracker/**)
+      - key: TRACKER_DATABASE_URL
+        fromDatabase:
+          name: hanabi-challenges-db-test
+          property: connectionString
+      - key: TRACKER_PORT
+        value: "4001"
+      - key: TRACKER_LOG_LEVEL
+        value: info
+      - key: TRACKER_BASE_URL
+        value: https://hanabi-challenges-test.onrender.com
+    buildCommand: COREPACK_INTEGRITY_KEYS=0 corepack enable && COREPACK_INTEGRITY_KEYS=0 corepack prepare pnpm@10.31.0 --activate && pnpm install --frozen-lockfile --filter @hanabi-challenges/api... --filter @tracker/server... && pnpm -C apps/api run build && pnpm -C tracker/types run build && pnpm -C tracker/server run build
+    startCommand: node apps/api/dist/src/scripts/bootstrap-db.js && pnpm tracker:db:migrate && node apps/api/dist/src/index.js
     healthCheckPath: /health
 
 databases:

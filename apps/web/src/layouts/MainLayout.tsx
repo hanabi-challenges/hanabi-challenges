@@ -142,9 +142,9 @@ export const MainLayout: React.FC = () => {
               <Link className="main-layout__footer-link" to="/contact">
                 Contact
               </Link>
-              <Link className="main-layout__footer-link" to="/feedback">
+              <a className="main-layout__footer-link" href="/tracker/">
                 Feedback
-              </Link>
+              </a>
               <Link className="main-layout__footer-link" to="/code-of-conduct">
                 Code of Conduct
               </Link>

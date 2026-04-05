@@ -20,6 +20,8 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // Tracker E2E tests require a running tracker server; skip unless TRACKER_E2E_URL is set.
+      testIgnore: process.env.TRACKER_E2E_URL ? undefined : '**/tracker/**',
     },
   ],
   webServer: {

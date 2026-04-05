@@ -7,7 +7,6 @@ const EDITABLE_SLUGS = new Set([
   'about',
   'faq',
   'contact',
-  'feedback',
   'code-of-conduct',
   'legal',
   'terms',

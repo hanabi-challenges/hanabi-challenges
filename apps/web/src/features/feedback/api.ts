@@ -8,9 +8,13 @@ import type {
   ListCommentsResponse,
   ListTicketsResponse,
   LookupsResponse,
+  TicketPinState,
+  TicketSubscriptionState,
   TicketVoteState,
   TransitionTicketRequest,
   TransitionTicketResponse,
+  UpdateTicketMetadataRequest,
+  UpdateTicketMetadataResponse,
 } from './types';
 
 const BASE = '/tracker/api';
@@ -84,11 +88,64 @@ export function getVoteState(ticketId: string, token?: string | null): Promise<T
 }
 
 export function castVote(ticketId: string, token: string): Promise<TicketVoteState> {
-  return req(`/tickets/${ticketId}/votes`, { method: 'POST' }, token);
+  return req(
+    `/tickets/${ticketId}/votes`,
+    { method: 'POST', body: JSON.stringify({ action: 'add' }) },
+    token,
+  );
 }
 
 export function removeVote(ticketId: string, token: string): Promise<TicketVoteState> {
-  return req(`/tickets/${ticketId}/votes`, { method: 'DELETE' }, token);
+  return req(
+    `/tickets/${ticketId}/votes`,
+    { method: 'POST', body: JSON.stringify({ action: 'remove' }) },
+    token,
+  );
+}
+
+export function getPinState(ticketId: string, token?: string | null): Promise<TicketPinState> {
+  return req(`/tickets/${ticketId}/pins`, {}, token);
+}
+
+export function setPinned(
+  ticketId: string,
+  pinned: boolean,
+  token: string,
+): Promise<TicketPinState> {
+  return req(`/tickets/${ticketId}/pins`, { method: pinned ? 'POST' : 'DELETE' }, token);
+}
+
+export function getSubscriptionState(
+  ticketId: string,
+  token?: string | null,
+): Promise<TicketSubscriptionState> {
+  return req(`/tickets/${ticketId}/subscriptions`, {}, token);
+}
+
+export function setSubscribed(
+  ticketId: string,
+  subscribed: boolean,
+  token: string,
+): Promise<TicketSubscriptionState> {
+  return req(
+    `/tickets/${ticketId}/subscriptions`,
+    { method: subscribed ? 'POST' : 'DELETE' },
+    token,
+  );
+}
+
+export interface MentionUser {
+  id: number;
+  display_name: string;
+  color_hex: string;
+  text_color: string;
+}
+
+export function searchMentionUsers(
+  q: string,
+  token: string | null,
+): Promise<{ users: MentionUser[] }> {
+  return req(`/users/mentions?${new URLSearchParams({ q }).toString()}`, {}, token);
 }
 
 export function transitionStatus(
@@ -97,4 +154,20 @@ export function transitionStatus(
   token: string,
 ): Promise<TransitionTicketResponse> {
   return req(`/tickets/${ticketId}/status`, { method: 'PATCH', body: JSON.stringify(data) }, token);
+}
+
+export function updateTicketMetadata(
+  ticketId: string,
+  data: UpdateTicketMetadataRequest,
+  token: string,
+): Promise<UpdateTicketMetadataResponse> {
+  return req(
+    `/tickets/${ticketId}/metadata`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    token,
+  );
+}
+
+export function deleteTicket(ticketId: string, token: string): Promise<void> {
+  return req(`/tickets/${ticketId}`, { method: 'DELETE' }, token);
 }

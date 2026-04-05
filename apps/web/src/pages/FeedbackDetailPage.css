@@ -1,3 +1,5 @@
+/* Responsive layout — kept here because it requires media queries
+   which cannot be expressed via design-system component props alone. */
 .feedback-detail__layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -7,58 +9,120 @@
 
 @media (min-width: 768px) {
   .feedback-detail__layout {
-    grid-template-columns: 1fr 280px;
+    grid-template-columns: 64px 1fr;
+  }
+  /* Actions column is last in DOM (content-first for mobile), but placed left on desktop */
+  .feedback-detail__actions {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .feedback-detail__content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* Mod layout: actions | content | sidebar */
+  .feedback-detail__layout--mod {
+    grid-template-columns: 64px 1fr 260px;
+  }
+  .feedback-detail__layout--mod .feedback-detail__content {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .feedback-detail__layout--mod .feedback-detail__mod {
+    grid-column: 3;
+    grid-row: 1;
   }
 }
 
-.feedback-detail__timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ds-space-sm);
+.feedback-detail__mod {
+  border-left: 1px solid var(--ds-color-border);
+  padding-left: var(--ds-space-md);
 }
 
-.feedback-detail__timeline-entry {
+.feedback-detail__danger-btn {
+  color: var(--ds-color-status-danger) !important;
+  border-color: var(--ds-color-status-danger) !important;
+}
+
+.feedback-detail__danger-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ds-color-status-danger) 8%, transparent) !important;
+}
+
+/* Breadcrumb current-page title: truncate long titles */
+.feedback-detail__breadcrumb-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+/* ── GitHub-style activity timeline ─────────────────────────────────────── */
+
+.timeline-row {
   display: flex;
-  gap: var(--ds-space-sm);
   align-items: flex-start;
+  gap: var(--ds-space-sm);
+  position: relative;
 }
 
-.feedback-detail__timeline-dot {
-  width: 28px;
-  height: 28px;
+/* Connecting line: runs from this node's center to the top of the next node */
+.timeline-row:not(:last-child) {
+  padding-bottom: var(--ds-space-sm);
+}
+
+.timeline-row:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 12px; /* centre of the 24 px node */
+  bottom: 0;
+  left: 11px; /* centres a 2 px line inside the 24 px node column */
+  width: 2px;
+  background: var(--ds-color-border);
+  z-index: 0;
+}
+
+/* The circular node that sits on the line */
+.timeline-node {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: var(--ds-color-surface-muted);
-  border: 1px solid var(--ds-color-border);
+  background: var(--ds-color-surface);
+  border: 2px solid var(--ds-color-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  font-weight: 700;
-  font-size: var(--ds-textScale-3-fontSize, 12px);
+  position: relative;
+  z-index: 1;
   color: var(--ds-color-text-muted);
 }
 
-.feedback-detail__timeline-dot--transition {
-  background: var(--ds-color-tone-info-bg);
-  border-color: transparent;
-  color: var(--ds-color-tone-info-text);
-}
-
-.feedback-detail__timeline-body {
+.timeline-content {
   flex: 1;
   min-width: 0;
-  padding-top: 4px;
+  padding-top: 3px; /* nudges inline text to align with node centre */
 }
 
-.feedback-detail__meta-row {
+/* Comment cards and input card */
+.activity-comment {
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-md);
+  overflow: hidden;
+  /* reset the top-nudge so the card top aligns with the node top */
+  margin-top: -3px;
+}
+
+.activity-comment__header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: baseline;
-  gap: var(--ds-space-xs);
-  margin-bottom: var(--ds-space-xxs);
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-xs) var(--ds-space-sm);
+  background: var(--ds-color-surface-muted);
+  border-bottom: 1px solid var(--ds-color-border);
 }
 
-.feedback-detail__comment-text {
-  color: var(--ds-color-text);
-  line-height: var(--ds-typography-lineHeight-relaxed);
+.activity-comment__body {
+  padding: var(--ds-space-sm);
 }

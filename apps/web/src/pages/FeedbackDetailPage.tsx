@@ -6,12 +6,14 @@ import {
   Button,
   Heading,
   Inline,
+  Input,
   Main,
   MaterialIcon,
   Modal,
   PageContainer,
   PageHeader,
   Section,
+  Select,
   Stack,
   Text,
 } from '../design-system';
@@ -31,6 +33,9 @@ import {
   setSubscribed,
   createComment,
   searchMentionUsers,
+  updateTicketMetadata,
+  deleteTicket,
+  transitionStatus,
 } from '../features/feedback/api';
 import {
   STATUS_CONFIG,
@@ -38,14 +43,22 @@ import {
   DOMAIN_LABELS,
   SEVERITY_LABELS,
   REPRODUCIBILITY_LABELS,
+  getValidNextStatuses,
 } from '../features/feedback/statusConfig';
 import type {
   TicketDetail,
   TicketHistoryEntry,
+  StatusHistoryEntry,
+  MetadataHistoryEntry,
   TicketComment,
   TicketVoteState,
   TicketPinState,
   TicketSubscriptionState,
+  StatusSlug,
+  BugSeverity,
+  BugReproducibility,
+  TicketTypeSlug,
+  DomainSlug,
 } from '../features/feedback/types';
 import './FeedbackDetailPage.css';
 
@@ -68,10 +81,12 @@ function formatDate(iso: string) {
   });
 }
 
+const TERMINAL_STATUSES = new Set<StatusSlug>(['resolved', 'rejected', 'closed']);
+
 export function FeedbackDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -82,6 +97,7 @@ export function FeedbackDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const [commentBody, setCommentBody] = useState('');
   const [commentBusy, setCommentBusy] = useState(false);
@@ -89,6 +105,24 @@ export function FeedbackDetailPage() {
 
   const [pinBusy, setPinBusy] = useState(false);
   const [subscribeBusy, setSubscribeBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Status transition state
+  const [transitionTo, setTransitionTo] = useState<StatusSlug | ''>('');
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [transitionBusy, setTransitionBusy] = useState(false);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
+
+  // Metadata edit state — initialised from ticket on load
+  const [metaTypeSlug, setMetaTypeSlug] = useState<TicketTypeSlug | ''>('');
+  const [metaDomainSlug, setMetaDomainSlug] = useState<DomainSlug | ''>('');
+  const [metaSeverity, setMetaSeverity] = useState<BugSeverity | 'none' | ''>('');
+  const [metaReproducibility, setMetaReproducibility] = useState<BugReproducibility | 'none' | ''>(
+    '',
+  );
+  const [metaBusy, setMetaBusy] = useState(false);
+  const [metaError, setMetaError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -108,12 +142,22 @@ export function FeedbackDetailPage() {
         setVoteState(votes);
         setPinState(pins);
         setSubscriptionState(subs);
+        setMetaTypeSlug(t.type_slug);
+        setMetaDomainSlug(t.domain_slug);
+        setMetaSeverity(t.severity ?? 'none');
+        setMetaReproducibility(t.reproducibility ?? 'none');
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Failed to load ticket.');
       })
       .finally(() => setLoading(false));
   }, [id, token]);
+
+  const isMod =
+    user !== null &&
+    (user.roles.includes('SUPERADMIN') ||
+      user.roles.includes('SITE_ADMIN') ||
+      user.roles.includes('MOD'));
 
   const togglePin = async () => {
     if (!token) {
@@ -149,8 +193,6 @@ export function FeedbackDetailPage() {
     ? (q: string) => searchMentionUsers(q, token).then((r) => r.users)
     : undefined;
 
-  // Build a display_name → color map from all loaded user data so that
-  // @mention pills in ticket descriptions and comments render with their colors.
   const mentionColors = useMemo<MentionColorMap>(() => {
     const map: MentionColorMap = {};
     if (ticket) {
@@ -194,6 +236,78 @@ export function FeedbackDetailPage() {
     }
   };
 
+  const submitTransition = async () => {
+    if (!id || !token || !transitionTo || !ticket) return;
+    setTransitionBusy(true);
+    setTransitionError(null);
+    try {
+      await transitionStatus(
+        id,
+        { to_status: transitionTo, resolution_note: resolutionNote.trim() || undefined },
+        token,
+      );
+      const [t, { history }, { comments }] = await Promise.all([
+        getTicket(id),
+        getTicketHistory(id),
+        getTicketComments(id),
+      ]);
+      setTicket(t);
+      setTimeline(buildTimeline(history, comments));
+      setTransitionTo('');
+      setResolutionNote('');
+    } catch (err) {
+      setTransitionError(err instanceof Error ? err.message : 'Failed to transition status.');
+    } finally {
+      setTransitionBusy(false);
+    }
+  };
+
+  const submitMetadata = async () => {
+    if (!id || !token || !ticket) return;
+    setMetaBusy(true);
+    setMetaError(null);
+    try {
+      const updated = await updateTicketMetadata(
+        id,
+        {
+          type_slug: metaTypeSlug as TicketTypeSlug,
+          domain_slug: metaDomainSlug as DomainSlug,
+          severity: metaSeverity === 'none' ? null : (metaSeverity as BugSeverity) || undefined,
+          reproducibility:
+            metaReproducibility === 'none'
+              ? null
+              : (metaReproducibility as BugReproducibility) || undefined,
+        },
+        token,
+      );
+      setTicket(updated);
+      const { history } = await getTicketHistory(id);
+      setTimeline((prev) => {
+        const comments = prev
+          .filter((e) => e.kind === 'comment')
+          .map((e) => e.data as TicketComment);
+        return buildTimeline(history, comments);
+      });
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : 'Failed to update metadata.');
+    } finally {
+      setMetaBusy(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!id || !token) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteTicket(id, token);
+      navigate('/feedback');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete ticket.');
+      setDeleteBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <Main>
@@ -226,21 +340,19 @@ export function FeedbackDetailPage() {
     tone: 'neutral' as const,
   };
 
+  const validNextStatuses = user ? getValidNextStatuses(ticket.status_slug, user.roles) : [];
+
+  const needsResolutionNote = transitionTo ? TERMINAL_STATUSES.has(transitionTo) : false;
+
   return (
     <Main>
       <PageContainer>
         <Section paddingY="lg" baseLevel={1}>
           <Stack gap="sm">
-            {/* Back nav */}
-            <Button variant="ghost" size="sm" onClick={() => navigate('/feedback')}>
-              <Inline gap="xxs" align="center">
-                <MaterialIcon name="chevron_left" size={14} />
-                Feedback
-              </Inline>
-            </Button>
-
-            <div className="feedback-detail__layout">
-              {/* Content column — right on desktop, top on mobile */}
+            <div
+              className={`feedback-detail__layout${isMod ? ' feedback-detail__layout--mod' : ''}`}
+            >
+              {/* Content column */}
               <div className="feedback-detail__content">
                 <Stack gap="md">
                   {/* Title + status badge */}
@@ -249,41 +361,26 @@ export function FeedbackDetailPage() {
                     actions={<Badge tone={statusTone}>{statusLabel}</Badge>}
                   />
 
-                  {/* Description — rendered as markdown */}
+                  {/* Description */}
                   <MarkdownRenderer markdown={ticket.description} mentionColors={mentionColors} />
 
-                  {/* Metadata: type/domain/severity badges left, attribution right */}
-                  <Inline justify="space-between" align="center" wrap>
-                    <Inline gap="xs" align="center" wrap>
-                      <Badge size="sm">{TYPE_LABELS[ticket.type_slug] ?? ticket.type_slug}</Badge>
+                  {/* Metadata badges */}
+                  <Inline gap="xs" align="center" wrap>
+                    <Badge size="sm">{TYPE_LABELS[ticket.type_slug] ?? ticket.type_slug}</Badge>
+                    <Badge size="sm">
+                      {DOMAIN_LABELS[ticket.domain_slug] ?? ticket.domain_slug}
+                    </Badge>
+                    {ticket.severity ? (
+                      <Badge size="sm">{SEVERITY_LABELS[ticket.severity] ?? ticket.severity}</Badge>
+                    ) : null}
+                    {ticket.reproducibility ? (
                       <Badge size="sm">
-                        {DOMAIN_LABELS[ticket.domain_slug] ?? ticket.domain_slug}
+                        {REPRODUCIBILITY_LABELS[ticket.reproducibility] ?? ticket.reproducibility}
                       </Badge>
-                      {ticket.severity ? (
-                        <Badge size="sm">
-                          {SEVERITY_LABELS[ticket.severity] ?? ticket.severity}
-                        </Badge>
-                      ) : null}
-                      {ticket.reproducibility ? (
-                        <Badge size="sm">
-                          {REPRODUCIBILITY_LABELS[ticket.reproducibility] ?? ticket.reproducibility}
-                        </Badge>
-                      ) : null}
-                    </Inline>
-                    <Inline gap="xs" align="center">
-                      <UserPill
-                        name={ticket.submitted_by_display_name}
-                        color={ticket.submitted_by_color_hex}
-                        textColor={ticket.submitted_by_text_color}
-                      />
-                      <Text variant="caption">{formatDate(ticket.created_at)}</Text>
-                      {ticket.updated_at !== ticket.created_at ? (
-                        <Text variant="caption">(updated {formatDate(ticket.updated_at)})</Text>
-                      ) : null}
-                    </Inline>
+                    ) : null}
                   </Inline>
 
-                  {/* Activity timeline — entries + comment box connected by a vertical line */}
+                  {/* Activity timeline */}
                   <div className="activity-timeline">
                     {timeline.map((entry) =>
                       entry.kind === 'history' ? (
@@ -297,7 +394,6 @@ export function FeedbackDetailPage() {
                       ),
                     )}
 
-                    {/* Terminal node: comment input (logged-in) or login prompt */}
                     {token ? (
                       <div className="timeline-row">
                         <div className="timeline-node">
@@ -346,10 +442,9 @@ export function FeedbackDetailPage() {
                 </Stack>
               </div>
 
-              {/* Actions column — left on desktop, bottom on mobile */}
+              {/* Actions column — left mini-rail */}
               <div className="feedback-detail__actions">
                 <Stack gap="md" align="center">
-                  {/* Vote */}
                   {voteState ? (
                     <VoteButton
                       voteState={voteState}
@@ -359,7 +454,6 @@ export function FeedbackDetailPage() {
                     />
                   ) : null}
 
-                  {/* Pin + follow */}
                   <Stack gap="xs" align="center">
                     <Button
                       variant="ghost"
@@ -411,6 +505,124 @@ export function FeedbackDetailPage() {
                 </Stack>
               </div>
 
+              {/* Mod sidebar — right rail, mods only */}
+              {isMod ? (
+                <div className="feedback-detail__mod">
+                  <Stack gap="lg">
+                    {/* Status transition */}
+                    <Stack gap="sm">
+                      <Heading level={5}>Change status</Heading>
+                      <Select
+                        options={validNextStatuses.map((s) => ({
+                          value: s,
+                          label: STATUS_CONFIG[s]?.label ?? s,
+                        }))}
+                        value={transitionTo}
+                        onChange={(v) => {
+                          setTransitionTo(v as StatusSlug);
+                          setResolutionNote('');
+                          setTransitionError(null);
+                        }}
+                        placeholder="Select next status…"
+                        disabled={transitionBusy || validNextStatuses.length === 0}
+                      />
+                      {needsResolutionNote ? (
+                        <Input
+                          multiline
+                          rows={3}
+                          value={resolutionNote}
+                          onChange={(e) => setResolutionNote(e.target.value)}
+                          placeholder="Resolution note (optional)"
+                          disabled={transitionBusy}
+                        />
+                      ) : null}
+                      {transitionError ? <Alert variant="error" message={transitionError} /> : null}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => void submitTransition()}
+                        disabled={transitionBusy || !transitionTo}
+                      >
+                        {transitionBusy ? 'Applying…' : 'Apply'}
+                      </Button>
+                    </Stack>
+
+                    {/* Metadata edit */}
+                    <Stack gap="sm">
+                      <Heading level={5}>Edit metadata</Heading>
+                      <Select
+                        options={Object.entries(TYPE_LABELS).map(([v, l]) => ({
+                          value: v,
+                          label: l,
+                        }))}
+                        value={metaTypeSlug}
+                        onChange={(v) => setMetaTypeSlug(v as TicketTypeSlug)}
+                        placeholder="Type…"
+                        disabled={metaBusy}
+                      />
+                      <Select
+                        options={Object.entries(DOMAIN_LABELS).map(([v, l]) => ({
+                          value: v,
+                          label: l,
+                        }))}
+                        value={metaDomainSlug}
+                        onChange={(v) => setMetaDomainSlug(v as DomainSlug)}
+                        placeholder="Domain…"
+                        disabled={metaBusy}
+                      />
+                      <Select
+                        options={[
+                          { value: 'none', label: 'None' },
+                          ...Object.entries(SEVERITY_LABELS).map(([v, l]) => ({
+                            value: v,
+                            label: l,
+                          })),
+                        ]}
+                        value={metaSeverity}
+                        onChange={(v) => setMetaSeverity(v as BugSeverity | 'none')}
+                        placeholder="Severity…"
+                        disabled={metaBusy}
+                      />
+                      <Select
+                        options={[
+                          { value: 'none', label: 'None' },
+                          ...Object.entries(REPRODUCIBILITY_LABELS).map(([v, l]) => ({
+                            value: v,
+                            label: l,
+                          })),
+                        ]}
+                        value={metaReproducibility}
+                        onChange={(v) => setMetaReproducibility(v as BugReproducibility | 'none')}
+                        placeholder="Reproducibility…"
+                        disabled={metaBusy}
+                      />
+                      {metaError ? <Alert variant="error" message={metaError} /> : null}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void submitMetadata()}
+                        disabled={metaBusy}
+                      >
+                        {metaBusy ? 'Saving…' : 'Save metadata'}
+                      </Button>
+                    </Stack>
+
+                    {/* Delete */}
+                    <Stack gap="sm">
+                      <Heading level={5}>Danger zone</Heading>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="feedback-detail__danger-btn"
+                        onClick={() => setDeleteModalOpen(true)}
+                      >
+                        Delete ticket
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </div>
+              ) : null}
+
               {/* Login prompt modal */}
               <Modal
                 open={loginModalOpen}
@@ -430,6 +642,43 @@ export function FeedbackDetailPage() {
                   </Button>
                 </Inline>
               </Modal>
+
+              {/* Delete confirmation modal */}
+              <Modal
+                open={deleteModalOpen}
+                onClose={() => {
+                  setDeleteModalOpen(false);
+                  setDeleteError(null);
+                }}
+                maxWidth="400px"
+              >
+                <Heading level={3}>Delete ticket?</Heading>
+                <Text variant="body">
+                  This will permanently remove the ticket from the list. This action cannot be
+                  undone.
+                </Text>
+                {deleteError ? <Alert variant="error" message={deleteError} /> : null}
+                <Inline gap="sm">
+                  <Button
+                    variant="outline"
+                    className="feedback-detail__danger-btn"
+                    onClick={() => void confirmDelete()}
+                    disabled={deleteBusy}
+                  >
+                    {deleteBusy ? 'Deleting…' : 'Yes, delete'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setDeleteModalOpen(false);
+                      setDeleteError(null);
+                    }}
+                    disabled={deleteBusy}
+                  >
+                    Cancel
+                  </Button>
+                </Inline>
+              </Modal>
             </div>
           </Stack>
         </Section>
@@ -439,10 +688,15 @@ export function FeedbackDetailPage() {
 }
 
 function HistoryEntry({ entry }: { entry: TicketHistoryEntry }) {
+  if (entry.kind === 'metadata') {
+    return <MetadataHistoryEntryRow entry={entry} />;
+  }
+  return <StatusHistoryEntryRow entry={entry} />;
+}
+
+function StatusHistoryEntryRow({ entry }: { entry: StatusHistoryEntry }) {
   const toLabel = STATUS_CONFIG[entry.to_status_slug]?.label ?? entry.to_status_slug;
-  const action = entry.from_status_slug
-    ? `changed the status to ${toLabel}`
-    : `opened the ticket as ${toLabel}`;
+  const action = entry.from_status_slug ? `changed the status to ${toLabel}` : `opened the ticket`;
   return (
     <div className="timeline-row">
       <div className="timeline-node">
@@ -458,6 +712,50 @@ function HistoryEntry({ entry }: { entry: TicketHistoryEntry }) {
           <Text variant="caption">{action}</Text>
           <Text variant="caption">· {formatDate(entry.created_at)}</Text>
         </Inline>
+        {entry.resolution_note ? (
+          <Text variant="caption" style={{ marginTop: 4 }}>
+            {entry.resolution_note}
+          </Text>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MetadataHistoryEntryRow({ entry }: { entry: MetadataHistoryEntry }) {
+  const fieldLabels: Record<string, string> = {
+    type: 'type',
+    domain: 'domain',
+    severity: 'severity',
+    reproducibility: 'reproducibility',
+  };
+  const changeDescriptions = Object.entries(entry.changes).map(([field, change]) => {
+    const label = fieldLabels[field] ?? field;
+    const from = change.from ?? 'none';
+    const to = change.to ?? 'none';
+    return `${label}: ${from} → ${to}`;
+  });
+
+  return (
+    <div className="timeline-row">
+      <div className="timeline-node">
+        <MaterialIcon name="edit_note" size={12} />
+      </div>
+      <div className="timeline-content">
+        <Inline gap="xs" align="center">
+          <UserPill
+            name={entry.changed_by_display_name}
+            color={entry.changed_by_color_hex}
+            textColor={entry.changed_by_text_color}
+          />
+          <Text variant="caption">updated metadata</Text>
+          <Text variant="caption">· {formatDate(entry.created_at)}</Text>
+        </Inline>
+        {changeDescriptions.length > 0 ? (
+          <Text variant="caption" style={{ marginTop: 4 }}>
+            {changeDescriptions.join(', ')}
+          </Text>
+        ) : null}
       </div>
     </div>
   );

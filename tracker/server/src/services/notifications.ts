@@ -13,9 +13,11 @@ import { logger } from '../logger.js';
 export async function fanoutNotification(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number | null,
   eventType: NotificationEventType,
 ): Promise<void> {
+  if (actorId === null) return; // System-triggered events (e.g. GitHub Bot) have no actor to notify
+
   try {
     await recordNotificationEvent(sql, ticketId, actorId, eventType);
   } catch (err) {

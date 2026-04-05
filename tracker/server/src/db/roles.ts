@@ -11,16 +11,19 @@ export async function assignRole(
   sql: Sql,
   userId: string,
   roleSlug: RoleSlug,
-  grantedBy: string,
+  grantedBy: number,
 ): Promise<{ ok: true } | { ok: false; reason: 'already_assigned' | 'role_not_found' }> {
   const [role] = await sql<{ id: number }[]>`
     SELECT id FROM roles WHERE name = ${roleSlug}
   `;
   if (!role) return { ok: false, reason: 'role_not_found' };
 
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) return { ok: false, reason: 'role_not_found' };
+
   const rows = await sql<{ id: string }[]>`
-    INSERT INTO user_role_assignments (user_id, role_id, granted_by)
-    VALUES (${userId}, ${role.id}, ${grantedBy})
+    INSERT INTO tracker_role_assignments (user_id, role_id, granted_by)
+    VALUES (${numericUserId}, ${role.id}, ${grantedBy})
     ON CONFLICT DO NOTHING
     RETURNING id
   `;
@@ -37,17 +40,20 @@ export async function revokeRole(
   sql: Sql,
   userId: string,
   roleSlug: RoleSlug,
-  revokedBy: string,
+  revokedBy: number,
 ): Promise<{ ok: true } | { ok: false; reason: 'not_assigned' | 'role_not_found' }> {
   const [role] = await sql<{ id: number }[]>`
     SELECT id FROM roles WHERE name = ${roleSlug}
   `;
   if (!role) return { ok: false, reason: 'role_not_found' };
 
+  const numericUserId = parseInt(userId, 10);
+  if (isNaN(numericUserId)) return { ok: false, reason: 'not_assigned' };
+
   const rows = await sql<{ id: string }[]>`
-    UPDATE user_role_assignments
+    UPDATE tracker_role_assignments
     SET revoked_at = now(), revoked_by = ${revokedBy}
-    WHERE user_id = ${userId}
+    WHERE user_id = ${numericUserId}
       AND role_id = ${role.id}
       AND revoked_at IS NULL
     RETURNING id

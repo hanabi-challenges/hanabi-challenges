@@ -5,7 +5,7 @@ import type { TicketSummary } from '@tracker/types';
 export async function flagTicketForReview(
   sql: Sql,
   ticketId: string,
-  flaggedById: string,
+  flaggedById: number,
 ): Promise<void> {
   await sql`
     UPDATE tickets
@@ -31,7 +31,7 @@ export async function closeAsDuplicate(
   ticketId: string,
   canonicalTicketId: string,
   closedStatusId: number,
-  changedById: string,
+  changedById: number,
 ): Promise<void> {
   await sql`
     WITH updated AS (
@@ -80,7 +80,7 @@ export async function listReadyForReviewTickets(sql: Sql): Promise<TicketSummary
     JOIN ticket_types tt ON tt.id = t.type_id
     JOIN domains      d  ON d.id  = t.domain_id
     JOIN statuses     s  ON s.id  = t.current_status_id
-    JOIN users        u  ON u.id  = t.submitted_by
+    JOIN public.users u  ON u.id  = t.submitted_by
     WHERE t.ready_for_review_at IS NOT NULL
     ORDER BY t.ready_for_review_at ASC
   `;
@@ -108,7 +108,7 @@ export async function getPlanningSignal(
     JOIN ticket_types tt ON tt.id = t.type_id
     JOIN domains      d  ON d.id  = t.domain_id
     JOIN statuses     s  ON s.id  = t.current_status_id
-    JOIN users        u  ON u.id  = t.submitted_by
+    JOIN public.users u  ON u.id  = t.submitted_by
     LEFT JOIN ticket_votes tv ON tv.ticket_id = t.id
     WHERE s.is_terminal = FALSE
       ${typeId !== undefined ? sql`AND t.type_id = ${typeId}` : sql``}

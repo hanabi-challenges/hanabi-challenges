@@ -29,7 +29,7 @@ import {
   getPendingRoleGrants,
   markRoleGrantsApplied,
 } from '../db/discord-bot.js';
-import { upsertTrackerUser, resolveUserRole } from '../db/users.js';
+import { findTrackerUser, resolveUserRole } from '../db/users.js';
 
 const { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_MOD_ROLE_NAME } = env;
 
@@ -93,7 +93,7 @@ async function handleRoleChange(oldMember: GuildMember, newMember: GuildMember):
 
 async function applyPendingGrants(
   discordUserId: string,
-  userId: string,
+  userId: number,
   guild: import('discord.js').Guild,
 ): Promise<void> {
   const modRoleName = DISCORD_MOD_ROLE_NAME!;
@@ -140,8 +140,15 @@ async function handleTokenCommand(
   }
 
   try {
-    // Upsert the tracker user
-    const trackerUser = await upsertTrackerUser(sql, hanabLiveUsername, hanabLiveUsername);
+    // Look up the tracker user by display name
+    const trackerUser = await findTrackerUser(sql, hanabLiveUsername);
+    if (!trackerUser) {
+      await interaction.reply({
+        content: `No hanab.live account found for username **${hanabLiveUsername}**. Please make sure you have logged in to the site first.`,
+        ephemeral: true,
+      });
+      return;
+    }
 
     // Link the Discord identity
     const linkResult = await linkDiscordIdentity(

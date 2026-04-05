@@ -12,11 +12,11 @@ vi.mock('../../../src/db/pool.js', () => ({
   getPool: vi.fn(() => mockSql),
 }));
 
-const mockUpsertTrackerUser = vi.fn<() => Promise<TrackerUserRow>>();
+const mockFindTrackerUser = vi.fn<() => Promise<TrackerUserRow | null>>();
 const mockResolveUserRole = vi.fn<() => Promise<RoleSlug>>();
 
 vi.mock('../../../src/db/users.js', () => ({
-  upsertTrackerUser: mockUpsertTrackerUser,
+  findTrackerUser: mockFindTrackerUser,
   resolveUserRole: mockResolveUserRole,
 }));
 
@@ -102,10 +102,23 @@ describe('requireTrackerAuth', () => {
     expect(errorCode(res)).toBe('UNAUTHORIZED');
   });
 
+  it('returns 401 when user not found in public.users', async () => {
+    mockFindTrackerUser.mockResolvedValue(null);
+
+    const req = makeReq({ hanabLiveUsername: 'unknown' });
+    const res = makeRes();
+    const next = makeNext();
+
+    await requireTrackerAuth(req, res, next);
+
+    expect(res._status).toBe(401);
+    expect(errorCode(res)).toBe('UNAUTHORIZED');
+    expect(next.called).toBe(false);
+  });
+
   it('returns 403 when account_status is banned', async () => {
-    mockUpsertTrackerUser.mockResolvedValue({
-      id: 'user-1',
-      hanablive_username: 'alice',
+    mockFindTrackerUser.mockResolvedValue({
+      id: 1,
       display_name: 'Alice',
       account_status: 'banned',
     });
@@ -122,9 +135,8 @@ describe('requireTrackerAuth', () => {
   });
 
   it('returns 403 when account_status is restricted', async () => {
-    mockUpsertTrackerUser.mockResolvedValue({
-      id: 'user-1',
-      hanablive_username: 'bob',
+    mockFindTrackerUser.mockResolvedValue({
+      id: 2,
       display_name: 'Bob',
       account_status: 'restricted',
     });
@@ -140,9 +152,8 @@ describe('requireTrackerAuth', () => {
   });
 
   it('attaches trackerUser and calls next() for an active community_member', async () => {
-    mockUpsertTrackerUser.mockResolvedValue({
-      id: 'user-2',
-      hanablive_username: 'carol',
+    mockFindTrackerUser.mockResolvedValue({
+      id: 3,
       display_name: 'Carol',
       account_status: 'active',
     });
@@ -156,15 +167,14 @@ describe('requireTrackerAuth', () => {
 
     expect(next.error).toBeUndefined();
     const trackerUser = (req as unknown as Record<string, unknown>).trackerUser as TrackerUser;
-    expect(trackerUser.id).toBe('user-2');
+    expect(trackerUser.id).toBe(3);
     expect(trackerUser.role).toBe('community_member');
     expect(trackerUser.account_status).toBe('active');
   });
 
   it('uses hanabLiveUsername as displayName fallback when displayName is absent', async () => {
-    mockUpsertTrackerUser.mockResolvedValue({
-      id: 'user-3',
-      hanablive_username: 'dave',
+    mockFindTrackerUser.mockResolvedValue({
+      id: 4,
       display_name: 'dave',
       account_status: 'active',
     });
@@ -176,12 +186,12 @@ describe('requireTrackerAuth', () => {
 
     await requireTrackerAuth(req, res, next);
 
-    expect(mockUpsertTrackerUser).toHaveBeenCalledWith(mockSql, 'dave', 'dave');
+    expect(mockFindTrackerUser).toHaveBeenCalledWith(mockSql, 'dave');
   });
 
   it('calls next(err) when DB throws', async () => {
     const boom = new Error('db error');
-    mockUpsertTrackerUser.mockRejectedValue(boom);
+    mockFindTrackerUser.mockRejectedValue(boom);
 
     const req = makeReq({ hanabLiveUsername: 'eve' });
     const res = makeRes();
@@ -200,7 +210,7 @@ describe('requirePermission', () => {
     const req = {} as unknown as Record<string, unknown>;
     if (role !== undefined) {
       req.trackerUser = {
-        id: 'u',
+        id: 1,
         hanablive_username: 'x',
         display_name: 'X',
         account_status: 'active',

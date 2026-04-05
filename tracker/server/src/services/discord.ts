@@ -24,7 +24,7 @@ interface TicketActorInfo {
 async function fetchTicketActorInfo(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number,
 ): Promise<TicketActorInfo | null> {
   const [row] = await sql<TicketActorInfo[]>`
     SELECT
@@ -32,8 +32,8 @@ async function fetchTicketActorInfo(
       u.display_name AS actor_display_name,
       s.slug        AS status_slug
     FROM tickets t
-    JOIN statuses s ON s.id = t.current_status_id
-    JOIN users    u ON u.id = ${actorId}
+    JOIN statuses      s ON s.id = t.current_status_id
+    JOIN public.users  u ON u.id = ${actorId}
     WHERE t.id = ${ticketId}
   `;
   return row ?? null;
@@ -69,7 +69,7 @@ function buildPayload(info: TicketActorInfo, eventType: NotificationEventType): 
 export async function sendDiscordWebhook(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number,
   eventType: NotificationEventType,
   eventId: string | null,
 ): Promise<void> {

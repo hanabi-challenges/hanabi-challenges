@@ -31,3 +31,15 @@ export interface TicketVoteState {
   vote_count: number;
   user_has_voted: boolean;
 }
+
+/** Response body for the pin state on a ticket. */
+export interface TicketPinState {
+  ticket_id: string;
+  is_pinned: boolean;
+}
+
+/** Response body for the subscription state on a ticket. */
+export interface TicketSubscriptionState {
+  ticket_id: string;
+  is_subscribed: boolean;
+}

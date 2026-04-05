@@ -10,7 +10,7 @@ import type { UserNotification, NotificationEventType } from '@tracker/types';
 export async function recordNotificationEvent(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number,
   eventType: NotificationEventType,
 ): Promise<void> {
   await sql`
@@ -42,7 +42,7 @@ interface NotificationRow {
 /** Returns all notifications for a user, newest first. */
 export async function listUserNotifications(
   sql: Sql,
-  userId: string,
+  userId: number,
 ): Promise<{ notifications: UserNotification[]; unread_count: number }> {
   const rows = await sql<NotificationRow[]>`
     SELECT
@@ -69,7 +69,7 @@ export async function listUserNotifications(
 export async function markNotificationRead(
   sql: Sql,
   notificationId: string,
-  userId: string,
+  userId: number,
 ): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE user_notifications

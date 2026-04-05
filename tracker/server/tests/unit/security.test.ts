@@ -7,6 +7,11 @@
  * any database call is made.
  *
  * Public routes (/tracker/health, /tracker/health/db) are intentionally excluded.
+ * Auth-aware public routes (optionalTrackerAuth) are also excluded:
+ *   GET /tracker/api/tickets         — publicly readable, pins sort first when authed
+ *   GET /tracker/api/tickets/:id/votes        — public; auth-aware for user_has_voted
+ *   GET /tracker/api/tickets/:id/pins         — public; auth-aware for is_pinned
+ *   GET /tracker/api/tickets/:id/subscriptions — public; auth-aware for is_subscribed
  */
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
@@ -21,7 +26,7 @@ const app = createApp();
 const PROTECTED_ROUTES: [string, string][] = [
   // Tickets
   ['post', '/tracker/api/tickets'],
-  ['get', '/tracker/api/tickets'],
+  // GET /tracker/api/tickets uses optionalTrackerAuth — publicly readable
   ['get', '/tracker/api/tickets/ready-for-review'],
   ['get', '/tracker/api/tickets/planning-signal'],
   ['get', '/tracker/api/tickets/search?q=test'],
@@ -31,11 +36,17 @@ const PROTECTED_ROUTES: [string, string][] = [
   ['delete', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/flag'],
   ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/duplicate'],
   ['get', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/history'],
+  ['patch', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/metadata'],
+  ['delete', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001'],
   // Discussion (mounted under /tracker/api/tickets/:ticketId)
   ['get', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/comments'],
   ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/comments'],
-  ['get', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/votes'],
+  // GET /tracker/api/tickets/:id/votes uses optionalTrackerAuth — publicly readable
   ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/votes'],
+  ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/pins'],
+  ['delete', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/pins'],
+  ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/subscriptions'],
+  ['delete', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/subscriptions'],
   // Me
   ['get', '/tracker/api/me/notifications'],
   ['patch', '/tracker/api/me/notifications/00000000-0000-0000-0000-000000000001/read'],

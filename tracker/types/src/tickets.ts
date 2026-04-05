@@ -86,17 +86,53 @@ export interface TransitionTicketResponse {
   status_slug: StatusSlug;
 }
 
-/** A single entry in the ticket status history. */
-export interface TicketHistoryEntry {
+/** A single status transition entry in the ticket history. */
+export interface StatusHistoryEntry {
+  kind: 'status';
   id: string;
   from_status_slug: StatusSlug | null;
   to_status_slug: StatusSlug;
-  changed_by_display_name: string;
+  changed_by_display_name: string | null;
+  changed_by_color_hex: string | null;
+  changed_by_text_color: string | null;
   resolution_note: string | null;
   created_at: string;
 }
+
+/** The shape of changes in a metadata history entry. */
+export interface MetadataChanges {
+  type?: { from: TicketTypeSlug; to: TicketTypeSlug };
+  domain?: { from: DomainSlug; to: DomainSlug };
+  severity?: { from: BugSeverity | null; to: BugSeverity | null };
+  reproducibility?: { from: BugReproducibility | null; to: BugReproducibility | null };
+}
+
+/** A single metadata edit entry in the ticket history. */
+export interface MetadataHistoryEntry {
+  kind: 'metadata';
+  id: string;
+  changed_by_display_name: string;
+  changed_by_color_hex: string | null;
+  changed_by_text_color: string | null;
+  changes: MetadataChanges;
+  created_at: string;
+}
+
+/** A merged history entry — either a status transition or a metadata edit. */
+export type TicketHistoryEntry = StatusHistoryEntry | MetadataHistoryEntry;
 
 /** Response body for GET /tracker/api/tickets/:id/history */
 export interface GetTicketHistoryResponse {
   history: TicketHistoryEntry[];
 }
+
+/** Request body for PATCH /tracker/api/tickets/:id/metadata */
+export interface UpdateTicketMetadataRequest {
+  type_slug?: TicketTypeSlug;
+  domain_slug?: DomainSlug;
+  severity?: BugSeverity | null;
+  reproducibility?: BugReproducibility | null;
+}
+
+/** Response body for a successful metadata update — the full updated ticket. */
+export type UpdateTicketMetadataResponse = TicketDetail;

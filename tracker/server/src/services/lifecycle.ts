@@ -7,8 +7,12 @@ import { getTicketByIssueNodeId } from '../db/github.js';
 import { env } from '../env.js';
 import { logger } from '../logger.js';
 
-/** Fixed UUID for the GitHub bot system user (seeded in migration 20260328000000). */
-const GITHUB_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
+/**
+ * Sentinel value for GitHub-triggered transitions.
+ * After the use_public_users migration, the GitHub Bot has no public.users entry.
+ * changed_by and actor_id are nullable for system-triggered events.
+ */
+const GITHUB_BOT_USER_ID: null = null;
 
 /**
  * Submits a new ticket.
@@ -23,7 +27,7 @@ const GITHUB_BOT_USER_ID = '00000000-0000-0000-0000-000000000001';
  */
 export async function submitTicket(
   sql: Sql,
-  submittedBy: string,
+  submittedBy: number,
   input: CreateTicketInput,
 ): Promise<{ id: string }> {
   const submittedStatusId = await getStatusId(sql, 'submitted');
@@ -76,7 +80,7 @@ export async function transitionTicket(
   sql: Sql,
   ticketId: string,
   toStatusSlug: string,
-  changedBy: string,
+  changedBy: number,
   roleSlug: string,
   resolutionNote?: string,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {

@@ -9,7 +9,7 @@ export type AssignmentSource = 'manual' | 'discord_sync';
 
 /** A tracker user as resolved by the auth middleware. */
 export interface TrackerUser {
-  id: string;
+  id: number;
   hanablive_username: string;
   display_name: string;
   account_status: AccountStatus;

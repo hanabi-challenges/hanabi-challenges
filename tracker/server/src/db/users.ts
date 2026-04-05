@@ -51,19 +51,31 @@ export async function findTrackerUser(
 
 /**
  * Returns the highest-privilege active role for the given user.
- * Defaults to 'community_member' when no explicit assignment exists.
+ * Explicit tracker_role_assignments take precedence; if none exist,
+ * SUPERADMIN/SITE_ADMIN on the main app implicitly maps to 'committee'.
  * Priority: committee > moderator > community_member.
  */
 export async function resolveUserRole(sql: Sql, userId: number): Promise<RoleSlug> {
-  const rows = await sql<{ name: string }[]>`
-    SELECT r.name
-    FROM tracker_role_assignments tra
-    JOIN roles r ON r.id = tra.role_id
-    WHERE tra.user_id = ${userId}
-      AND tra.revoked_at IS NULL
+  const [row] = await sql<{ assignments: string[]; site_roles: string[] }[]>`
+    SELECT
+      COALESCE(
+        ARRAY_AGG(r.name) FILTER (WHERE tra.id IS NOT NULL AND tra.revoked_at IS NULL),
+        '{}'
+      ) AS assignments,
+      COALESCE(u.roles, '{}') AS site_roles
+    FROM public.users u
+    LEFT JOIN tracker_role_assignments tra ON tra.user_id = u.id
+    LEFT JOIN roles r ON r.id = tra.role_id
+    WHERE u.id = ${userId}
+    GROUP BY u.roles
   `;
-  if (rows.some((r) => r.name === 'committee')) return 'committee';
-  if (rows.some((r) => r.name === 'moderator')) return 'moderator';
+  if (!row) return 'community_member';
+  if (row.assignments.includes('committee')) return 'committee';
+  if (row.assignments.includes('moderator')) return 'moderator';
+  // Fall back to main-app roles: SUPERADMIN/SITE_ADMIN → committee
+  if (row.site_roles.includes('SUPERADMIN') || row.site_roles.includes('SITE_ADMIN')) {
+    return 'committee';
+  }
   return 'community_member';
 }
 

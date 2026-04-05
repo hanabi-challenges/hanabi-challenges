@@ -7,6 +7,8 @@ import type {
   GetTicketHistoryResponse,
   TransitionTicketRequest,
   TransitionTicketResponse,
+  UpdateTicketMetadataRequest,
+  UpdateTicketMetadataResponse,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
 import {
@@ -15,6 +17,8 @@ import {
   getStatusId,
   searchTickets,
   getTicketHistory,
+  softDeleteTicket,
+  updateTicketMetadata,
 } from '../db/tickets.js';
 import { submitTicket, transitionTicket } from '../services/lifecycle.js';
 import {
@@ -27,6 +31,7 @@ import {
 } from '../db/moderation.js';
 import {
   requireTrackerAuth,
+  optionalTrackerAuth,
   requirePermission,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
@@ -78,19 +83,20 @@ router.post(
   },
 );
 
-/** GET /tracker/api/tickets — list tickets (paginated) */
+/** GET /tracker/api/tickets — list tickets (paginated); pins sort first for authenticated users */
 router.get(
   '/',
-  requireTrackerAuth,
+  optionalTrackerAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const rawLimit = Number(req.query.limit ?? 25);
     const rawOffset = Number(req.query.offset ?? 0);
     const limit = Number.isInteger(rawLimit) && rawLimit > 0 && rawLimit <= 100 ? rawLimit : 25;
     const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+    const userId = (req as Partial<AuthenticatedRequest>).trackerUser?.id ?? null;
 
     try {
       const sql = getPool();
-      const { tickets, total } = await listTickets(sql, { limit, offset });
+      const { tickets, total } = await listTickets(sql, { limit, offset, userId });
       const body: ListTicketsResponse = { tickets, total, limit, offset };
       res.json(body);
     } catch (err) {
@@ -455,6 +461,74 @@ router.get(
       const history = await getTicketHistory(sql, id);
       const body: GetTicketHistoryResponse = { history };
       res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** PATCH /tracker/api/tickets/:id/metadata — update editable metadata fields */
+router.patch(
+  '/:id/metadata',
+  requireTrackerAuth,
+  requirePermission('ticket.triage'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+
+    try {
+      const sql = getPool();
+      const authed = req as AuthenticatedRequest;
+      const input = req.body as UpdateTicketMetadataRequest;
+      const ticket = await updateTicketMetadata(sql, id, input, authed.trackerUser.id);
+      if (!ticket) {
+        res.status(404).json({
+          error: {
+            code: 'NOT_FOUND',
+            message: 'Ticket not found.',
+            correlationId: authed.correlationId,
+          },
+        });
+        return;
+      }
+      const body: UpdateTicketMetadataResponse = ticket;
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /tracker/api/tickets/:id — soft-delete a ticket */
+router.delete(
+  '/:id',
+  requireTrackerAuth,
+  requirePermission('ticket.triage'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const id = req.params['id'] as string | undefined;
+    if (!id) {
+      res.status(404).json({
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Ticket not found.',
+          correlationId: (req as AuthenticatedRequest).correlationId,
+        },
+      });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await softDeleteTicket(sql, id);
+      res.status(204).end();
     } catch (err) {
       next(err);
     }

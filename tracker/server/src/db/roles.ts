@@ -9,9 +9,9 @@ import type { RoleSlug } from '@tracker/types';
  */
 export async function assignRole(
   sql: Sql,
-  userId: string,
+  userId: number,
   roleSlug: RoleSlug,
-  grantedBy: string,
+  grantedBy: number,
 ): Promise<{ ok: true } | { ok: false; reason: 'already_assigned' | 'role_not_found' }> {
   const [role] = await sql<{ id: number }[]>`
     SELECT id FROM roles WHERE name = ${roleSlug}
@@ -19,7 +19,7 @@ export async function assignRole(
   if (!role) return { ok: false, reason: 'role_not_found' };
 
   const rows = await sql<{ id: string }[]>`
-    INSERT INTO user_role_assignments (user_id, role_id, granted_by)
+    INSERT INTO tracker_role_assignments (user_id, role_id, granted_by)
     VALUES (${userId}, ${role.id}, ${grantedBy})
     ON CONFLICT DO NOTHING
     RETURNING id
@@ -35,9 +35,9 @@ export async function assignRole(
  */
 export async function revokeRole(
   sql: Sql,
-  userId: string,
+  userId: number,
   roleSlug: RoleSlug,
-  revokedBy: string,
+  revokedBy: number,
 ): Promise<{ ok: true } | { ok: false; reason: 'not_assigned' | 'role_not_found' }> {
   const [role] = await sql<{ id: number }[]>`
     SELECT id FROM roles WHERE name = ${roleSlug}
@@ -45,7 +45,7 @@ export async function revokeRole(
   if (!role) return { ok: false, reason: 'role_not_found' };
 
   const rows = await sql<{ id: string }[]>`
-    UPDATE user_role_assignments
+    UPDATE tracker_role_assignments
     SET revoked_at = now(), revoked_by = ${revokedBy}
     WHERE user_id = ${userId}
       AND role_id = ${role.id}

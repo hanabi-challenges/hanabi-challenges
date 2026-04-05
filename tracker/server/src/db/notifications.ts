@@ -10,7 +10,7 @@ import type { UserNotification, NotificationEventType } from '@tracker/types';
 export async function recordNotificationEvent(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number | null,
   eventType: NotificationEventType,
 ): Promise<void> {
   await sql`
@@ -24,7 +24,7 @@ export async function recordNotificationEvent(
     FROM ticket_subscriptions ts
     CROSS JOIN event
     WHERE ts.ticket_id = ${ticketId}
-      AND ts.user_id  <> ${actorId}
+      AND (${actorId}::INTEGER IS NULL OR ts.user_id <> ${actorId})
     ON CONFLICT (user_id, event_id) DO NOTHING
   `;
 }
@@ -42,7 +42,7 @@ interface NotificationRow {
 /** Returns all notifications for a user, newest first. */
 export async function listUserNotifications(
   sql: Sql,
-  userId: string,
+  userId: number,
 ): Promise<{ notifications: UserNotification[]; unread_count: number }> {
   const rows = await sql<NotificationRow[]>`
     SELECT
@@ -56,7 +56,7 @@ export async function listUserNotifications(
     FROM user_notifications un
     JOIN notification_events ne ON ne.id   = un.event_id
     JOIN tickets              t  ON t.id   = ne.ticket_id
-    JOIN users                u  ON u.id   = ne.actor_id
+    JOIN public.users         u  ON u.id   = ne.actor_id
     WHERE un.user_id = ${userId}
     ORDER BY un.created_at DESC
   `;
@@ -69,7 +69,7 @@ export async function listUserNotifications(
 export async function markNotificationRead(
   sql: Sql,
   notificationId: string,
-  userId: string,
+  userId: number,
 ): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE user_notifications

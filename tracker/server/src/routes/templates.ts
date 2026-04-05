@@ -32,7 +32,7 @@ router.get(
           tt.template_updated_at,
           u.display_name AS updated_by_display_name
         FROM ticket_types tt
-        LEFT JOIN users u ON u.id = tt.template_updated_by
+        LEFT JOIN public.users u ON u.id = tt.template_updated_by
         WHERE tt.slug = ${type_slug}
       `;
 
@@ -144,7 +144,7 @@ router.get(
           tt.template_updated_at,
           u.display_name AS updated_by_display_name
         FROM ticket_types tt
-        LEFT JOIN users u ON u.id = tt.template_updated_by
+        LEFT JOIN public.users u ON u.id = tt.template_updated_by
         ORDER BY tt.sort_order
       `;
       res.json({

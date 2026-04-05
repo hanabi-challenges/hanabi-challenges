@@ -22,9 +22,9 @@ interface SeedUser {
  *
  * Wipes all tracker ticket data (tickets, comments, votes, history,
  * notifications) and seeds a set of users with their roles.
- * Users already present are upserted; roles are replaced.
+ * Users are upserted into public.users; tracker_role_assignments are replaced.
  *
- * Returns the seeded users with their UUIDs so tests can reference them
+ * Returns the seeded users with their IDs so tests can reference them
  * by ID in subsequent calls.
  */
 router.post('/seed', async (req: Request, res: Response): Promise<void> => {
@@ -49,41 +49,39 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
     await sql`DELETE FROM tickets`;
     // Wipe role assignments so each seed call starts with a clean role state.
     // Roles are re-assigned below for each seeded user.
-    await sql`DELETE FROM user_role_assignments`;
+    await sql`DELETE FROM tracker_role_assignments`;
 
-    // Upsert each requested user and assign their role.
-    const seeded: { username: string; id: string; role: string }[] = [];
+    // Upsert each requested user into public.users and assign their tracker role.
+    const seeded: { username: string; id: number; role: string }[] = [];
 
     for (const u of users) {
-      const username = u.username;
-      const displayName = u.display_name ?? username;
+      const displayName = u.display_name ?? u.username;
 
-      const [row] = await sql<{ id: string }[]>`
-        INSERT INTO users (hanablive_username, display_name)
-        VALUES (${username}, ${displayName})
-        ON CONFLICT (hanablive_username) DO UPDATE SET display_name = EXCLUDED.display_name
+      const [row] = await sql<{ id: number }[]>`
+        INSERT INTO public.users (display_name)
+        VALUES (${displayName})
+        ON CONFLICT (display_name) DO UPDATE SET display_name = EXCLUDED.display_name
         RETURNING id
       `;
-      if (!row) throw new Error(`seed: failed to upsert user ${username}`);
+      if (!row) throw new Error(`seed: failed to upsert user ${displayName}`);
 
       const userId = row.id;
 
       if (u.role && u.role !== 'community_member') {
-        // Resolve role id
         const [roleRow] = await sql<{ id: number }[]>`
           SELECT id FROM roles WHERE name = ${u.role}
         `;
         if (!roleRow) throw new Error(`seed: unknown role ${u.role}`);
 
         await sql`
-          INSERT INTO user_role_assignments (user_id, role_id, granted_by)
+          INSERT INTO tracker_role_assignments (user_id, role_id, granted_by)
           VALUES (${userId}, ${roleRow.id}, ${userId})
-          ON CONFLICT (user_id, role_id) WHERE revoked_at IS NULL DO NOTHING
+          ON CONFLICT DO NOTHING
         `;
       }
 
       const resolvedRole = u.role ?? 'community_member';
-      seeded.push({ username, id: userId, role: resolvedRole });
+      seeded.push({ username: u.username, id: userId, role: resolvedRole });
     }
 
     res.json({ seeded });
@@ -96,7 +94,7 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
 /**
  * GET /tracker/api/test/user/:username
  *
- * Returns the tracker user record for a given hanabLiveUsername.
+ * Returns the tracker user record for a given display_name.
  * Used by tests to look up user IDs without going through the main auth flow.
  */
 router.get('/user/:username', async (req: Request, res: Response): Promise<void> => {
@@ -108,8 +106,8 @@ router.get('/user/:username', async (req: Request, res: Response): Promise<void>
 
   try {
     const sql = getPool();
-    const [row] = await sql<{ id: string; hanablive_username: string; display_name: string }[]>`
-      SELECT id, hanablive_username, display_name FROM users WHERE hanablive_username = ${username}
+    const [row] = await sql<{ id: number; display_name: string }[]>`
+      SELECT id, display_name FROM public.users WHERE display_name = ${username}
     `;
     if (!row) {
       res.status(404).json({ error: 'not found' });

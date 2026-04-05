@@ -21,7 +21,7 @@ const app = createApp();
 const PROTECTED_ROUTES: [string, string][] = [
   // Tickets
   ['post', '/tracker/api/tickets'],
-  ['get', '/tracker/api/tickets'],
+  // GET /tracker/api/tickets is public (optionalTrackerAuth) — no 401
   ['get', '/tracker/api/tickets/ready-for-review'],
   ['get', '/tracker/api/tickets/planning-signal'],
   ['get', '/tracker/api/tickets/search?q=test'],
@@ -34,7 +34,7 @@ const PROTECTED_ROUTES: [string, string][] = [
   // Discussion (mounted under /tracker/api/tickets/:ticketId)
   ['get', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/comments'],
   ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/comments'],
-  ['get', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/votes'],
+  // GET .../votes is public (optionalTrackerAuth) — no 401
   ['post', '/tracker/api/tickets/00000000-0000-0000-0000-000000000001/votes'],
   // Me
   ['get', '/tracker/api/me/notifications'],

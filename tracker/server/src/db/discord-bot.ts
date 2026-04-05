@@ -23,11 +23,11 @@ export async function recordRoleSyncEvent(
  */
 export async function linkDiscordIdentity(
   sql: Sql,
-  userId: string,
+  userId: number,
   discordUserId: string,
   discordUsername: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'already_linked' }> {
-  const rows = await sql<{ user_id: string }[]>`
+  const rows = await sql<{ user_id: number }[]>`
     INSERT INTO discord_identities (user_id, discord_user_id, discord_username)
     VALUES (${userId}, ${discordUserId}, ${discordUsername})
     ON CONFLICT (discord_user_id) DO NOTHING
@@ -73,8 +73,8 @@ export async function markRoleGrantsApplied(sql: Sql, ids: string[]): Promise<vo
 export async function getUserByDiscordId(
   sql: Sql,
   discordUserId: string,
-): Promise<{ user_id: string } | null> {
-  const [row] = await sql<{ user_id: string }[]>`
+): Promise<{ user_id: number } | null> {
+  const [row] = await sql<{ user_id: number }[]>`
     SELECT user_id FROM discord_identities WHERE discord_user_id = ${discordUserId}
   `;
   return row ?? null;

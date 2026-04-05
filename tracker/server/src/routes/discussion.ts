@@ -3,6 +3,8 @@ import type {
   CreateCommentRequest,
   CreateCommentResponse,
   ListCommentsResponse,
+  TicketPinState,
+  TicketSubscriptionState,
   TicketVoteState,
 } from '@tracker/types';
 import { getPool } from '../db/pool.js';
@@ -12,9 +14,16 @@ import {
   getVoteState,
   addVote,
   removeVote,
+  getPinState,
+  addPin,
+  removePin,
+  getSubscriptionState,
+  subscribeToTicket,
+  unsubscribeFromTicket,
 } from '../db/discussion.js';
 import {
   requireTrackerAuth,
+  optionalTrackerAuth,
   requirePermission,
   type AuthenticatedRequest,
 } from '../middleware/auth.js';
@@ -70,6 +79,8 @@ router.post(
         body.trim(),
         isInternal,
       );
+      // Auto-subscribe the commenter so they receive future updates
+      void subscribeToTicket(sql, ticketId, authed.trackerUser.id);
       // Fanout only for public comments — internal notes don't notify community members
       if (!isInternal) {
         void fanoutNotification(sql, ticketId, authed.trackerUser.id, 'comment_added');
@@ -114,28 +125,22 @@ router.get(
   },
 );
 
-/** GET /tracker/api/tickets/:ticketId/votes */
+/** GET /tracker/api/tickets/:ticketId/votes — public; auth-aware for user_has_voted */
 router.get(
   '/votes',
-  requireTrackerAuth,
+  optionalTrackerAuth,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const ticketId = req.params['ticketId'] as string | undefined;
     if (!ticketId) {
-      res.status(404).json({
-        error: {
-          code: 'NOT_FOUND',
-          message: 'Ticket not found.',
-          correlationId: (req as AuthenticatedRequest).correlationId,
-        },
-      });
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
       return;
     }
 
     try {
       const sql = getPool();
-      const state = await getVoteState(sql, ticketId, (req as AuthenticatedRequest).trackerUser.id);
-      const responseBody: TicketVoteState = state;
-      res.json(responseBody);
+      const userId = (req as Partial<AuthenticatedRequest>).trackerUser?.id ?? null;
+      const state = await getVoteState(sql, ticketId, userId);
+      res.json(state satisfies TicketVoteState);
     } catch (err) {
       next(err);
     }
@@ -185,6 +190,132 @@ router.post(
       const state = await getVoteState(sql, ticketId, userId);
       const responseBody: TicketVoteState = state;
       res.json(responseBody);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/:ticketId/pins — public; auth-aware for is_pinned */
+router.get(
+  '/pins',
+  optionalTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      const userId = (req as Partial<AuthenticatedRequest>).trackerUser?.id ?? null;
+      const state = await getPinState(sql, ticketId, userId);
+      res.json(state satisfies TicketPinState);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /tracker/api/tickets/:ticketId/pins — pin a ticket */
+router.post(
+  '/pins',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await addPin(sql, ticketId, (req as AuthenticatedRequest).trackerUser.id);
+      const body: TicketPinState = { ticket_id: ticketId, is_pinned: true };
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /tracker/api/tickets/:ticketId/pins — unpin a ticket */
+router.delete(
+  '/pins',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await removePin(sql, ticketId, (req as AuthenticatedRequest).trackerUser.id);
+      const body: TicketPinState = { ticket_id: ticketId, is_pinned: false };
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** GET /tracker/api/tickets/:ticketId/subscriptions — public; auth-aware for is_subscribed */
+router.get(
+  '/subscriptions',
+  optionalTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      const userId = (req as Partial<AuthenticatedRequest>).trackerUser?.id ?? null;
+      const state = await getSubscriptionState(sql, ticketId, userId);
+      res.json(state satisfies TicketSubscriptionState);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** POST /tracker/api/tickets/:ticketId/subscriptions — subscribe to a ticket */
+router.post(
+  '/subscriptions',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await subscribeToTicket(sql, ticketId, (req as AuthenticatedRequest).trackerUser.id);
+      const body: TicketSubscriptionState = { ticket_id: ticketId, is_subscribed: true };
+      res.json(body);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/** DELETE /tracker/api/tickets/:ticketId/subscriptions — unsubscribe from a ticket */
+router.delete(
+  '/subscriptions',
+  requireTrackerAuth,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ticketId = req.params['ticketId'] as string | undefined;
+    if (!ticketId) {
+      res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Ticket not found.' } });
+      return;
+    }
+    try {
+      const sql = getPool();
+      await unsubscribeFromTicket(sql, ticketId, (req as AuthenticatedRequest).trackerUser.id);
+      const body: TicketSubscriptionState = { ticket_id: ticketId, is_subscribed: false };
+      res.json(body);
     } catch (err) {
       next(err);
     }

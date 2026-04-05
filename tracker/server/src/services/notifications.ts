@@ -13,7 +13,7 @@ import { logger } from '../logger.js';
 export async function fanoutNotification(
   sql: Sql,
   ticketId: string,
-  actorId: string,
+  actorId: number | null,
   eventType: NotificationEventType,
 ): Promise<void> {
   try {

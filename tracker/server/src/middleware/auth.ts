@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import type { TrackerUser, TrackerErrorResponse } from '@tracker/types';
 import { getPool } from '../db/pool.js';
-import { upsertTrackerUser, resolveUserRole } from '../db/users.js';
+import { findTrackerUser, resolveUserRole } from '../db/users.js';
 import { env } from '../env.js';
 
 /**
@@ -115,7 +115,12 @@ export async function requireTrackerAuth(
 
   try {
     const sql = getPool();
-    const user = await upsertTrackerUser(sql, hanabLiveUsername, displayName);
+    const user = await findTrackerUser(sql, displayName);
+
+    if (!user) {
+      res.status(401).json(errorResponse('UNAUTHORIZED', 'Authentication required.', req));
+      return;
+    }
 
     if (user.account_status === 'banned' || user.account_status === 'restricted') {
       res
@@ -128,11 +133,76 @@ export async function requireTrackerAuth(
 
     (req as AuthenticatedRequest).trackerUser = {
       id: user.id,
-      hanablive_username: user.hanablive_username,
+      hanablive_username: user.display_name,
       display_name: user.display_name,
       account_status: user.account_status,
       role,
     };
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Like requireTrackerAuth, but does not return 401 when no session is present.
+ * Attaches req.trackerUser only when a valid session is found.
+ * Use for endpoints that are publicly readable but auth-aware (e.g. "did I vote?").
+ */
+export async function optionalTrackerAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const siteUser = (req as Request & { user?: SiteUser }).user;
+
+  const testUsername =
+    process.env['NODE_ENV'] !== 'production' && req.headers
+      ? (req.headers['x-tracker-test-username'] as string | undefined)
+      : undefined;
+
+  let cookieUsername: string | undefined;
+  if (!testUsername && !siteUser?.hanabLiveUsername && env.JWT_SECRET) {
+    const cookieHeader = req.headers?.cookie ?? '';
+    const token = cookieHeader
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith('hanabi_token='))
+      ?.slice('hanabi_token='.length);
+    if (token) {
+      try {
+        const payload = jwt.verify(token, env.JWT_SECRET) as { displayName?: string };
+        cookieUsername = payload.displayName;
+      } catch {
+        // Invalid or expired token — proceed unauthenticated
+      }
+    }
+  }
+
+  const hanabLiveUsername = testUsername ?? siteUser?.hanabLiveUsername ?? cookieUsername;
+
+  if (!hanabLiveUsername) {
+    next(); // No auth present — proceed without trackerUser
+    return;
+  }
+
+  const displayName = testUsername ?? siteUser?.displayName ?? cookieUsername ?? hanabLiveUsername;
+
+  try {
+    const sql = getPool();
+    const user = await findTrackerUser(sql, displayName);
+
+    if (user && user.account_status !== 'banned' && user.account_status !== 'restricted') {
+      const role = await resolveUserRole(sql, user.id);
+      (req as AuthenticatedRequest).trackerUser = {
+        id: user.id,
+        hanablive_username: user.display_name,
+        display_name: user.display_name,
+        account_status: user.account_status,
+        role,
+      };
+    }
 
     next();
   } catch (err) {

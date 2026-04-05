@@ -4,7 +4,10 @@ import { z } from 'zod';
 dotenv.config();
 
 const schema = z.object({
-  TRACKER_DATABASE_URL: z.string().url('TRACKER_DATABASE_URL must be a valid URL'),
+  TRACKER_DATABASE_URL: z.preprocess(
+    (val) => val ?? process.env['DATABASE_URL'],
+    z.string().url('TRACKER_DATABASE_URL or DATABASE_URL must be a valid URL'),
+  ),
   TRACKER_DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   TRACKER_PORT: z.coerce.number().int().min(1).max(65535).default(4001),
   TRACKER_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
